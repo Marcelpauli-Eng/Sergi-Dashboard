@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 
 /**
  * Login de una sola vez.
@@ -46,19 +47,24 @@ export default function LoginForm() {
     }
   }
 
+  const field =
+    "w-full rounded-md border border-input bg-card px-3.5 py-3 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/15";
+
   return (
-    <main className="flex min-h-dvh flex-col justify-center px-6 py-12">
-      <div className="mx-auto w-full max-w-sm">
-        <div className="mb-10 text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-ink">Reparto</h1>
-          <p className="mt-2 text-muted">Entra con tu código y tu PIN</p>
+    <main className="flex min-h-svh flex-col justify-center px-6 py-12">
+      <div className="mx-auto w-full max-w-sm animate-rise-in">
+        <div className="mb-10">
+          <h1 className="text-3xl tracking-tight">Reparto</h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Entra con tu código y tu PIN
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
               htmlFor="driverId"
-              className="mb-2 block text-sm font-semibold text-ink"
+              className="mb-1.5 block text-sm font-medium"
             >
               Código de transportista
             </label>
@@ -73,12 +79,12 @@ export default function LoginForm() {
               required
               value={driverId}
               onChange={(e) => setDriverId(e.target.value)}
-              className="w-full rounded-xl border border-line bg-surface px-4 py-4 text-lg text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+              className={field}
             />
           </div>
 
           <div>
-            <label htmlFor="pin" className="mb-2 block text-sm font-semibold text-ink">
+            <label htmlFor="pin" className="mb-1.5 block text-sm font-medium">
               PIN
             </label>
             <input
@@ -91,29 +97,30 @@ export default function LoginForm() {
               required
               value={pin}
               onChange={(e) => setPin(e.target.value)}
-              className="w-full rounded-xl border border-line bg-surface px-4 py-4 text-lg tracking-widest text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+              className={`${field} tracking-[0.3em]`}
             />
           </div>
 
           {error && (
             <p
               role="alert"
-              className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-danger"
+              className="rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700"
             >
               {error}
             </p>
           )}
 
-          <button
+          <Button
             type="submit"
+            size="touch"
+            className="w-full"
             disabled={busy || !driverId || !pin}
-            className="w-full rounded-xl bg-brand px-4 py-4 text-lg font-semibold text-white transition active:bg-brand-strong disabled:opacity-40"
           >
             {busy ? "Entrando…" : "Entrar"}
-          </button>
+          </Button>
         </form>
 
-        <p className="mt-8 text-center text-sm text-muted">
+        <p className="mt-8 text-xs leading-relaxed text-muted-foreground">
           Solo necesitas internet para entrar. Después, la app funciona sin
           cobertura.
         </p>

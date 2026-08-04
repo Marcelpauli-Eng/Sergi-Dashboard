@@ -1,6 +1,9 @@
 "use client";
 
+import { RefreshCw } from "lucide-react";
 import { formatRelativeTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 interface Props {
   online: boolean;
@@ -27,40 +30,42 @@ export default function SyncBar({
   onSync,
 }: Props) {
   const state = syncing
-    ? { dot: "bg-brand animate-pulse", text: "Sincronizando…" }
+    ? { dot: "bg-muted-foreground animate-pulse", text: "Sincronizando…" }
     : // Un error tiene que verse como error: si el punto sigue verde,
       // el transportista da por bueno un dato que no lo es.
       error
-      ? { dot: "bg-danger", text: error }
+      ? { dot: "bg-destructive", text: error }
       : !online
-        ? { dot: "bg-warn", text: "Sin conexión" }
+        ? { dot: "bg-warning", text: "Sin conexión" }
         : pendingCount > 0
-          ? { dot: "bg-warn", text: `${pendingCount} sin enviar` }
+          ? { dot: "bg-warning", text: `${pendingCount} sin enviar` }
           : {
-              dot: "bg-ok",
+              dot: "bg-success",
               text: savedAt
                 ? `Actualizado ${formatRelativeTime(savedAt)}`
                 : "Al día",
             };
 
   return (
-    <div className="flex items-center gap-3 border-t border-line bg-surface px-4 py-2.5">
-      <span className={`size-2.5 shrink-0 rounded-full ${state.dot}`} aria-hidden />
+    <div className="flex items-center gap-2.5 border-t border-border px-4 py-2">
+      <span className={cn("size-2 shrink-0 rounded-full", state.dot)} aria-hidden />
       <p
-        className={`min-w-0 flex-1 truncate text-sm ${
-          error ? "text-danger" : "text-muted"
-        }`}
+        className={cn(
+          "min-w-0 flex-1 truncate text-xs",
+          error ? "text-destructive" : "text-muted-foreground",
+        )}
       >
         {state.text}
       </p>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={onSync}
         disabled={syncing || !online}
-        className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-semibold text-brand active:bg-canvas disabled:opacity-40"
       >
+        <RefreshCw className={cn(syncing && "animate-spin")} />
         Actualizar
-      </button>
+      </Button>
     </div>
   );
 }

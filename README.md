@@ -44,6 +44,23 @@ mismos valores, así que un reintento nunca duplica nada.
 
 ---
 
+## ¿Solo quieres ver la interfaz?
+
+Sin configurar nada de Google:
+
+```bash
+npm install
+echo "DEMO_MODE=true" > .env.local
+npm run dev
+```
+
+Entra con **`demo` / `1234`**. Verás la app entera con pedidos de ejemplo y
+una franja "MODO DEMO" para que nadie los confunda con los de verdad. El
+botón Entregado funciona; las entregas se guardan en memoria del servidor en
+vez de en el Sheet.
+
+---
+
 ## Puesta en marcha
 
 ### 1. Google Cloud
@@ -112,13 +129,39 @@ npm install && npm run dev
 
 ---
 
-## Despliegue
+## Despliegue en Vercel
 
-Pensado para Vercel: conectas el repositorio, copias las variables de
-`.env.local` en el panel de Vercel y listo. Cada `git push` despliega.
+`.env.local` **nunca se sube** (está en `.gitignore`, y así debe seguir: son
+credenciales). En producción las variables se configuran aparte, en Vercel.
+
+1. Sube el repositorio a GitHub.
+2. En [vercel.com](https://vercel.com) → **Add New → Project** → importa el
+   repositorio.
+3. Antes de pulsar **Deploy**, despliega la sección **Environment
+   Variables** y añade **una por una** las mismas que tienes en
+   `.env.local`, con los mismos nombres y valores.
+   - `GOOGLE_PRIVATE_KEY`: pega el valor **sin las comillas exteriores**,
+     manteniendo los `\n` literales.
+   - `DEMO_MODE`: **no la pongas** (o ponla a `false`).
+4. **Deploy**.
+
+A partir de ahí, cada `git push` despliega solo.
+
+**Si ya has desplegado y quieres cambiar una variable:** *Project →
+Settings → Environment Variables* → editas → y luego *Deployments → ⋯ →
+Redeploy*, porque las variables se aplican en el momento del build.
+
+**Atajo desde la terminal**, si prefieres no ir pegando a mano:
+
+```bash
+npx vercel link
+npx vercel env pull    # trae las de Vercel a .env.local
+npx vercel env add GOOGLE_SHEET_ID production
+```
 
 > El build usa webpack (`next build --webpack`) porque Serwist, la
-> librería del service worker, todavía no soporta Turbopack.
+> librería del service worker, todavía no soporta Turbopack. Vercel respeta
+> el script `build` del `package.json`, así que no hay que configurar nada.
 
 ---
 

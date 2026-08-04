@@ -3,11 +3,15 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
+import { ChevronDown, Route } from "lucide-react";
 import { db } from "@/lib/db";
 import { recordDelivery, syncNow, SessionExpiredError } from "@/lib/sync";
 import { formatDistance, formatDuration } from "@/lib/format";
 import { formatLongDate } from "@/lib/dates";
+import { cn } from "@/lib/utils";
 import type { RouteDay, Stop } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import StopCard from "./stop-card";
 import SyncBar from "./sync-bar";
 
@@ -116,35 +120,36 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   };
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-2xl flex-col">
+    <div className="mx-auto flex min-h-svh max-w-2xl flex-col">
       {manifest?.demo && (
-        <p className="bg-warn px-4 py-1.5 text-center text-xs font-bold uppercase tracking-wide text-white">
+        <p className="bg-amber-100 px-4 py-1.5 text-center text-[10px] font-medium uppercase tracking-wide text-amber-800">
           Modo demo · pedidos de ejemplo
         </p>
       )}
 
-      <header className="sticky top-0 z-10 bg-surface shadow-sm">
-        <div className="flex items-baseline justify-between gap-4 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <header className="sticky top-0 z-10 border-b border-border bg-background/85 backdrop-blur-md">
+        <div className="flex items-baseline justify-between gap-4 px-4 pb-2.5 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <div className="min-w-0">
-            <h1 className="truncate text-xl font-bold text-ink">{driverName}</h1>
+            <h1 className="truncate text-lg tracking-tight">{driverName}</h1>
             {/* `capitalize` pondría mayúscula en cada palabra ("4 De
                 Agosto"); solo queremos la inicial de la frase. */}
             {todayRoute && (
-              <p className="text-sm text-muted first-letter:uppercase">
+              <p className="text-xs text-muted-foreground first-letter:uppercase">
                 {formatLongDate(todayRoute.date)}
               </p>
             )}
           </div>
           {total > 0 && (
-            <p className="shrink-0 text-sm font-semibold text-muted">
-              {closed.length}/{total}
+            <p className="shrink-0 text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">{closed.length}</span>
+              /{total}
             </p>
           )}
         </div>
 
         {total > 0 && (
           <div
-            className="h-1 w-full bg-line"
+            className="mx-4 mb-2 h-0.5 overflow-hidden rounded-full bg-muted"
             role="progressbar"
             aria-valuenow={closed.length}
             aria-valuemin={0}
@@ -152,7 +157,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
             aria-label="Progreso de la jornada"
           >
             <div
-              className="h-full bg-ok transition-all duration-300"
+              className="h-full bg-foreground transition-all duration-500"
               style={{ width: `${(closed.length / total) * 100}%` }}
             />
           </div>
@@ -168,9 +173,9 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         />
       </header>
 
-      <main className="flex-1 px-4 py-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      <main className="flex-1 px-4 py-5 pb-[max(2rem,env(safe-area-inset-bottom))]">
         {loading ? (
-          <p className="py-16 text-center text-muted">Cargando…</p>
+          <p className="py-16 text-center text-sm text-muted-foreground">Cargando…</p>
         ) : !manifest ? (
           <EmptyState online={online} syncing={syncing} />
         ) : (
@@ -178,11 +183,18 @@ export default function Dashboard({ driverName }: { driverName: string }) {
             {todayRoute && <RouteSummary route={todayRoute} />}
 
             {pending.length === 0 ? (
-              <p className="rounded-2xl border border-line bg-surface px-4 py-10 text-center text-lg font-semibold text-ok">
-                {total === 0
-                  ? "Hoy no tienes pedidos asignados"
-                  : "¡Jornada completada!"}
-              </p>
+              <div className="animate-rise-in rounded-xl border border-border bg-card px-6 py-12 text-center shadow-sm">
+                <p className="text-base">
+                  {total === 0
+                    ? "Hoy no tienes pedidos asignados"
+                    : "Jornada completada"}
+                </p>
+                {total > 0 && (
+                  <p className="mt-1.5 text-sm text-muted-foreground">
+                    {total} {total === 1 ? "parada cerrada" : "paradas cerradas"}
+                  </p>
+                )}
+              </div>
             ) : (
               <ul className="space-y-3">
                 {pending.map((stop) => (
@@ -198,7 +210,8 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
             {closed.length > 0 && (
               <Section
-                title={`Cerrados hoy (${closed.length})`}
+                title="Cerrados hoy"
+                count={closed.length}
                 open={showDone}
                 onToggle={() => setShowDone((v) => !v)}
               >
@@ -217,11 +230,12 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
             {manifest.tomorrow && manifest.tomorrow.stops.length > 0 && (
               <Section
-                title={`Mañana (${manifest.tomorrow.stops.length})`}
+                title="Mañana"
+                count={manifest.tomorrow.stops.length}
                 open={showTomorrow}
                 onToggle={() => setShowTomorrow((v) => !v)}
               >
-                <ul className="space-y-3">
+                <ul className="space-y-2">
                   {manifest.tomorrow.stops.map((stop) => (
                     <TomorrowRow key={stop.id} stop={stop} />
                   ))}
@@ -241,27 +255,27 @@ function RouteSummary({ route }: { route: RouteDay }) {
   if (!distance && !duration && !route.fullRouteUrl) return null;
 
   return (
-    <div className="mb-4 rounded-2xl border border-line bg-surface p-4">
+    <div className="mb-3 animate-rise-in rounded-xl border border-border bg-card p-5 shadow-sm">
       <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm text-muted">Ruta de hoy</p>
-          <p className="text-lg font-semibold text-ink">
+        <div className="min-w-0">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            Ruta de hoy
+          </p>
+          <p className="mt-1 text-xl tracking-tight">
             {[distance, duration].filter(Boolean).join(" · ") || "Sin calcular"}
           </p>
         </div>
         {route.fullRouteUrl && (
-          <a
-            href={route.fullRouteUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white active:bg-brand-strong"
-          >
-            Abrir ruta
-          </a>
+          <Button asChild variant="secondary" size="sm">
+            <a href={route.fullRouteUrl} target="_blank" rel="noopener noreferrer">
+              <Route />
+              Abrir ruta
+            </a>
+          </Button>
         )}
       </div>
       {!route.optimized && (
-        <p className="mt-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">
+        <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           No se ha podido calcular la ruta óptima. El orden mostrado es el de
           prioridad del listado.
         </p>
@@ -272,20 +286,22 @@ function RouteSummary({ route }: { route: RouteDay }) {
 
 function TomorrowRow({ stop }: { stop: Stop }) {
   return (
-    <li className="rounded-2xl border border-line bg-surface p-4">
-      <p className="font-semibold text-ink">{stop.customer || stop.address}</p>
-      <p className="mt-0.5 text-[15px] text-muted">{stop.address}</p>
+    <li className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
+      <p className="font-medium">{stop.customer || stop.address}</p>
+      <p className="mt-0.5 text-sm text-muted-foreground">{stop.address}</p>
     </li>
   );
 }
 
 function Section({
   title,
+  count,
   open,
   onToggle,
   children,
 }: {
   title: string;
+  count: number;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
@@ -296,31 +312,40 @@ function Section({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="mb-3 flex w-full items-center justify-between rounded-xl px-1 py-2 text-left"
+        className="mb-3 flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-muted"
       >
-        <span className="text-sm font-bold uppercase tracking-wide text-muted">
+        <span className="text-xs uppercase tracking-wide text-muted-foreground">
           {title}
         </span>
-        <span className="text-muted" aria-hidden>
-          {open ? "▲" : "▼"}
-        </span>
+        <Badge variant="secondary">{count}</Badge>
+        <ChevronDown
+          className={cn(
+            "ml-auto size-4 text-muted-foreground transition-transform",
+            open && "rotate-180",
+          )}
+          aria-hidden
+        />
       </button>
-      {open && children}
+      {open && <div className="animate-fade-in">{children}</div>}
     </section>
   );
 }
 
 function EmptyState({ online, syncing }: { online: boolean; syncing: boolean }) {
   if (syncing) {
-    return <p className="py-16 text-center text-muted">Descargando tu ruta…</p>;
+    return (
+      <p className="py-16 text-center text-sm text-muted-foreground">
+        Descargando tu ruta…
+      </p>
+    );
   }
 
   return (
-    <div className="rounded-2xl border border-line bg-surface px-6 py-12 text-center">
-      <p className="text-lg font-semibold text-ink">
+    <div className="animate-rise-in rounded-xl border border-border bg-card px-6 py-12 text-center shadow-sm">
+      <p className="text-base">
         {online ? "Todavía no hay datos" : "Sin datos descargados"}
       </p>
-      <p className="mt-2 text-muted">
+      <p className="mt-1.5 text-sm text-muted-foreground">
         {online
           ? "Pulsa Actualizar para descargar la ruta de hoy."
           : "Conéctate a internet una vez para descargar la ruta. Después podrás trabajar sin cobertura."}
