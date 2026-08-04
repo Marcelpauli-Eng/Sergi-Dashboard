@@ -1,30 +1,130 @@
 @import "tailwindcss";
 
-/**
- * Paleta deliberadamente clara y de alto contraste.
- *
- * Esta app se usa dentro de una furgoneta, muchas veces con el sol dando en
- * la pantalla. Un tema oscuro se ve peor en esas condiciones, así que se
- * fuerza el claro en vez de seguir la preferencia del sistema.
+/*
+ * Mismo sistema de diseño que DashboardPersonal: tema claro y MINIMALISTA,
+ * casi todo blanco, líneas de un pelo y tipografía ligera. El color se
+ * reserva para lo que informa (estados de entrega, incidencias); el resto es
+ * escala de grises.
  */
-@theme {
-  --color-canvas: #f1f5f9;
-  --color-surface: #ffffff;
-  --color-ink: #0f172a;
-  --color-muted: #64748b;
-  --color-line: #e2e8f0;
+:root {
+  --background: #fbfbfc;
+  --foreground: #18181b;
 
-  --color-brand: #1d4ed8;
-  --color-brand-strong: #1e3a8a;
-  --color-ok: #15803d;
-  --color-ok-soft: #dcfce7;
-  --color-warn: #b45309;
-  --color-warn-soft: #fef3c7;
-  --color-danger: #b91c1c;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+
+  --muted: #f5f5f7;
+  --muted-foreground: #8a8a93;
+
+  /* Líneas casi invisibles, al estilo "hairline" */
+  --border: #ececef;
+  --input: #ececef;
+  --ring: #18181b;
+
+  --primary: #18181b; /* acción principal: casi negro sobre blanco */
+  --primary-foreground: #fafafa;
+
+  --secondary: #f2f2f4;
+  --secondary-foreground: #18181b;
+
+  --accent: #18181b;
+  --accent-foreground: #fafafa;
+
+  --destructive: #dc2626;
+
+  /* Únicos colores de la app, y solo para estados de entrega. */
+  --success: #16a34a;
+  --warning: #b45309;
+
+  --radius: 0.75rem;
 }
 
-:root {
-  color-scheme: light;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans), system-ui, sans-serif;
+    /* Trazo fino en todo el texto (la clave del look minimalista) */
+    font-weight: 350;
+    -webkit-font-smoothing: antialiased;
+    /* Sin rebote elástico: hace que la lista parezca que se ha roto. */
+    overscroll-behavior-y: none;
+  }
+
+  /*
+   * Titulares ligeros y apretados: nada de negritas gruesas. Los pesos
+   * fuertes se reservan para datos concretos (nombre del cliente, cifras).
+   */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: 400;
+    letter-spacing: -0.015em;
+  }
+
+  strong,
+  b {
+    font-weight: 500;
+  }
+
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 18%, transparent);
+  }
+}
+
+/*
+ * Peso "medio" recalibrado: en toda la app `font-medium`/`font-semibold`
+ * pintan más finos de lo normal, para no tener que tocar cada componente.
+ */
+@layer utilities {
+  .font-medium {
+    font-weight: 450;
+  }
+  .font-semibold {
+    font-weight: 500;
+  }
+  .font-bold {
+    font-weight: 600;
+  }
+}
+
+/* Sin resaltado azul al tocar: los botones ya tienen su propio estado. */
+* {
+  -webkit-tap-highlight-color: transparent;
 }
 
 html {
@@ -32,14 +132,52 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
-body {
-  background: var(--color-canvas);
-  color: var(--color-ink);
-  /* Sin rebote elástico: hace que la lista parezca que se ha roto. */
-  overscroll-behavior-y: none;
+/* Entrada de las tarjetas, en CSS puro (sin framer-motion). */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-/* Sin resaltado azul al tocar: los botones ya tienen su propio estado. */
-* {
-  -webkit-tap-highlight-color: transparent;
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-rise-in {
+  animation: rise-in 0.5s cubic-bezier(0.21, 0.47, 0.32, 0.98) both;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise-in,
+  .animate-fade-in {
+    animation: fade-in 0.01s both;
+  }
+}
+
+/*
+ * FORMULARIOS EN MÓVIL — que no salte la pantalla.
+ * Safari de iPhone hace zoom automático al enfocar un campo con letra menor
+ * de 16 px, y al hacerlo descoloca toda la página. Con 16 px justos ya no
+ * hace zoom.
+ */
+@media (max-width: 639px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
