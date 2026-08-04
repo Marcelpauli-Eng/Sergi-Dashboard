@@ -57,8 +57,12 @@ mismos valores, así que un reintento nunca duplica nada.
 
 ### 2. El Google Sheet
 
-Comparte el Sheet con el email de la cuenta de servicio, **con permiso de
-Editor** (la app escribe el estado de las entregas).
+Comparte el Sheet con el email de la cuenta de servicio (el campo
+`client_email` del JSON), **con permiso de Editor** — la app escribe el
+estado de las entregas, así que Lector no vale.
+
+Google avisará de que no puede notificar a esa dirección. Es normal: es un
+robot, no una persona.
 
 La hoja necesita al menos estas columnas, con la cabecera en la fila 1:
 
@@ -86,7 +90,22 @@ cp .env.example .env.local
 
 Rellena `.env.local` siguiendo los comentarios del propio archivo.
 
-### 4. Arrancar
+> ⚠️ `GOOGLE_PRIVATE_KEY` va en **una sola línea, entre comillas dobles, con
+> los `\n` literales** tal y como vienen en el JSON. Pegar saltos de línea
+> reales es el fallo número uno y da un `invalid_grant` que no explica nada.
+
+### 4. Comprobar la conexión
+
+```bash
+npm run check
+```
+
+Verifica la cadena entera —credenciales, acceso al documento, pestaña,
+columnas— y se para en el primer punto que falla explicando qué hacer.
+También lista los códigos de transportista que ha encontrado en el Sheet,
+para que puedas contrastarlos con los de `DRIVERS`.
+
+### 5. Arrancar
 
 ```bash
 npm install && npm run dev
