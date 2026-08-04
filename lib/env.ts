@@ -82,35 +82,49 @@ interface Env {
   timezone: string;
 }
 
-let cached: Env | null = null;
+/**
+ * Un cargador por campo, en lugar de uno que valide todo de golpe.
+ *
+ * Importa: el login solo necesita SESSION_SECRET y DRIVERS. Si validáramos
+ * el bloque entero al primer acceso, no se podría ni entrar en la app hasta
+ * tener también las credenciales de Google — justo lo que no tienes durante
+ * la puesta en marcha. Así cada parte falla solo cuando de verdad hace falta.
+ */
+const loaders: { [K in keyof Env]: () => Env[K] } = {
+  google: () => ({
+    serviceAccountEmail: required("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
+    privateKey: parsePrivateKey(required("GOOGLE_PRIVATE_KEY")),
+    sheetId: required("GOOGLE_SHEET_ID"),
+    sheetTab: optional("GOOGLE_SHEET_TAB", "Pedidos"),
+    mapsApiKey: required("GOOGLE_MAPS_API_KEY"),
+  }),
+  depotAddress: () => required("DEPOT_ADDRESS"),
+  sessionSecret: () => required("SESSION_SECRET"),
+  drivers: () => parseDrivers(required("DRIVERS")),
+  timezone: () => optional("BUSINESS_TIMEZONE", "Europe/Madrid"),
+};
 
-function load(): Env {
-  return {
-    google: {
-      serviceAccountEmail: required("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
-      privateKey: parsePrivateKey(required("GOOGLE_PRIVATE_KEY")),
-      sheetId: required("GOOGLE_SHEET_ID"),
-      sheetTab: optional("GOOGLE_SHEET_TAB", "Pedidos"),
-      mapsApiKey: required("GOOGLE_MAPS_API_KEY"),
-    },
-    depotAddress: required("DEPOT_ADDRESS"),
-    sessionSecret: required("SESSION_SECRET"),
-    drivers: parseDrivers(required("DRIVERS")),
-    timezone: optional("BUSINESS_TIMEZONE", "Europe/Madrid"),
-  };
-}
+const cache = new Map<keyof Env, unknown>();
 
 /**
- * La validación se hace al primer acceso, no al importar el módulo.
- *
- * Importa: si se validara al importar, `next build` fallaría en cualquier
- * máquina que no tenga las credenciales (CI, un compañero clonando el
- * repo). Así el build siempre funciona y el error, si falta algo, aparece
- * en la primera petición con un mensaje que dice exactamente qué falta.
+ * La validación se hace al primer acceso a cada campo, no al importar el
+ * módulo: así `next build` funciona en una máquina sin credenciales (CI, un
+ * compañero clonando el repo) y el error, si falta algo, aparece en la
+ * petición que lo necesita diciendo exactamente qué variable falta.
  */
 export const env = new Proxy({} as Env, {
   get(_target, property: keyof Env) {
-    cached ??= load();
-    return cached[property];
+    if (!cache.has(property)) cache.set(property, loaders[property]());
+    return cache.get(property);
   },
 });
+
+/**
+ * `true` si el error viene de una variable de entorno mal puesta.
+ *
+ * Permite responder al operador con el mensaje concreto en vez de un 500
+ * mudo. No expone secretos: solo dice qué variable falta.
+ */
+export function isConfigError(error: unknown): error is Error {
+  return error instanceof Error && error.message.includes("variable de entorno");
+}

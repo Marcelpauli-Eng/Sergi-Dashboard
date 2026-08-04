@@ -7,7 +7,8 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "check": "node --no-warnings --env-file=.env.local scripts/check-sheet.mts"
+    "check": "node --no-warnings --env-file=.env.local scripts/check-sheet.mts",
+    "env:json": "node --no-warnings scripts/env-from-json.mts"
   },
   "dependencies": {
     "dexie": "^4.4.4",
