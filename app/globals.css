@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+/**
+ * Paleta deliberadamente clara y de alto contraste.
+ *
+ * Esta app se usa dentro de una furgoneta, muchas veces con el sol dando en
+ * la pantalla. Un tema oscuro se ve peor en esas condiciones, así que se
+ * fuerza el claro en vez de seguir la preferencia del sistema.
+ */
+@theme {
+  --color-canvas: #f1f5f9;
+  --color-surface: #ffffff;
+  --color-ink: #0f172a;
+  --color-muted: #64748b;
+  --color-line: #e2e8f0;
+
+  --color-brand: #1d4ed8;
+  --color-brand-strong: #1e3a8a;
+  --color-ok: #15803d;
+  --color-ok-soft: #dcfce7;
+  --color-warn: #b45309;
+  --color-warn-soft: #fef3c7;
+  --color-danger: #b91c1c;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  /* Evita que iOS agrande el texto al girar el móvil. */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  /* Sin rebote elástico: hace que la lista parezca que se ha roto. */
+  overscroll-behavior-y: none;
+}
+
+/* Sin resaltado azul al tocar: los botones ya tienen su propio estado. */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
