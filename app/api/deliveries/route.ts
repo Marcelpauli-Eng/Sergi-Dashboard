@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { writeDeliveries } from "@/lib/sheets";
+import { isDemoMode, recordDemoDeliveries } from "@/lib/demo";
 
 const recordSchema = z.object({
   clientId: z.string().uuid(),
@@ -37,6 +38,17 @@ export async function POST(request: Request) {
       { error: "Petición inválida", detail: parsed.error.issues },
       { status: 400 },
     );
+  }
+
+  // En demo se guardan en memoria en vez de en el Sheet, para que la
+  // pantalla se comporte igual que en real (las paradas entregadas no
+  // reaparecen al sincronizar).
+  if (isDemoMode()) {
+    recordDemoDeliveries(parsed.data.records);
+    return NextResponse.json({
+      applied: parsed.data.records.map((r) => r.orderId),
+      notFound: [],
+    });
   }
 
   try {

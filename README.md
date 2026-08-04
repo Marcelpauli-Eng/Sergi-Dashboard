@@ -48,12 +48,11 @@ mismos valores, así que un reintento nunca duplica nada.
 
 ### 1. Google Cloud
 
-1. Crea un proyecto en [console.cloud.google.com](https://console.cloud.google.com).
-2. Habilita **Google Sheets API**, **Geocoding API** y **Routes API**.
-   Las de Maps exigen una tarjeta asociada, aunque el crédito mensual
-   gratuito cubre de sobra el volumen de una flota pequeña.
-3. Crea una **cuenta de servicio** y descarga su clave en JSON.
-4. Crea una **clave de API** para Maps y restríngela a esas dos APIs.
+👉 **[Guía paso a paso con todos los clics](docs/GOOGLE-SETUP.md)** (15 min)
+
+En resumen: creas un proyecto, habilitas **Google Sheets API**, **Geocoding
+API** y **Routes API**, creas una **cuenta de servicio** con su clave JSON, y
+una **clave de API** para Maps.
 
 ### 2. El Google Sheet
 

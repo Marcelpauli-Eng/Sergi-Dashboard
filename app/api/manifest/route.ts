@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { buildManifest } from "@/lib/manifest";
+import { isDemoMode, demoManifest } from "@/lib/demo";
+import { env } from "@/lib/env";
 
 /**
  * Devuelve todo lo que el transportista necesita para la jornada.
@@ -12,6 +14,14 @@ export async function GET() {
   const driver = await getSession();
   if (!driver) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+
+  // Datos de mentira, sin tocar Google. Permite ver y enseñar la interfaz
+  // antes de tener nada configurado.
+  if (isDemoMode()) {
+    return NextResponse.json(demoManifest(env.timezone), {
+      headers: { "Cache-Control": "no-store" },
+    });
   }
 
   try {

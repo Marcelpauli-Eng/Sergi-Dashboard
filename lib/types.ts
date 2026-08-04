@@ -72,6 +72,11 @@ export interface Manifest {
   driverName: string;
   /** ISO timestamp de cuándo se generó, para mostrar "actualizado hace X". */
   generatedAt: string;
+  /**
+   * `true` si los datos son de mentira (modo demo). La interfaz lo señala de
+   * forma bien visible para que nadie los confunda con pedidos reales.
+   */
+  demo?: boolean;
   today: RouteDay;
   tomorrow: RouteDay | null;
 }

@@ -117,6 +117,12 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col">
+      {manifest?.demo && (
+        <p className="bg-warn px-4 py-1.5 text-center text-xs font-bold uppercase tracking-wide text-white">
+          Modo demo · pedidos de ejemplo
+        </p>
+      )}
+
       <header className="sticky top-0 z-10 bg-surface shadow-sm">
         <div className="flex items-baseline justify-between gap-4 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <div className="min-w-0">

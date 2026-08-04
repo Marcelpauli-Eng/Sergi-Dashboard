@@ -82,6 +82,11 @@ interface Env {
   timezone: string;
 }
 
+/** Ver lib/demo.ts. Se lee aquí directamente para evitar un import circular. */
+function demoMode(): boolean {
+  return process.env.DEMO_MODE === "true";
+}
+
 /**
  * Un cargador por campo, en lugar de uno que valide todo de golpe.
  *
@@ -99,8 +104,23 @@ const loaders: { [K in keyof Env]: () => Env[K] } = {
     mapsApiKey: required("GOOGLE_MAPS_API_KEY"),
   }),
   depotAddress: () => required("DEPOT_ADDRESS"),
-  sessionSecret: () => required("SESSION_SECRET"),
-  drivers: () => parseDrivers(required("DRIVERS")),
+  sessionSecret: () => {
+    if (demoMode() && !process.env.SESSION_SECRET) {
+      // Secreto fijo y conocido, solo para que el modo demo arranque sin
+      // configurar nada. Nunca se llega aquí fuera de DEMO_MODE.
+      console.warn(
+        "[DEMO] Usando un SESSION_SECRET de desarrollo. No uses DEMO_MODE en producción.",
+      );
+      return "demo-mode-insecure-session-secret-no-usar-en-produccion";
+    }
+    return required("SESSION_SECRET");
+  },
+  // En modo demo no hace falta dar de alta a nadie: se entra con un usuario
+  // de prueba fijo. Ver lib/demo.ts.
+  drivers: () =>
+    demoMode() && !process.env.DRIVERS
+      ? [{ id: "demo", pin: "1234", name: "Transportista de prueba" }]
+      : parseDrivers(required("DRIVERS")),
   timezone: () => optional("BUSINESS_TIMEZONE", "Europe/Madrid"),
 };
 
