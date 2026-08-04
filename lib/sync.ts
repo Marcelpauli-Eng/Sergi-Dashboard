@@ -28,6 +28,19 @@ export class SessionExpiredError extends Error {
 }
 
 /**
+ * `fetch` lanza un TypeError seco ("Failed to fetch") cuando no hay red, el
+ * servidor está caído o hay un portal cautivo de por medio. Ese texto no le
+ * dice nada a un transportista, así que se traduce a algo accionable.
+ */
+async function request(input: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch {
+    throw new Error("Sin conexión. Estás viendo los datos descargados.");
+  }
+}
+
+/**
  * Aplica sobre un manifiesto las entregas que aún no han llegado al
  * servidor.
  *
@@ -99,7 +112,7 @@ export async function flushOutbox(): Promise<number> {
   if (pending.length === 0) return 0;
   if (typeof navigator !== "undefined" && !navigator.onLine) return 0;
 
-  const response = await fetch("/api/deliveries", {
+  const response = await request("/api/deliveries", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -155,7 +168,7 @@ export async function flushOutbox(): Promise<number> {
 
 /** Descarga el manifiesto del día y lo guarda en IndexedDB. */
 export async function refreshManifest(): Promise<void> {
-  const response = await fetch("/api/manifest", { cache: "no-store" });
+  const response = await request("/api/manifest", { cache: "no-store" });
 
   if (response.status === 401) throw new SessionExpiredError();
   if (!response.ok) {

@@ -11,6 +11,9 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
+    // scripts/*.mts los ejecuta Node directamente, y Node exige la extensión
+    // .ts explícita en los imports. Es seguro porque aquí no se emite nada.
+    "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,

@@ -264,7 +264,7 @@ export async function optimizeRoute(
   // Las paradas sin coordenadas van al final: el transportista las ve, pero
   // no entran en el cálculo.
   const unroutable = orders.filter((o) => o.lat === null || o.lng === null);
-  for (const _ of unroutable) {
+  for (let i = 0; i < unroutable.length; i++) {
     legs.push({ distanceMeters: null, durationSeconds: null });
   }
 

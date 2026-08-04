@@ -110,12 +110,18 @@ export function canonicalHeader(key: ColumnKey): string {
 }
 
 export class MissingColumnsError extends Error {
-  constructor(public readonly missing: ColumnKey[]) {
+  // Campo declarado y asignado a mano en vez de con una "parameter
+  // property": Node no las soporta al ejecutar TypeScript directamente, y
+  // scripts/check-sheet.mts importa este archivo sin pasar por un compilador.
+  readonly missing: ColumnKey[];
+
+  constructor(missing: ColumnKey[]) {
     super(
       `Al Google Sheet le faltan columnas obligatorias: ${missing
         .map((k) => COLUMNS[k][0])
         .join(", ")}. Revisa lib/sheet-schema.ts si en tu hoja se llaman de otra forma.`,
     );
     this.name = "MissingColumnsError";
+    this.missing = missing;
   }
 }

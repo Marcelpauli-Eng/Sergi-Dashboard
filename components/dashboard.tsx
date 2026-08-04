@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
@@ -10,6 +10,22 @@ import { formatLongDate } from "@/lib/dates";
 import type { RouteDay, Stop } from "@/lib/types";
 import StopCard from "./stop-card";
 import SyncBar from "./sync-bar";
+
+/**
+ * Suscripción al estado de conexión del navegador.
+ *
+ * Se usa con `useSyncExternalStore` en vez de un `useEffect` + `setState`:
+ * el valor inicial se lee directamente de `navigator.onLine` en el primer
+ * render, sin provocar un segundo renderizado en cascada.
+ */
+function subscribeToConnectivity(onChange: () => void): () => void {
+  window.addEventListener("online", onChange);
+  window.addEventListener("offline", onChange);
+  return () => {
+    window.removeEventListener("online", onChange);
+    window.removeEventListener("offline", onChange);
+  };
+}
 
 /**
  * Pantalla principal.
@@ -35,7 +51,13 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   const outbox = useLiveQuery(() => db.outbox.toArray(), []);
   const pendingCount = (outbox ?? []).filter((i) => i.syncedAt === null).length;
 
-  const [online, setOnline] = useState(true);
+  const online = useSyncExternalStore(
+    subscribeToConnectivity,
+    () => navigator.onLine,
+    // En el servidor se asume conectado: es lo que verá el usuario en el
+    // primer pintado, antes de que el navegador pueda opinar.
+    () => true,
+  );
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showTomorrow, setShowTomorrow] = useState(false);
@@ -58,23 +80,13 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     }
   }, [router]);
 
-  // Estado de conexión.
-  useEffect(() => {
-    const update = () => setOnline(navigator.onLine);
-    update();
-    window.addEventListener("online", update);
-    window.addEventListener("offline", update);
-    return () => {
-      window.removeEventListener("online", update);
-      window.removeEventListener("offline", update);
-    };
-  }, []);
-
   // Sincroniza al abrir, al recuperar cobertura y al volver a la app.
   // Son los tres momentos en los que puede haber algo nuevo que enviar o
   // recibir, y cubrirlos evita tener que pedirle nada al transportista.
   useEffect(() => {
-    void sync();
+    // Se lanza fuera del ciclo de render (no de forma síncrona dentro del
+    // efecto) para no encadenar un segundo renderizado con el primero.
+    const initial = setTimeout(() => void sync(), 0);
 
     const onOnline = () => void sync();
     const onVisible = () => {
@@ -84,6 +96,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
+      clearTimeout(initial);
       window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisible);
     };
@@ -108,8 +121,10 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         <div className="flex items-baseline justify-between gap-4 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <div className="min-w-0">
             <h1 className="truncate text-xl font-bold text-ink">{driverName}</h1>
+            {/* `capitalize` pondría mayúscula en cada palabra ("4 De
+                Agosto"); solo queremos la inicial de la frase. */}
             {todayRoute && (
-              <p className="text-sm capitalize text-muted">
+              <p className="text-sm text-muted first-letter:uppercase">
                 {formatLongDate(todayRoute.date)}
               </p>
             )}

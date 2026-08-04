@@ -1,36 +1,145 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Reparto — dashboard para transportistas
 
-## Getting Started
+Aplicación web instalable (PWA) que le muestra a cada transportista los
+pedidos que tiene asignados hoy, en el orden más eficiente, y le deja
+marcarlos como entregados. **Funciona sin cobertura.**
 
-First, run the development server:
+Los datos salen de un Google Sheet y vuelven a él: la oficina sigue
+trabajando exactamente igual que hasta ahora.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## Cómo funciona
+
+```
+Google Sheet ──lee──▶ API (Next.js) ──manifiesto──▶ IndexedDB ──▶ Pantalla
+     ▲                                                   │
+     └──────── escribe entregas ◀──── cola de salida ◀────┘
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Una sola regla gobierna todo el diseño:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+> **La pantalla lee siempre de IndexedDB, nunca de la red.**
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+La red solo alimenta IndexedDB en segundo plano. Por eso el modo offline no
+es un caso especial que haya que probar aparte: es el único modo que existe.
+Si la app funciona con cobertura, funciona sin ella.
 
-## Learn More
+Cuando el transportista pulsa **Entregado** sin cobertura, la acción se
+guarda en una cola local con un identificador único y se sube sola en cuanto
+hay red. Reenviar el mismo registro reescribe las mismas celdas con los
+mismos valores, así que un reintento nunca duplica nada.
 
-To learn more about Next.js, take a look at the following resources:
+### Qué hay en cada sitio
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Archivo | Qué hace |
+|---|---|
+| `lib/sheet-schema.ts` | **Mapeo de columnas del Sheet.** El único archivo a tocar si cambian los nombres de las columnas. |
+| `lib/sheets.ts` | Lee y escribe en el Google Sheet. |
+| `lib/routing.ts` | Geocoding y cálculo de la ruta óptima. |
+| `lib/manifest.ts` | Junta ambas cosas en el paquete que se descarga. |
+| `lib/db.ts` | Base de datos local (IndexedDB). |
+| `lib/sync.ts` | Motor de sincronización en las dos direcciones. |
+| `app/sw.ts` | Service worker: hace que la app arranque sin red. |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Puesta en marcha
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 1. Google Cloud
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Crea un proyecto en [console.cloud.google.com](https://console.cloud.google.com).
+2. Habilita **Google Sheets API**, **Geocoding API** y **Routes API**.
+   Las de Maps exigen una tarjeta asociada, aunque el crédito mensual
+   gratuito cubre de sobra el volumen de una flota pequeña.
+3. Crea una **cuenta de servicio** y descarga su clave en JSON.
+4. Crea una **clave de API** para Maps y restríngela a esas dos APIs.
+
+### 2. El Google Sheet
+
+Comparte el Sheet con el email de la cuenta de servicio, **con permiso de
+Editor** (la app escribe el estado de las entregas).
+
+La hoja necesita al menos estas columnas, con la cabecera en la fila 1:
+
+| Columna | Obligatoria | Para qué |
+|---|:---:|---|
+| `ID Pedido` | ✅ | Identificador único e inmutable |
+| `Transportista` | ✅ | Debe coincidir con el código de `DRIVERS` |
+| `Fecha` | ✅ | Fecha de reparto |
+| `Direccion` | ✅ | Se geocodifica para calcular la ruta |
+| `Prioridad` | | Menor número = antes |
+| `Cliente`, `Telefono`, `Observaciones` | | Se muestran en la ficha |
+
+Los nombres admiten variantes (mayúsculas, acentos, sinónimos). Si en tu
+hoja se llaman de otra forma, añádela a `lib/sheet-schema.ts`.
+
+Las columnas donde la app **escribe** (`Estado`, `Hora Entrega`,
+`Incidencia`) y las de caché de coordenadas (`_lat`, `_lng`) **se crean
+solas** la primera vez si no existen. Las de coordenadas se pueden ocultar.
+
+### 3. Variables de entorno
+
+```bash
+cp .env.example .env.local
+```
+
+Rellena `.env.local` siguiendo los comentarios del propio archivo.
+
+### 4. Arrancar
+
+```bash
+npm install && npm run dev
+```
+
+---
+
+## Despliegue
+
+Pensado para Vercel: conectas el repositorio, copias las variables de
+`.env.local` en el panel de Vercel y listo. Cada `git push` despliega.
+
+> El build usa webpack (`next build --webpack`) porque Serwist, la
+> librería del service worker, todavía no soporta Turbopack.
+
+---
+
+## Cómo lo instala el transportista
+
+1. Le mandas el enlace por WhatsApp.
+2. Entra una vez con su código y su PIN. **La sesión dura un año**, así que
+   no vuelve a ver esa pantalla.
+3. En el menú del navegador: **Añadir a pantalla de inicio**.
+
+A partir de ahí tiene un icono como cualquier otra app, se abre sin barra
+de navegador y funciona sin cobertura.
+
+---
+
+## Decisiones de diseño que conviene conocer
+
+**No hay base de datos propia.** El Sheet es la única fuente de verdad.
+Para una flota pequeña sobra, y evita mantener dos sistemas sincronizados.
+Si algún día hay muchos transportistas escribiendo a la vez, o hace falta
+histórico y estadísticas, el sitio natural para meter Postgres es entre
+`lib/sheets.ts` y `lib/manifest.ts`.
+
+**No hay mapa dentro de la app.** Los términos de servicio de Google
+prohíben cachear las teselas del mapa, así que un mapa embebido se quedaría
+en blanco justo cuando más falta hace. En su lugar, cada parada tiene un
+botón que abre Google Maps: si el transportista se ha descargado el área
+una vez, la navegación con voz funciona offline de verdad.
+
+**La ruta se calcula en el servidor.** Así el móvil no necesita red para
+consultarla y la clave de Maps nunca sale del servidor.
+
+**Las coordenadas se cachean en el Sheet.** Cada dirección se geocodifica
+una sola vez en su vida, no una vez al día.
+
+---
+
+## Pendiente de definir
+
+- ¿Se puede deshacer un "Entregado" pulsado por error?
+- ¿La ruta vuelve a la central al terminar?
+- ¿Los transportistas se gestionan desde el Sheet en vez de por variable de entorno?
