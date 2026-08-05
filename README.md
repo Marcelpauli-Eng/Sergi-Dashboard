@@ -139,10 +139,17 @@ credenciales). En producción las variables se configuran aparte, en Vercel.
    repositorio.
 3. Antes de pulsar **Deploy**, despliega la sección **Environment
    Variables** y añade **una por una** las mismas que tienes en
-   `.env.local`, con los mismos nombres y valores.
-   - `GOOGLE_PRIVATE_KEY`: pega el valor **sin las comillas exteriores**,
-     manteniendo los `\n` literales.
+   `.env.local`, con los mismos nombres.
+
+   > ⚠️ **En Vercel los valores van SIN comillas.** En un archivo `.env` las
+   > comillas son sintaxis; en el formulario de Vercel se guardarían como
+   > parte del valor y nada funcionaría. Esto vale para todas, no solo para
+   > la clave privada.
+
+   - `GOOGLE_PRIVATE_KEY`: pega desde `-----BEGIN` hasta `KEY-----\n`,
+     manteniendo los `\n` literales, sin las comillas de fuera.
    - `DEMO_MODE`: **no la pongas** (o ponla a `false`).
+   - Marca los tres entornos (Production, Preview, Development).
 4. **Deploy**.
 
 A partir de ahí, cada `git push` despliega solo.

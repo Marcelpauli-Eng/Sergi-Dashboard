@@ -41,11 +41,46 @@ async function request(input: string, init?: RequestInit): Promise<Response> {
 }
 
 /**
- * Aplica sobre un manifiesto las entregas que aún no han llegado al
- * servidor.
+ * Cuánto tiempo se sigue confiando en lo que dice el móvil por encima de lo
+ * que responde el servidor, para una entrega ya subida.
  *
- * Sin esto, cada sincronización con la cola llena devolvería los pedidos a
- * "pendiente" y el transportista vería reaparecer paradas que ya ha hecho.
+ * Hace falta porque entre que escribimos en el Google Sheet y que esa
+ * escritura se ve al releerlo puede pasar un momento; y en modo demo sobre
+ * Vercel, la petición siguiente puede atender otra instancia que no conozca
+ * la entrega. Sin este margen, una parada recién entregada reaparecería
+ * como pendiente, que es el peor error posible en esta app.
+ */
+const TRUST_LOCAL_MS = 10 * 60 * 1000;
+
+/** Entregas que deben imponerse sobre lo que diga el servidor. */
+async function locallyAuthoritative(): Promise<OutboxItem[]> {
+  const cutoff = Date.now() - TRUST_LOCAL_MS;
+  return (await db.outbox.toArray()).filter(
+    (item) =>
+      item.syncedAt === null || new Date(item.recordedAt).getTime() > cutoff,
+  );
+}
+
+/**
+ * Borra de la cola lo ya confirmado hace tiempo, para que no crezca sin
+ * límite en un móvil que lleve meses con la app instalada.
+ */
+async function pruneOutbox(): Promise<void> {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  const stale = (await db.outbox.toArray()).filter(
+    (item) =>
+      item.syncedAt !== null && new Date(item.recordedAt).getTime() < cutoff,
+  );
+  if (stale.length > 0) {
+    await db.outbox.bulkDelete(stale.map((item) => item.clientId));
+  }
+}
+
+/**
+ * Aplica sobre un manifiesto las entregas que manda el móvil.
+ *
+ * Sin esto, cada sincronización devolvería los pedidos a "pendiente" y el
+ * transportista vería reaparecer paradas que ya ha hecho.
  */
 function applyOutbox(manifest: Manifest, items: OutboxItem[]): Manifest {
   if (items.length === 0) return manifest;
@@ -179,8 +214,8 @@ export async function refreshManifest(): Promise<void> {
   }
 
   const manifest = (await response.json()) as Manifest;
-  const stillPending = await pendingOutbox();
-  await saveManifest(applyOutbox(manifest, stillPending));
+  await saveManifest(applyOutbox(manifest, await locallyAuthoritative()));
+  await pruneOutbox();
 }
 
 export interface SyncOutcome {
