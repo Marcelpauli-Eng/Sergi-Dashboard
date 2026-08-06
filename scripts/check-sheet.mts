@@ -22,7 +22,11 @@ import {
   type ColumnKey,
 } from "../lib/sheet-schema.ts";
 import { parseSheetDate, today } from "../lib/dates.ts";
-import { findMonthTab, noTabFoundMessage } from "../lib/sheet-tab.ts";
+import {
+  findMonthTab,
+  findLatestTabUpTo,
+  noTabFoundMessage,
+} from "../lib/sheet-tab.ts";
 
 const ok = (msg: string) => console.log(`\x1b[32m✓\x1b[0m ${msg}`);
 const bad = (msg: string) => console.log(`\x1b[31m✗\x1b[0m ${msg}`);
@@ -174,15 +178,24 @@ if (configuredTab) {
 } else {
   const month = today(timezone).slice(0, 7);
   const detected = findMonthTab(tabs, month);
-  if (!detected) {
-    fail(
-      `No hay ninguna pestaña que corresponda al mes en curso (${month})`,
-      noTabFoundMessage(tabs, month),
-    );
+
+  if (detected) {
+    tab = detected;
+    ok(`Pestaña "${tab}" detectada automáticamente para ${month}`);
+    dim("GOOGLE_SHEET_TAB no está definida: se busca la del mes cada vez.");
+  } else {
+    const fallback = findLatestTabUpTo(tabs, month);
+    if (!fallback) {
+      fail(
+        `No hay ninguna pestaña que corresponda al mes en curso (${month})`,
+        noTabFoundMessage(tabs, month),
+      );
+    }
+    tab = fallback;
+    warn(`No existe la pestaña de ${month}: se usará "${tab}", la más reciente`);
+    dim("Los pedidos de hoy no aparecerán hasta que crees la pestaña del mes.");
+    dim("En cuanto la crees, la app la coge sola: no hay que redesplegar.");
   }
-  tab = detected;
-  ok(`Pestaña "${tab}" detectada automáticamente para ${month}`);
-  dim("GOOGLE_SHEET_TAB no está definida: se busca la del mes cada vez.");
 }
 
 // ── 5. Las columnas ───────────────────────────────────────────────────────

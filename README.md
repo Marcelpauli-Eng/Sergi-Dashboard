@@ -108,6 +108,11 @@ pregunta a Google qué pestañas hay y elige la del mes en curso cada vez, así
 que el día 1 no hay que tocar nada. Ver `lib/sheet-tab.ts`. Define la
 variable solo para forzar una pestaña concreta.
 
+Si la pestaña del mes nuevo **aún no está creada**, la app no se cae: sigue
+con la más reciente anterior y lo avisa en los logs. Ese día no aparecerán
+pedidos —no hay ninguno con fecha de hoy en la pestaña del mes pasado— pero
+en cuanto se cree la nueva la coge sola, sin redesplegar.
+
 Las columnas donde la app **escribe** (`Estado`, `Hora Entrega`,
 `Incidencia`) y las de caché de coordenadas (`_lat`, `_lng`) **se crean
 solas** la primera vez si no existen. Las de coordenadas se pueden ocultar.

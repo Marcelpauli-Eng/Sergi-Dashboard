@@ -2,7 +2,7 @@ import "server-only";
 import { googleAccessToken } from "./google-auth";
 import { env } from "./env";
 import { parseSheetDate, formatSheetTimestamp, today } from "./dates";
-import { findMonthTab, noTabFoundMessage } from "./sheet-tab";
+import { findMonthTab, findLatestTabUpTo, noTabFoundMessage } from "./sheet-tab";
 import {
   mapHeaders,
   canonicalHeader,
@@ -74,8 +74,9 @@ let tabCache: { month: string; tab: string } | null = null;
 /**
  * Qué pestaña hay que leer hoy.
  *
- * Con `GOOGLE_SHEET_TAB` definida se usa esa y no se pregunta nada. Si no,
- * se busca la del mes en curso entre las que existen. Ver lib/sheet-tab.ts.
+ * Con `GOOGLE_SHEET_TAB` definida se usa esa y no se pregunta nada. Si no:
+ * la del mes en curso; y si todavía no existe, la más reciente anterior.
+ * Ver lib/sheet-tab.ts.
  */
 export async function resolveSheetTab(): Promise<string> {
   const configured = env.google.sheetTab;
@@ -85,11 +86,25 @@ export async function resolveSheetTab(): Promise<string> {
   if (tabCache?.month === month) return tabCache.tab;
 
   const tabs = await listTabs();
-  const found = findMonthTab(tabs, month);
-  if (!found) throw new Error(noTabFoundMessage(tabs, month));
 
-  tabCache = { month, tab: found };
-  return found;
+  const found = findMonthTab(tabs, month);
+  if (found) {
+    tabCache = { month, tab: found };
+    return found;
+  }
+
+  const fallback = findLatestTabUpTo(tabs, month);
+  if (!fallback) throw new Error(noTabFoundMessage(tabs, month));
+
+  // A propósito SIN cachear: la pestaña del mes puede crearse en cualquier
+  // momento, y cachear el apaño dejaría al servidor leyendo la del mes
+  // pasado hasta el siguiente despliegue. Cuesta una llamada de más por
+  // petición, solo mientras dure la situación anómala.
+  console.warn(
+    `No hay pestaña para ${month}; se usa la más reciente: "${fallback}". ` +
+      "Crea la del mes nuevo para que aparezcan los pedidos de hoy.",
+  );
+  return fallback;
 }
 
 /** Minúsculas y sin acentos, para comparar lo que escribe la oficina a mano. */

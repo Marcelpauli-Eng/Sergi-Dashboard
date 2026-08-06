@@ -147,7 +147,9 @@ Solo si quieres forzar una pestaña concreta, pon su nombre **exacto**
 (respetando mayúsculas y acentos) en `GOOGLE_SHEET_TAB`.
 
 > ⚠️ Si trabajas con pestañas mensuales, acuérdate de crear la del mes nuevo.
-> Si no existe, `npm run check` te lo dirá y te listará las que sí hay.
+> Mientras no exista, la app tira de la más reciente anterior y avisa en los
+> logs; ese día no saldrán pedidos, porque en la pestaña del mes pasado no
+> hay ninguno con fecha de hoy. `npm run check` también te lo dice.
 
 ## Paso 9 · Rellenar `.env.local`
 
@@ -211,9 +213,13 @@ barras.
 **"El documento no tiene ninguna pestaña llamada X"**
 `npm run check` te lista las pestañas que sí existen. Copia el nombre exacto.
 
+**"No existe la pestaña de YYYY-MM: se usará …, la más reciente"**
+Es un aviso, no un error: falta la pestaña de este mes. Créala con el mes en
+el nombre y la app la cogerá sola. Hasta entonces no saldrán pedidos.
+
 **"No hay ninguna pestaña que corresponda al mes en curso"**
-Con pestañas mensuales, falta la de este mes: créala con el mes en el nombre.
-`npm run check` te lista las que hay para que veas qué formato usáis.
+Esto sí es un error: no hay ni la de este mes ni ninguna anterior que se
+pueda fechar por el nombre. `npm run check` te lista las que hay.
 
 **"Faltan columnas obligatorias" con la hoja aparentemente bien**
 Mira la **fila 1** de esa pestaña concreta: si alguien pisó la celda de la
