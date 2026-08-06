@@ -21,7 +21,12 @@ import {
   MANAGED_COLUMNS,
   type ColumnKey,
 } from "../lib/sheet-schema.ts";
-import { parseSheetDate } from "../lib/dates.ts";
+import { parseSheetDate, today } from "../lib/dates.ts";
+import {
+  findMonthTab,
+  findLatestTabUpTo,
+  noTabFoundMessage,
+} from "../lib/sheet-tab.ts";
 
 const ok = (msg: string) => console.log(`\x1b[32m✓\x1b[0m ${msg}`);
 const bad = (msg: string) => console.log(`\x1b[31m✗\x1b[0m ${msg}`);
@@ -54,7 +59,9 @@ console.log("\nComprobando la conexión con Google Sheets\n");
 const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
 const rawKey = process.env.GOOGLE_PRIVATE_KEY;
 const sheetId = process.env.GOOGLE_SHEET_ID;
-const tab = process.env.GOOGLE_SHEET_TAB || "Pedidos";
+// Sin definir = la pestaña del mes en curso, que se resuelve más abajo con
+// la lista real de pestañas del documento.
+const configuredTab = process.env.GOOGLE_SHEET_TAB?.trim() || null;
 
 const missing = [
   ["GOOGLE_SERVICE_ACCOUNT_EMAIL", email],
@@ -68,6 +75,8 @@ if (missing.length > 0) {
     "Copia .env.example a .env.local y rellénalo.",
   );
 }
+
+const timezone = process.env.BUSINESS_TIMEZONE || "Europe/Madrid";
 
 ok("Variables de entorno presentes");
 dim(`cuenta de servicio: ${email}`);
@@ -153,14 +162,41 @@ ok(`Acceso al documento "${info.properties.title}"`);
 
 // ── 4. La pestaña ─────────────────────────────────────────────────────────
 
-if (!tabs.includes(tab)) {
-  fail(
-    `El documento no tiene ninguna pestaña llamada "${tab}"`,
-    `Pestañas disponibles: ${tabs.map((t) => `"${t}"`).join(", ")}\n\n` +
-      "Ajusta GOOGLE_SHEET_TAB en .env.local con el nombre exacto.",
-  );
+let tab: string;
+
+if (configuredTab) {
+  if (!tabs.includes(configuredTab)) {
+    fail(
+      `El documento no tiene ninguna pestaña llamada "${configuredTab}"`,
+      `Pestañas disponibles: ${tabs.map((t) => `"${t}"`).join(", ")}\n\n` +
+        "Ajusta GOOGLE_SHEET_TAB en .env.local con el nombre exacto,\n" +
+        "o quita la variable para que la app busque sola la del mes.",
+    );
+  }
+  tab = configuredTab;
+  ok(`Pestaña "${tab}" (fijada en GOOGLE_SHEET_TAB)`);
+} else {
+  const month = today(timezone).slice(0, 7);
+  const detected = findMonthTab(tabs, month);
+
+  if (detected) {
+    tab = detected;
+    ok(`Pestaña "${tab}" detectada automáticamente para ${month}`);
+    dim("GOOGLE_SHEET_TAB no está definida: se busca la del mes cada vez.");
+  } else {
+    const fallback = findLatestTabUpTo(tabs, month);
+    if (!fallback) {
+      fail(
+        `No hay ninguna pestaña que corresponda al mes en curso (${month})`,
+        noTabFoundMessage(tabs, month),
+      );
+    }
+    tab = fallback;
+    warn(`No existe la pestaña de ${month}: se usará "${tab}", la más reciente`);
+    dim("Los pedidos de hoy no aparecerán hasta que crees la pestaña del mes.");
+    dim("En cuanto la crees, la app la coge sola: no hay que redesplegar.");
+  }
 }
-ok(`Pestaña "${tab}" encontrada`);
 
 // ── 5. Las columnas ───────────────────────────────────────────────────────
 
@@ -195,6 +231,10 @@ for (const key of Object.keys(COLUMNS) as ColumnKey[]) {
   } else if (required) {
     bad(`${label} → NO ENCONTRADA  (obligatoria)`);
     missingRequired++;
+  } else if (key === "driverId") {
+    warn(`${label} → no existe: un solo transportista, verá todos los pedidos`);
+  } else if (key === "town") {
+    warn(`${label} → no existe: se geocodifica solo con la dirección`);
   } else if (MANAGED_COLUMNS.includes(key)) {
     warn(`${label} → no existe, la app la creará sola`);
   } else {
@@ -228,24 +268,40 @@ if (badDates.length > 0) {
   warn(`${badDates.length} fila(s) con fecha ilegible: se ignorarán`);
 }
 
-const drivers = new Set(
-  dataRows.map((r) => cell(r, "driverId").toLowerCase()).filter(Boolean),
-);
-if (drivers.size > 0) {
-  console.log(`\nTransportistas en la columna "${canonicalHeader("driverId")}":`);
-  dim([...drivers].map((d) => `"${d}"`).join(", "));
-  dim("Estos códigos deben coincidir con los de DRIVERS en .env.local");
+if (headerMap.driverId === undefined) {
+  console.log(`\nSin columna de transportista:`);
+  dim("quien entre verá todos los pedidos del día, sin filtrar.");
+  dim(
+    `Para repartir entre varios, añade una columna "${canonicalHeader("driverId")}"\n` +
+      "  con el código de cada uno; el filtro se activará solo.",
+  );
+} else {
+  const drivers = new Set(
+    dataRows.map((r) => cell(r, "driverId").toLowerCase()).filter(Boolean),
+  );
+  if (drivers.size > 0) {
+    console.log(`\nTransportistas en la columna "${canonicalHeader("driverId")}":`);
+    dim([...drivers].map((d) => `"${d}"`).join(", "));
+    dim("Estos códigos deben coincidir con los de DRIVERS en .env.local");
+  }
 }
 
 if (dataRows.length > 0) {
   const sample = dataRows[0];
+  // La dirección que se geocodifica es calle + municipio, igual que en
+  // lib/sheets.ts: verla montada evita sorpresas con las coordenadas.
+  const fullAddress = [cell(sample, "address"), cell(sample, "town")]
+    .filter(Boolean)
+    .join(", ");
   console.log(`\nPrimera fila, tal y como la va a leer la app:`);
   dim(`id:            ${cell(sample, "id")}`);
-  dim(`transportista: ${cell(sample, "driverId")}`);
+  if (headerMap.driverId !== undefined) {
+    dim(`transportista: ${cell(sample, "driverId")}`);
+  }
   dim(
     `fecha:         ${parseSheetDate(headerMap.date !== undefined ? sample[headerMap.date] : null) ?? "(ilegible)"}`,
   );
-  dim(`dirección:     ${cell(sample, "address")}`);
+  dim(`dirección:     ${fullAddress}`);
   dim(`prioridad:     ${cell(sample, "priority") || "(vacía)"}`);
 }
 

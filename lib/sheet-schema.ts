@@ -15,34 +15,87 @@
 
 export const COLUMNS = {
   /** Identificador único del pedido. Obligatoria. */
-  id: ["ID Pedido", "ID", "Pedido", "Albaran", "Nº Albaran", "Referencia", "Ref"],
+  id: [
+    "ID Pedido",
+    "ID",
+    "Pedido",
+    "Albaran",
+    "Nº Albaran",
+    "Referencia",
+    "Ref",
+    "Nº Comanda",
+    "Comanda",
+  ],
 
-  /** A qué transportista está asignado. Obligatoria. */
-  driverId: ["Transportista", "Repartidor", "Conductor", "Chofer", "Driver"],
+  /**
+   * A qué transportista está asignado. OPCIONAL.
+   *
+   * Si la hoja no tiene esta columna, la app entiende que hay un único
+   * transportista y le enseña todos los pedidos del día sin filtrar. El día
+   * que se añada la columna, el filtro se activa solo.
+   */
+  driverId: ["Transportista", "Repartidor", "Conductor", "Chofer", "Driver", "Xofer"],
 
   /** Fecha de reparto. Obligatoria. */
-  date: ["Fecha", "Fecha Reparto", "Fecha Entrega", "Dia", "Date"],
+  date: ["Fecha", "Fecha Reparto", "Fecha Entrega", "Dia", "Date", "Data"],
 
-  /** Prioridad. Menor número = antes. Opcional (si falta, todas iguales). */
-  priority: ["Prioridad", "Orden", "Priority"],
+  /**
+   * Prioridad. Menor número = antes. Opcional (si falta, todas iguales).
+   * Admite también texto: ver `parsePriority` en lib/sheets.ts.
+   */
+  priority: ["Prioridad", "Orden", "Priority", "Prioritat"],
 
-  customer: ["Cliente", "Nombre", "Destinatario", "Customer"],
+  customer: ["Cliente", "Nombre", "Destinatario", "Customer", "Client"],
 
-  /** Dirección completa para geocodificar y navegar. Obligatoria. */
-  address: ["Direccion", "Dirección", "Domicilio", "Address"],
+  /** Calle y número. Obligatoria. */
+  address: ["Direccion", "Dirección", "Domicilio", "Address", "Adreça", "Carrer"],
 
-  phone: ["Telefono", "Teléfono", "Movil", "Contacto", "Phone"],
+  /**
+   * Municipio y código postal, cuando van en una columna aparte de la calle.
+   *
+   * Opcional: si existe, se concatena con `address` antes de geocodificar.
+   * Sin ella, "Carrer Major, 53" a secas es ambiguo — hay uno en casi cada
+   * pueblo de Cataluña — y Google devuelve unas coordenadas cualesquiera.
+   */
+  town: [
+    "Poblacion",
+    "Población",
+    "Població",
+    "Municipio",
+    "Municipi",
+    "Localidad",
+    "Localitat",
+    "Ciudad",
+    "Ciutat",
+  ],
 
-  notes: ["Observaciones", "Notas", "Comentarios", "Nota", "Notes"],
+  phone: ["Telefono", "Teléfono", "Movil", "Contacto", "Phone", "Telèfon", "Mòbil"],
+
+  notes: [
+    "Observaciones",
+    "Notas",
+    "Comentarios",
+    "Nota",
+    "Notes",
+    "Comentaris/Observacions",
+    "Observacions",
+    "Comentaris",
+  ],
 
   /** Estado de la entrega. La app ESCRIBE aquí. */
-  status: ["Estado", "Status", "Entregado"],
+  status: ["Estado", "Status", "Entregado", "Estat de l'entrega", "Estat"],
 
   /** Momento de la entrega. La app ESCRIBE aquí. */
-  deliveredAt: ["Hora Entrega", "Fecha Entrega Real", "Entregado El"],
+  deliveredAt: [
+    "Hora Entrega",
+    "Fecha Entrega Real",
+    "Entregado El",
+    "Data entrega",
+    "Data Lliurament",
+  ],
 
   /** Nota de incidencia del transportista. La app ESCRIBE aquí. */
-  incidentNote: ["Incidencia", "Motivo", "Nota Transportista"],
+  incidentNote: ["Incidencia", "Motivo", "Nota Transportista", "Motiu"],
 
   /**
    * Coordenadas cacheadas. La app las ESCRIBE la primera vez que geocodifica
@@ -56,8 +109,13 @@ export const COLUMNS = {
 
 export type ColumnKey = keyof typeof COLUMNS;
 
-/** Columnas sin las cuales no podemos funcionar. */
-export const REQUIRED_COLUMNS: ColumnKey[] = ["id", "driverId", "date", "address"];
+/**
+ * Columnas sin las cuales no podemos funcionar.
+ *
+ * `driverId` NO está aquí a propósito: con un solo transportista la hoja no
+ * necesita decir a quién va cada pedido. Ver el comentario de `driverId`.
+ */
+export const REQUIRED_COLUMNS: ColumnKey[] = ["id", "date", "address"];
 
 /** Columnas que la app crea automáticamente si no existen en la hoja. */
 export const MANAGED_COLUMNS: ColumnKey[] = [
