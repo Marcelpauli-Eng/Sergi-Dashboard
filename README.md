@@ -35,6 +35,7 @@ mismos valores, así que un reintento nunca duplica nada.
 | Archivo | Qué hace |
 |---|---|
 | `lib/sheet-schema.ts` | **Mapeo de columnas del Sheet.** El único archivo a tocar si cambian los nombres de las columnas. |
+| `lib/sheet-tab.ts` | Elige la pestaña del mes en curso cuando hay una por mes. |
 | `lib/sheets.ts` | Lee y escribe en el Google Sheet. |
 | `lib/routing.ts` | Geocoding y cálculo de la ruta óptima. |
 | `lib/manifest.ts` | Junta ambas cosas en el paquete que se descarga. |
@@ -85,14 +86,27 @@ La hoja necesita al menos estas columnas, con la cabecera en la fila 1:
 | Columna | Obligatoria | Para qué |
 |---|:---:|---|
 | `ID Pedido` | ✅ | Identificador único e inmutable |
-| `Transportista` | ✅ | Debe coincidir con el código de `DRIVERS` |
 | `Fecha` | ✅ | Fecha de reparto |
 | `Direccion` | ✅ | Se geocodifica para calcular la ruta |
-| `Prioridad` | | Menor número = antes |
+| `Poblacion` | | Municipio y CP, si van aparte de la calle. Se concatenan antes de geocodificar |
+| `Transportista` | | Código del repartidor. **Si no existe, hay uno solo y ve todos los pedidos** |
+| `Prioridad` | | Menor número = antes. Admite también `Urgent`/`Normal`/`Baixa` |
 | `Cliente`, `Telefono`, `Observaciones` | | Se muestran en la ficha |
 
-Los nombres admiten variantes (mayúsculas, acentos, sinónimos). Si en tu
-hoja se llaman de otra forma, añádela a `lib/sheet-schema.ts`.
+Los nombres admiten variantes (mayúsculas, acentos, sinónimos, y las formas
+catalanas: `Data`, `Adreça`, `Població`, `Nº Comanda`, `Client`, `Telèfon`,
+`Prioritat`, `Estat de l'entrega`…). Si en tu hoja se llaman de otra forma,
+añádela a `lib/sheet-schema.ts`.
+
+**Sobre `Transportista`:** con un único repartidor la columna sobra — quien
+entre verá todos los pedidos del día. En cuanto la añadas con el código de
+cada uno, el filtro se activa solo, sin tocar código.
+
+**Una pestaña por mes.** Si la hoja tiene una pestaña por mes
+(`Agost 2026`, `08/2026`, `ago-26`…), no definas `GOOGLE_SHEET_TAB`: la app
+pregunta a Google qué pestañas hay y elige la del mes en curso cada vez, así
+que el día 1 no hay que tocar nada. Ver `lib/sheet-tab.ts`. Define la
+variable solo para forzar una pestaña concreta.
 
 Las columnas donde la app **escribe** (`Estado`, `Hora Entrega`,
 `Incidencia`) y las de caché de coordenadas (`_lat`, `_lng`) **se crean

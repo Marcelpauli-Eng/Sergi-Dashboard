@@ -159,9 +159,12 @@ export async function buildManifest(
   const tomorrowDate = addDays(todayDate, 1);
   const normalizedDriver = driverId.toLowerCase();
 
+  // Sin columna de transportista en la hoja hay un solo repartidor, y todos
+  // los pedidos del día son suyos. En cuanto la columna exista, el filtro se
+  // aplica solo, sin tocar nada aquí.
   const mine = snapshot.orders.filter(
     (order) =>
-      order.driverId === normalizedDriver &&
+      (!snapshot.hasDriverColumn || order.driverId === normalizedDriver) &&
       (order.date === todayDate || order.date === tomorrowDate),
   );
 

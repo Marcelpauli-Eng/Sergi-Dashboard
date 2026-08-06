@@ -1,7 +1,8 @@
 import "server-only";
 import { googleAccessToken } from "./google-auth";
 import { env } from "./env";
-import { parseSheetDate, formatSheetTimestamp } from "./dates";
+import { parseSheetDate, formatSheetTimestamp, today } from "./dates";
+import { findMonthTab, noTabFoundMessage } from "./sheet-tab";
 import {
   mapHeaders,
   canonicalHeader,
@@ -26,8 +27,8 @@ function columnLetter(index: number): string {
 }
 
 /** Rango A1 con el nombre de pestaña escapado (puede llevar espacios). */
-function range(a1: string): string {
-  return `${env.google.sheetTab.replace(/'/g, "''")}!${a1}`;
+function range(tab: string, a1: string): string {
+  return `${tab.replace(/'/g, "''")}!${a1}`;
 }
 
 async function sheetsFetch(path: string, init?: RequestInit): Promise<unknown> {
@@ -53,15 +54,67 @@ async function sheetsFetch(path: string, init?: RequestInit): Promise<unknown> {
   return response.json();
 }
 
-function parseStatus(raw: unknown): DeliveryStatus {
-  const text = String(raw ?? "")
+/** Nombres de todas las pestañas del documento, en su orden real. */
+async function listTabs(): Promise<string[]> {
+  const data = (await sheetsFetch("?fields=sheets.properties.title")) as {
+    sheets?: { properties?: { title?: string } }[];
+  };
+  return (data.sheets ?? [])
+    .map((sheet) => sheet.properties?.title)
+    .filter((title): title is string => Boolean(title));
+}
+
+/**
+ * La pestaña resuelta, cacheada por mes. La clave incluye el mes para que el
+ * día 1 se vuelva a preguntar a Google en vez de seguir leyendo la de
+ * diciembre hasta el siguiente despliegue.
+ */
+let tabCache: { month: string; tab: string } | null = null;
+
+/**
+ * Qué pestaña hay que leer hoy.
+ *
+ * Con `GOOGLE_SHEET_TAB` definida se usa esa y no se pregunta nada. Si no,
+ * se busca la del mes en curso entre las que existen. Ver lib/sheet-tab.ts.
+ */
+export async function resolveSheetTab(): Promise<string> {
+  const configured = env.google.sheetTab;
+  if (configured) return configured;
+
+  const month = today(env.timezone).slice(0, 7); // YYYY-MM
+  if (tabCache?.month === month) return tabCache.tab;
+
+  const tabs = await listTabs();
+  const found = findMonthTab(tabs, month);
+  if (!found) throw new Error(noTabFoundMessage(tabs, month));
+
+  tabCache = { month, tab: found };
+  return found;
+}
+
+/** Minúsculas y sin acentos, para comparar lo que escribe la oficina a mano. */
+function plain(raw: unknown): string {
+  return String(raw ?? "")
     .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // diacríticos
     .toLowerCase();
+}
+
+function parseStatus(raw: unknown): DeliveryStatus {
+  const text = plain(raw);
   if (text === "") return "pendiente";
-  if (["entregado", "entregada", "si", "sí", "ok", "x", "true", "1"].includes(text)) {
+  if (
+    // Las formas catalanas ("entregat", "lliurat") son las que usa la hoja.
+    ["entregado", "entregada", "entregat", "lliurat", "lliurada", "fet"].includes(text) ||
+    ["si", "ok", "x", "true", "1"].includes(text)
+  ) {
     return "entregado";
   }
-  if (["incidencia", "ausente", "rechazado", "no entregado", "ko"].includes(text)) {
+  if (
+    ["incidencia", "ausente", "absent", "rechazado", "rebutjat", "ko"].includes(text) ||
+    ["no entregado", "no entregat"].includes(text)
+  ) {
     return "incidencia";
   }
   return "pendiente";
@@ -71,6 +124,32 @@ function parseNumber(raw: unknown): number | null {
   if (raw === null || raw === undefined || raw === "") return null;
   const value = typeof raw === "number" ? raw : Number(String(raw).replace(",", "."));
   return Number.isFinite(value) ? value : null;
+}
+
+/** Sin prioridad: al final de la ruta, pero antes de desbordar el número. */
+const NO_PRIORITY = Number.MAX_SAFE_INTEGER;
+
+/**
+ * Prioridad como número, donde menor = antes.
+ *
+ * La hoja la escribe como texto ("Urgent", "Normal"), no como número, así
+ * que se traduce. Se dejan huecos entre los valores para poder intercalar
+ * niveles nuevos sin renumerar.
+ */
+function parsePriority(raw: unknown): number {
+  const numeric = parseNumber(raw);
+  if (numeric !== null) return numeric;
+
+  const text = plain(raw);
+  if (text === "") return NO_PRIORITY;
+  if (["urgent", "urgente", "alta", "alt", "prioritario", "alta prioridad"].includes(text)) {
+    return 10;
+  }
+  if (["normal", "media", "mitja", "estandar", "standard"].includes(text)) return 20;
+  if (["baja", "baixa", "baix", "bajo"].includes(text)) return 30;
+
+  // Un texto que no reconocemos no debe colarse por delante de nada.
+  return NO_PRIORITY;
 }
 
 function text(raw: unknown): string {
@@ -84,6 +163,16 @@ export interface SheetSnapshot {
   headerMap: Partial<Record<ColumnKey, number>>;
   /** Filas que se descartaron y por qué, para poder avisar en logs. */
   skipped: { rowNumber: number; reason: string }[];
+  /**
+   * Pestaña de la que salió este snapshot. Viaja con él para que la escritura
+   * de vuelta vaya exactamente a la misma, aunque entretanto cambie el mes.
+   */
+  tab: string;
+  /**
+   * `false` si la hoja no tiene columna de transportista. En ese caso hay un
+   * único transportista y no se filtra por él: ver lib/manifest.ts.
+   */
+  hasDriverColumn: boolean;
 }
 
 /**
@@ -93,15 +182,17 @@ export interface SheetSnapshot {
  * así el parseo no depende del locale con el que esté configurada la hoja.
  */
 export async function readSheet(): Promise<SheetSnapshot> {
+  const tab = await resolveSheetTab();
+
   const data = (await sheetsFetch(
-    `/values/${encodeURIComponent(range("A1:ZZ"))}` +
+    `/values/${encodeURIComponent(range(tab, "A1:ZZ"))}` +
       `?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
   )) as { values?: unknown[][] };
 
   const rows = data.values ?? [];
   if (rows.length === 0) {
     throw new Error(
-      `La pestaña "${env.google.sheetTab}" está vacía. Comprueba GOOGLE_SHEET_TAB.`,
+      `La pestaña "${tab}" está vacía: la fila 1 debe tener las cabeceras.`,
     );
   }
 
@@ -125,7 +216,11 @@ export async function readSheet(): Promise<SheetSnapshot> {
     const rowNumber = i + 1; // Sheets numera desde 1 y la fila 1 es la cabecera.
 
     const id = text(cell(row, "id"));
-    const address = text(cell(row, "address"));
+    // La calle sola no basta para geocodificar: "Carrer Major, 53" existe en
+    // media Cataluña. Si el municipio va en su propia columna, se une aquí.
+    const address = [text(cell(row, "address")), text(cell(row, "town"))]
+      .filter(Boolean)
+      .join(", ");
     const driverId = text(cell(row, "driverId")).toLowerCase();
     const date = parseSheetDate(cell(row, "date"));
 
@@ -154,7 +249,7 @@ export async function readSheet(): Promise<SheetSnapshot> {
       id,
       driverId,
       date,
-      priority: parseNumber(cell(row, "priority")) ?? Number.MAX_SAFE_INTEGER,
+      priority: parsePriority(cell(row, "priority")),
       customer: text(cell(row, "customer")),
       address,
       phone: text(cell(row, "phone")) || null,
@@ -166,7 +261,13 @@ export async function readSheet(): Promise<SheetSnapshot> {
     });
   }
 
-  return { orders, headerMap, skipped };
+  return {
+    orders,
+    headerMap,
+    skipped,
+    tab,
+    hasDriverColumn: headerMap.driverId !== undefined,
+  };
 }
 
 /**
@@ -177,6 +278,7 @@ export async function readSheet(): Promise<SheetSnapshot> {
  * Devuelve el headerMap actualizado.
  */
 export async function ensureManagedColumns(
+  tab: string,
   headerMap: Partial<Record<ColumnKey, number>>,
 ): Promise<Partial<Record<ColumnKey, number>>> {
   const missing = MANAGED_COLUMNS.filter((key) => headerMap[key] === undefined);
@@ -202,7 +304,7 @@ export async function ensureManagedColumns(
   const endCell = `${columnLetter(nextIndex - 1)}1`;
 
   await sheetsFetch(
-    `/values/${encodeURIComponent(range(`${startCell}:${endCell}`))}` +
+    `/values/${encodeURIComponent(range(tab, `${startCell}:${endCell}`))}` +
       `?valueInputOption=RAW`,
     { method: "PUT", body: JSON.stringify({ values: [newHeaders] }) },
   );
@@ -218,6 +320,7 @@ interface CellUpdate {
 }
 
 async function writeCells(
+  tab: string,
   updates: CellUpdate[],
   headerMap: Partial<Record<ColumnKey, number>>,
 ): Promise<void> {
@@ -226,7 +329,7 @@ async function writeCells(
       const columnIndex = headerMap[update.column];
       if (columnIndex === undefined) return null;
       const a1 = `${columnLetter(columnIndex)}${update.rowNumber}`;
-      return { range: range(a1), values: [[update.value]] };
+      return { range: range(tab, a1), values: [[update.value]] };
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
@@ -259,7 +362,7 @@ export async function writeDeliveries(
   if (records.length === 0) return { applied: [], notFound: [] };
 
   const snapshot = await readSheet();
-  const headerMap = await ensureManagedColumns(snapshot.headerMap);
+  const headerMap = await ensureManagedColumns(snapshot.tab, snapshot.headerMap);
   const byId = new Map(snapshot.orders.map((order) => [order.id, order]));
 
   const updates: CellUpdate[] = [];
@@ -294,7 +397,7 @@ export async function writeDeliveries(
     applied.push(record.orderId);
   }
 
-  await writeCells(updates, headerMap);
+  await writeCells(snapshot.tab, updates, headerMap);
   return { applied, notFound };
 }
 
@@ -308,7 +411,7 @@ export async function cacheCoordinates(
 ): Promise<void> {
   if (coords.length === 0) return;
 
-  const headerMap = await ensureManagedColumns(snapshot.headerMap);
+  const headerMap = await ensureManagedColumns(snapshot.tab, snapshot.headerMap);
   const byId = new Map(snapshot.orders.map((order) => [order.id, order]));
 
   const updates: CellUpdate[] = [];
@@ -319,5 +422,5 @@ export async function cacheCoordinates(
     updates.push({ rowNumber: order.rowNumber, column: "lng", value: coord.lng });
   }
 
-  await writeCells(updates, headerMap);
+  await writeCells(snapshot.tab, updates, headerMap);
 }

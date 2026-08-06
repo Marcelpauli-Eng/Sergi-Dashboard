@@ -7,8 +7,10 @@ Al terminar tendrás estos cinco datos para `.env.local`:
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | El email del "usuario robot" |
 | `GOOGLE_PRIVATE_KEY` | Su contraseña, en forma de clave |
 | `GOOGLE_SHEET_ID` | Qué documento hay que leer |
-| `GOOGLE_SHEET_TAB` | Qué pestaña dentro del documento |
 | `GOOGLE_MAPS_API_KEY` | Para geocodificar y calcular rutas |
+
+(Hay una quinta, `GOOGLE_SHEET_TAB`, que normalmente **no hace falta**: si el
+documento tiene una pestaña por mes, la app busca sola la del mes en curso.)
 
 Tiempo estimado: 15 minutos.
 
@@ -136,8 +138,16 @@ https://docs.google.com/spreadsheets/d/1a2B3cD4eF5gH6iJ7kL8mN9oP/edit#gid=0
                                        └────── GOOGLE_SHEET_ID ──────┘
 ```
 
-Y `GOOGLE_SHEET_TAB` es el nombre de la pestaña de abajo, escrito **exacto**
-(respetando mayúsculas y acentos).
+La pestaña **no hace falta indicarla** si el documento tiene una por mes con
+el mes en el nombre (`Agost 2026`, `08/2026`, `ago-26`…): la app pregunta a
+Google qué pestañas hay y elige la de hoy, así que el día 1 no hay que tocar
+nada.
+
+Solo si quieres forzar una pestaña concreta, pon su nombre **exacto**
+(respetando mayúsculas y acentos) en `GOOGLE_SHEET_TAB`.
+
+> ⚠️ Si trabajas con pestañas mensuales, acuérdate de crear la del mes nuevo.
+> Si no existe, `npm run check` te lo dirá y te listará las que sí hay.
 
 ## Paso 9 · Rellenar `.env.local`
 
@@ -151,18 +161,19 @@ Debe quedar así:
 GOOGLE_SERVICE_ACCOUNT_EMAIL="reparto@reparto-123456.iam.gserviceaccount.com"
 GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvQ...\n-----END PRIVATE KEY-----\n"
 GOOGLE_SHEET_ID="1a2B3cD4eF5gH6iJ7kL8mN9oP"
-GOOGLE_SHEET_TAB="Pedidos"
 GOOGLE_MAPS_API_KEY="AIzaSy..."
 
 DEPOT_ADDRESS="Carrer de Mallorca 401, 08013 Barcelona"
 BUSINESS_TIMEZONE="Europe/Madrid"
 
 SESSION_SECRET="...32+ caracteres aleatorios..."
-DRIVERS="sergi:4821:Sergi Pons,juan:9034:Juan Ruiz"
+DRIVERS="sergi:4821:Sergi Pons"
 ```
 
-En `DRIVERS`, el **código** (`sergi`) tiene que coincidir con lo que ponga
-la columna `Transportista` de tu Sheet. El PIN te lo inventas tú.
+El PIN de `DRIVERS` te lo inventas tú. Si tu hoja tiene columna
+`Transportista`, el **código** (`sergi`) tiene que coincidir con lo que ponga
+en ella; si no la tiene, hay un solo transportista y verá todos los pedidos
+del día.
 
 ## Paso 10 · Comprobar que todo está bien
 
@@ -199,6 +210,15 @@ barras.
 
 **"El documento no tiene ninguna pestaña llamada X"**
 `npm run check` te lista las pestañas que sí existen. Copia el nombre exacto.
+
+**"No hay ninguna pestaña que corresponda al mes en curso"**
+Con pestañas mensuales, falta la de este mes: créala con el mes en el nombre.
+`npm run check` te lista las que hay para que veas qué formato usáis.
+
+**"Faltan columnas obligatorias" con la hoja aparentemente bien**
+Mira la **fila 1** de esa pestaña concreta: si alguien pisó la celda de la
+cabecera (un código postal, un "Columna 1"), esa columna deja de reconocerse.
+`npm run check` imprime la fila 1 tal cual para que se vea al momento.
 
 **`REQUEST_DENIED` al calcular la ruta**
 Falta habilitar Geocoding API o Routes API (paso 2), o la clave de API está
