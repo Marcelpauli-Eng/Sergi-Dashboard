@@ -78,8 +78,57 @@ if (missing.length > 0) {
 
 const timezone = process.env.BUSINESS_TIMEZONE || "Europe/Madrid";
 
-ok("Variables de entorno presentes");
+ok("Variables de entorno de Google presentes");
 dim(`cuenta de servicio: ${email}`);
+
+// ── 1b. El resto de variables ─────────────────────────────────────────────
+//
+// No hacen falta para hablar con el Sheet, así que aquí solo se avisa: el
+// diagnóstico de la hoja sigue siendo útil aunque falten. Pero sin ellas la
+// app no arranca, y descubrirlo aquí es mucho mejor que en un 500.
+
+console.log("\nResto de configuración:");
+
+const depot = process.env.DEPOT_ADDRESS?.trim();
+if (!depot) {
+  warn("DEPOT_ADDRESS  → falta. Es de dónde sale el transportista; sin ella");
+  dim("la app no puede calcular la ruta y falla al generar el manifiesto.");
+} else {
+  ok(`DEPOT_ADDRESS  → ${depot}`);
+  dim("Compruébala en Google Maps: si Maps duda, la app también.");
+}
+
+const secret = process.env.SESSION_SECRET ?? "";
+if (!secret) {
+  warn("SESSION_SECRET → falta. Firma la cookie de sesión.");
+  dim('Genera uno:  node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"');
+} else if (secret.length < 32) {
+  warn(`SESSION_SECRET → solo ${secret.length} caracteres, hacen falta 32 o más`);
+} else {
+  ok(`SESSION_SECRET → ${secret.length} caracteres`);
+}
+
+const driversRaw = process.env.DRIVERS?.trim();
+if (!driversRaw) {
+  warn("DRIVERS        → falta. Sin transportistas dados de alta no se");
+  dim('puede entrar. Formato: DRIVERS="sergi:4821:Sergi Pons"');
+} else {
+  // Mismas reglas que parseDrivers en lib/env.ts, que no se puede importar
+  // aquí porque ese módulo es solo de servidor.
+  const entries = driversRaw.split(",").map((e) => e.trim()).filter(Boolean);
+  const broken = entries.filter((entry) => {
+    const [id, pin] = entry.split(":").map((part) => part.trim());
+    return !id || !pin;
+  });
+
+  if (broken.length > 0) {
+    bad(`DRIVERS        → entrada(s) mal formada(s): ${broken.join(", ")}`);
+    dim("El formato es codigo:pin o codigo:pin:nombre, separados por comas.");
+  } else {
+    const codes = entries.map((e) => e.split(":")[0].trim().toLowerCase());
+    ok(`DRIVERS        → ${codes.length} transportista(s): ${codes.join(", ")}`);
+  }
+}
 
 const privateKey = rawKey!.replace(/\\n/g, "\n");
 if (!privateKey.includes("BEGIN PRIVATE KEY")) {
