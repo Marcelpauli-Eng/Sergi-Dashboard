@@ -233,7 +233,7 @@ for (const key of Object.keys(COLUMNS) as ColumnKey[]) {
     missingRequired++;
   } else if (key === "driverId") {
     warn(`${label} → no existe: un solo transportista, verá todos los pedidos`);
-  } else if (key === "town") {
+  } else if (key === "city") {
     warn(`${label} → no existe: se geocodifica solo con la dirección`);
   } else if (MANAGED_COLUMNS.includes(key)) {
     warn(`${label} → no existe, la app la creará sola`);
@@ -290,7 +290,7 @@ if (dataRows.length > 0) {
   const sample = dataRows[0];
   // La dirección que se geocodifica es calle + municipio, igual que en
   // lib/sheets.ts: verla montada evita sorpresas con las coordenadas.
-  const fullAddress = [cell(sample, "address"), cell(sample, "town")]
+  const fullAddress = [cell(sample, "address"), cell(sample, "city")]
     .filter(Boolean)
     .join(", ");
   console.log(`\nPrimera fila, tal y como la va a leer la app:`);

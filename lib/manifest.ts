@@ -224,7 +224,7 @@ export async function buildManifest(
     driverId: normalizedDriver,
     driverName,
     generatedAt: new Date().toISOString(),
-    sheetTab: snapshot.sheetTab,
+    sheetTab: snapshot.sheetTab ?? "",
     today: todayRoute,
     tomorrow: tomorrowRoute.stops.length > 0 ? tomorrowRoute : null,
   };

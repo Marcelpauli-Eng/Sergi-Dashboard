@@ -27,8 +27,9 @@ function columnLetter(index: number): string {
 }
 
 /** Rango A1 con el nombre de pestaña escapado (puede llevar espacios). */
-function range(a1: string, sheetTab?: string): string {
+function range(a1: string, sheetTab?: string | null): string {
   const tab = sheetTab ?? env.google.sheetTab;
+  if (!tab) return a1;
   // Las comillas simples en el nombre de pestaña se escapan duplicándolas.
   // Envolvemos siempre en comillas simples para que funcionen tabs con espacios.
   return `'${tab.replace(/'/g, "''")}'!${a1}`;
@@ -124,13 +125,13 @@ function parsePriority(raw: unknown): number {
   const numeric = parseNumber(raw);
   if (numeric !== null) return numeric;
 
-  const text = plain(raw);
-  if (text === "") return NO_PRIORITY;
-  if (["urgent", "urgente", "alta", "alt", "prioritario", "alta prioridad"].includes(text)) {
+  const textStr = text(raw);
+  if (textStr === "") return NO_PRIORITY;
+  if (["urgent", "urgente", "alta", "alt", "prioritario", "alta prioridad"].includes(textStr)) {
     return 10;
   }
-  if (["normal", "media", "mitja", "estandar", "standard"].includes(text)) return 20;
-  if (["baja", "baixa", "baix", "bajo"].includes(text)) return 30;
+  if (["normal", "media", "mitja", "estandar", "standard"].includes(textStr)) return 20;
+  if (["baja", "baixa", "baix", "bajo"].includes(textStr)) return 30;
 
   // Un texto que no reconocemos no debe colarse por delante de nada.
   return NO_PRIORITY;
@@ -148,7 +149,7 @@ export interface SheetSnapshot {
   /** Filas que se descartaron y por qué, para poder avisar en logs. */
   skipped: { rowNumber: number; reason: string }[];
   /** Nombre de la pestaña que se leyó. */
-  sheetTab: string;
+  sheetTab: string | null;
 }
 
 /**
@@ -159,7 +160,7 @@ export interface SheetSnapshot {
  *
  * @param sheetTab - Nombre de la pestaña a leer. Si no se pasa, usa la de env.
  */
-export async function readSheet(sheetTab?: string): Promise<SheetSnapshot> {
+export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot> {
   const tab = sheetTab ?? env.google.sheetTab;
 
   const data = (await sheetsFetch(
@@ -258,7 +259,7 @@ export async function readSheet(sheetTab?: string): Promise<SheetSnapshot> {
  */
 export async function ensureManagedColumns(
   headerMap: Partial<Record<ColumnKey, number>>,
-  sheetTab?: string,
+  sheetTab?: string | null,
 ): Promise<Partial<Record<ColumnKey, number>>> {
   const tab = sheetTab ?? env.google.sheetTab;
   const missing = MANAGED_COLUMNS.filter((key) => headerMap[key] === undefined);
@@ -300,10 +301,9 @@ interface CellUpdate {
 }
 
 async function writeCells(
-  tab: string,
   updates: CellUpdate[],
   headerMap: Partial<Record<ColumnKey, number>>,
-  sheetTab?: string,
+  sheetTab?: string | null,
 ): Promise<void> {
   const tab = sheetTab ?? env.google.sheetTab;
   const data = updates
@@ -340,7 +340,7 @@ export interface WriteResult {
  */
 export async function writeDeliveries(
   records: DeliveryRecord[],
-  sheetTab?: string,
+  sheetTab?: string | null,
 ): Promise<WriteResult> {
   if (records.length === 0) return { applied: [], notFound: [] };
 
