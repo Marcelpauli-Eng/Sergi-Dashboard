@@ -35,6 +35,9 @@ async function getDepotCoord(): Promise<Coord> {
  * Sheet para no repetir el trabajo mañana.
  *
  * Muta los pedidos recibidos: a partir de aquí ya tienen lat/lng.
+ *
+ * Para las direcciones que tienen ciudad, se concatena para mejorar la
+ * precisión del geocoding.
  */
 async function fillMissingCoordinates(
   orders: Order[],
@@ -48,10 +51,14 @@ async function fillMissingCoordinates(
   // En serie a propósito: son pocas direcciones nuevas al día y así no se
   // dispara el rate limit de la Geocoding API en un pico.
   for (const order of pending) {
-    const coord = await geocodeAddress(order.address);
+    // Construir dirección completa con la ciudad si existe
+    const fullAddress = order.city
+      ? `${order.address}, ${order.city}`
+      : order.address;
+    const coord = await geocodeAddress(fullAddress);
     if (!coord) {
       console.warn(
-        `Dirección no reconocida por Google (pedido ${order.id}): "${order.address}"`,
+        `Dirección no reconocida por Google (pedido ${order.id}): "${fullAddress}"`,
       );
       continue;
     }
@@ -140,12 +147,17 @@ async function buildRouteDay(
 /**
  * Genera el paquete completo que se descarga el transportista: todo lo que
  * necesita para trabajar el día entero sin cobertura.
+ *
+ * @param driverId - ID del transportista logueado.
+ * @param driverName - Nombre del transportista.
+ * @param sheetTab - Pestaña del Sheet a leer. Si no se pasa, usa la de env.
  */
 export async function buildManifest(
   driverId: string,
   driverName: string,
+  sheetTab?: string,
 ): Promise<Manifest> {
-  const snapshot = await readSheet();
+  const snapshot = await readSheet(sheetTab);
 
   if (snapshot.skipped.length > 0) {
     console.warn(
@@ -156,27 +168,54 @@ export async function buildManifest(
   }
 
   const todayDate = today(env.timezone);
-  const tomorrowDate = addDays(todayDate, 1);
   const normalizedDriver = driverId.toLowerCase();
 
-  const mine = snapshot.orders.filter(
-    (order) =>
-      order.driverId === normalizedDriver &&
-      (order.date === todayDate || order.date === tomorrowDate),
-  );
+  // Si el Sheet tiene columna driverId, filtrar por transportista.
+  // Si no, todos los pedidos de la pestaña son del transportista logueado.
+  const hasDriverColumn = snapshot.orders.some((o) => o.driverId !== "");
+  const hasDateColumn = snapshot.orders.some((o) => o.date !== "");
+
+  let mine: Order[];
+
+  if (hasDriverColumn && hasDateColumn) {
+    // Modo original: filtrar por transportista y fecha
+    const tomorrowDate = addDays(todayDate, 1);
+    mine = snapshot.orders.filter(
+      (order) =>
+        order.driverId === normalizedDriver &&
+        (order.date === todayDate || order.date === tomorrowDate),
+    );
+  } else if (hasDriverColumn) {
+    // Filtrar solo por transportista
+    mine = snapshot.orders.filter(
+      (order) => order.driverId === normalizedDriver,
+    );
+  } else {
+    // Sin columna transportista: todos los pedidos son del usuario
+    mine = snapshot.orders;
+  }
 
   await fillMissingCoordinates(mine, snapshot);
   const depot = await getDepotCoord();
 
+  // Si hay fecha, separar hoy y mañana. Si no, todo va en "hoy".
+  let todayOrders: Order[];
+  let tomorrowOrders: Order[];
+
+  if (hasDateColumn) {
+    const tomorrowDate = addDays(todayDate, 1);
+    todayOrders = mine.filter((o) => o.date === todayDate);
+    tomorrowOrders = mine.filter((o) => o.date === tomorrowDate);
+  } else {
+    todayOrders = mine;
+    tomorrowOrders = [];
+  }
+
   const [todayRoute, tomorrowRoute] = await Promise.all([
+    buildRouteDay(todayDate, todayOrders, depot),
     buildRouteDay(
-      todayDate,
-      mine.filter((o) => o.date === todayDate),
-      depot,
-    ),
-    buildRouteDay(
-      tomorrowDate,
-      mine.filter((o) => o.date === tomorrowDate),
+      hasDateColumn ? addDays(todayDate, 1) : todayDate,
+      tomorrowOrders,
       depot,
     ),
   ]);
@@ -185,6 +224,7 @@ export async function buildManifest(
     driverId: normalizedDriver,
     driverName,
     generatedAt: new Date().toISOString(),
+    sheetTab: snapshot.sheetTab,
     today: todayRoute,
     tomorrow: tomorrowRoute.stops.length > 0 ? tomorrowRoute : null,
   };

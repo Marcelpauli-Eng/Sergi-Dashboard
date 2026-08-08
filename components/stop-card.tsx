@@ -65,15 +65,33 @@ export default function StopCard({ stop, onDelivered, onIncident }: Props) {
               <p className="min-w-0 flex-1 truncate font-semibold leading-tight tracking-tight">
                 {stop.customer || stop.address}
               </p>
-              {stop.status === "entregado" && <Badge variant="success">Entregado</Badge>}
+              {stop.status === "entregado" && <Badge variant="success">Entregat</Badge>}
               {stop.status === "incidencia" && (
-                <Badge variant="warning">Incidencia</Badge>
+                <Badge variant="warning">Incidència</Badge>
               )}
             </div>
 
+            {/* Dirección y Población */}
             <p className="mt-1 text-sm leading-snug text-muted-foreground">
               {stop.address}
             </p>
+            {stop.city && (
+              <p className="text-sm text-muted-foreground">
+                {stop.city}
+              </p>
+            )}
+
+            {/* Nº Comanda */}
+            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+              {stop.id}
+            </p>
+
+            {/* Medidas */}
+            {stop.measures && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                📦 {stop.measures}
+              </p>
+            )}
 
             {leg && !done && (
               <p className="mt-1.5 text-xs text-muted-foreground">
@@ -116,14 +134,14 @@ export default function StopCard({ stop, onDelivered, onIncident }: Props) {
                   onClick={() => onDelivered(stop.id)}
                 >
                   <Check />
-                  Entregado
+                  Entregat
                 </Button>
                 <Button
                   variant="ghost"
                   size="touch"
                   onClick={() => setShowIncident(true)}
                 >
-                  Incidencia
+                  Incidència
                 </Button>
               </div>
             ) : (
@@ -132,7 +150,7 @@ export default function StopCard({ stop, onDelivered, onIncident }: Props) {
                   htmlFor={`note-${stop.id}`}
                   className="block text-sm font-medium"
                 >
-                  ¿Qué ha pasado?
+                  Què ha passat?
                 </label>
                 <textarea
                   id={`note-${stop.id}`}
@@ -140,7 +158,7 @@ export default function StopCard({ stop, onDelivered, onIncident }: Props) {
                   onChange={(e) => setNote(e.target.value)}
                   rows={2}
                   maxLength={500}
-                  placeholder="Ausente, dirección incorrecta, rechazado…"
+                  placeholder="Absent, adreça incorrecta, rebutjat…"
                   className="w-full rounded-md border border-input bg-card px-3 py-2.5 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/15"
                 />
                 <div className="flex gap-2">
@@ -153,7 +171,7 @@ export default function StopCard({ stop, onDelivered, onIncident }: Props) {
                       setNote("");
                     }}
                   >
-                    Guardar incidencia
+                    Guardar incidència
                   </Button>
                   <Button
                     variant="ghost"
@@ -163,7 +181,7 @@ export default function StopCard({ stop, onDelivered, onIncident }: Props) {
                       setNote("");
                     }}
                   >
-                    Cancelar
+                    Cancel·lar
                   </Button>
                 </div>
               </div>

@@ -141,11 +141,30 @@ export async function recordDelivery(
   void flushOutbox().catch(() => {});
 }
 
+/**
+ * Obtiene la pestaña del Sheet actualmente seleccionada.
+ * Se guarda en localStorage para persistir entre sesiones.
+ */
+export function getSelectedTab(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("selectedSheetTab");
+}
+
+/**
+ * Guarda la pestaña seleccionada.
+ */
+export function setSelectedTab(tab: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("selectedSheetTab", tab);
+}
+
 /** Envía al servidor las entregas pendientes. Devuelve cuántas se subieron. */
 export async function flushOutbox(): Promise<number> {
   const pending = await pendingOutbox();
   if (pending.length === 0) return 0;
   if (typeof navigator !== "undefined" && !navigator.onLine) return 0;
+
+  const sheetTab = getSelectedTab();
 
   const response = await request("/api/deliveries", {
     method: "POST",
@@ -158,6 +177,7 @@ export async function flushOutbox(): Promise<number> {
         recordedAt,
         note,
       })),
+      ...(sheetTab ? { sheetTab } : {}),
     }),
   });
 
@@ -201,9 +221,19 @@ export async function flushOutbox(): Promise<number> {
   return result.applied.length;
 }
 
-/** Descarga el manifiesto del día y lo guarda en IndexedDB. */
-export async function refreshManifest(): Promise<void> {
-  const response = await request("/api/manifest", { cache: "no-store" });
+/**
+ * Descarga el manifiesto del día y lo guarda en IndexedDB.
+ *
+ * @param sheetTab - Pestaña del Sheet a leer. Si se pasa, se añade como
+ *   parámetro al endpoint. Si no, el servidor usa la de env.
+ */
+export async function refreshManifest(sheetTab?: string): Promise<void> {
+  const tab = sheetTab ?? getSelectedTab();
+  const url = tab
+    ? `/api/manifest?tab=${encodeURIComponent(tab)}`
+    : "/api/manifest";
+
+  const response = await request(url, { cache: "no-store" });
 
   if (response.status === 401) throw new SessionExpiredError();
   if (!response.ok) {
@@ -230,8 +260,10 @@ export interface SyncOutcome {
  * Nunca lanza: devuelve el resultado para que la interfaz pueda mostrar un
  * aviso discreto sin romper la pantalla. La única excepción que sí se
  * propaga es la sesión caducada, porque requiere que el usuario actúe.
+ *
+ * @param sheetTab - Pestaña del Sheet. Se pasa a refreshManifest.
  */
-export async function syncNow(): Promise<SyncOutcome> {
+export async function syncNow(sheetTab?: string): Promise<SyncOutcome> {
   let uploaded = 0;
   let error: string | null = null;
 
@@ -243,7 +275,7 @@ export async function syncNow(): Promise<SyncOutcome> {
   }
 
   try {
-    await refreshManifest();
+    await refreshManifest(sheetTab);
     return { uploaded, refreshed: true, error };
   } catch (e) {
     if (e instanceof SessionExpiredError) throw e;

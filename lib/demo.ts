@@ -142,7 +142,9 @@ function toStop(sample: Sample, date: string, sequence: number): Stop {
     priority: sample.priority,
     customer: sample.customer,
     address: sample.address,
+    city: null,
     phone: sample.phone ?? null,
+    measures: null,
     notes: sample.notes ?? null,
     status: recorded?.status ?? "pendiente",
     lat: sample.lat,
@@ -182,6 +184,7 @@ export function demoManifest(timezone: string): Manifest {
     driverName: DEMO_DRIVER.name,
     generatedAt: new Date().toISOString(),
     demo: true,
+    sheetTab: "Demo",
     today: buildDay(TODAY_SAMPLES, todayDate),
     tomorrow: buildDay(TOMORROW_SAMPLES, addDays(todayDate, 1)),
   };

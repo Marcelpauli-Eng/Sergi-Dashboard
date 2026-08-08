@@ -10,17 +10,21 @@ export type DeliveryStatus = "pendiente" | "entregado" | "incidencia";
 
 /** Una fila del Sheet, ya normalizada. */
 export interface Order {
-  /** Identificador único e inmutable del pedido (nº de albarán o similar). */
+  /** Identificador único e inmutable del pedido (nº de comanda). */
   id: string;
-  /** Código del transportista al que está asignado. */
+  /** Código del transportista al que está asignado. Vacío si el Sheet no tiene esa columna. */
   driverId: string;
-  /** Fecha de reparto en formato YYYY-MM-DD. */
+  /** Fecha de reparto en formato YYYY-MM-DD. Vacío si el Sheet usa pestañas por mes. */
   date: string;
   /** Prioridad tal cual viene del Sheet. Menor número = más prioritario. */
   priority: number;
   customer: string;
   address: string;
+  /** Población / ciudad. Complementa la dirección. */
+  city: string | null;
   phone: string | null;
+  /** Medidas del paquete. */
+  measures: string | null;
   notes: string | null;
   status: DeliveryStatus;
   /** Coordenadas cacheadas en el Sheet para no re-geocodificar cada día. */
@@ -77,6 +81,8 @@ export interface Manifest {
    * forma bien visible para que nadie los confunda con pedidos reales.
    */
   demo?: boolean;
+  /** Nombre de la pestaña del Sheet que se está usando. */
+  sheetTab: string;
   today: RouteDay;
   tomorrow: RouteDay | null;
 }

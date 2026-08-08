@@ -15,28 +15,52 @@
 
 export const COLUMNS = {
   /** Identificador único del pedido. Obligatoria. */
-  id: ["ID Pedido", "ID", "Pedido", "Albaran", "Nº Albaran", "Referencia", "Ref"],
+  id: [
+    "Nº Comanda",
+    "N Comanda",
+    "Numero Comanda",
+    "ID Pedido",
+    "ID",
+    "Pedido",
+    "Albaran",
+    "Nº Albaran",
+    "Referencia",
+    "Ref",
+  ],
 
-  /** A qué transportista está asignado. Obligatoria. */
-  driverId: ["Transportista", "Repartidor", "Conductor", "Chofer", "Driver"],
+  /** A qué transportista está asignado. Opcional (el Sheet real no la tiene). */
+  driverId: ["Transportista", "Repartidor", "Conductor", "Chofer", "Driver", "Tr"],
 
-  /** Fecha de reparto. Obligatoria. */
+  /** Fecha de reparto. Opcional (el Sheet real usa pestañas por mes). */
   date: ["Fecha", "Fecha Reparto", "Fecha Entrega", "Dia", "Date"],
 
   /** Prioridad. Menor número = antes. Opcional (si falta, todas iguales). */
-  priority: ["Prioridad", "Orden", "Priority"],
+  priority: ["Prioritat", "Prioridad", "Orden", "Priority"],
 
-  customer: ["Cliente", "Nombre", "Destinatario", "Customer"],
+  customer: ["Client", "Cliente", "Nombre", "Destinatario", "Customer"],
 
   /** Dirección completa para geocodificar y navegar. Obligatoria. */
-  address: ["Direccion", "Dirección", "Domicilio", "Address"],
+  address: ["Adreça", "Adreca", "Direccion", "Dirección", "Domicilio", "Address"],
 
-  phone: ["Telefono", "Teléfono", "Movil", "Contacto", "Phone"],
+  /** Población / ciudad. Complementa la dirección. */
+  city: ["Població", "Poblacio", "Población", "Poblacion", "Ciudad", "City"],
+
+  phone: ["Telefon", "Telefono", "Teléfono", "Movil", "Contacto", "Phone"],
+
+  /** Medidas del paquete. */
+  measures: ["Mides", "Medidas", "Measures", "Dimensiones"],
 
   notes: ["Observaciones", "Notas", "Comentarios", "Nota", "Notes"],
 
   /** Estado de la entrega. La app ESCRIBE aquí. */
-  status: ["Estado", "Status", "Entregado"],
+  status: [
+    "Estat de l'entrega",
+    "Estat entrega",
+    "Estat",
+    "Estado",
+    "Status",
+    "Entregado",
+  ],
 
   /** Momento de la entrega. La app ESCRIBE aquí. */
   deliveredAt: ["Hora Entrega", "Fecha Entrega Real", "Entregado El"],
@@ -56,8 +80,12 @@ export const COLUMNS = {
 
 export type ColumnKey = keyof typeof COLUMNS;
 
-/** Columnas sin las cuales no podemos funcionar. */
-export const REQUIRED_COLUMNS: ColumnKey[] = ["id", "driverId", "date", "address"];
+/**
+ * Columnas sin las cuales no podemos funcionar.
+ * Solo id y address son realmente obligatorias — el Sheet real no tiene
+ * ni driverId ni date (usa pestañas por mes).
+ */
+export const REQUIRED_COLUMNS: ColumnKey[] = ["id", "address"];
 
 /** Columnas que la app crea automáticamente si no existen en la hoja. */
 export const MANAGED_COLUMNS: ColumnKey[] = [

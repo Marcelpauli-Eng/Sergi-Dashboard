@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { writeDeliveries } from "@/lib/sheets";
@@ -14,6 +14,8 @@ const recordSchema = z.object({
 
 const schema = z.object({
   records: z.array(recordSchema).min(1).max(100),
+  /** Pestaña del Sheet donde escribir. Si no se pasa, usa la de env. */
+  sheetTab: z.string().optional(),
 });
 
 /**
@@ -26,7 +28,7 @@ const schema = z.object({
  * mismas celdas con los mismos valores, así que un reintento tras un timeout
  * nunca duplica nada.
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   const driver = await getSession();
   if (!driver) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -52,7 +54,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await writeDeliveries(parsed.data.records);
+    const result = await writeDeliveries(parsed.data.records, parsed.data.sheetTab);
 
     if (result.notFound.length > 0) {
       console.warn(

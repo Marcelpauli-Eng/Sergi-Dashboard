@@ -3,9 +3,15 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ChevronDown, Route } from "lucide-react";
+import { ChevronDown, Menu, Route, X } from "lucide-react";
 import { db } from "@/lib/db";
-import { recordDelivery, syncNow, SessionExpiredError } from "@/lib/sync";
+import {
+  recordDelivery,
+  syncNow,
+  SessionExpiredError,
+  getSelectedTab,
+  setSelectedTab,
+} from "@/lib/sync";
 import { formatDistance, formatDuration } from "@/lib/format";
 import { formatLongDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
@@ -67,11 +73,64 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   const [showTomorrow, setShowTomorrow] = useState(false);
   const [showDone, setShowDone] = useState(false);
 
+  // ── Menú hamburguesa & selector de pestaña ────────────────────────────
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [tabs, setTabs] = useState<string[]>([]);
+  const [selectedTab, setSelectedTabState] = useState<string | null>(null);
+  const [loadingTabs, setLoadingTabs] = useState(false);
+
+  // Inicializar tab seleccionada desde localStorage
+  useEffect(() => {
+    const saved = getSelectedTab();
+    if (saved) setSelectedTabState(saved);
+  }, []);
+
+  // Cargar pestañas del Sheet cuando se abre el menú
+  const fetchTabs = useCallback(async () => {
+    if (tabs.length > 0) return; // ya las tenemos
+    setLoadingTabs(true);
+    try {
+      const res = await fetch("/api/sheets/tabs");
+      if (res.ok) {
+        const data = (await res.json()) as { tabs: string[] };
+        setTabs(data.tabs);
+      }
+    } catch {
+      // Silenciar si no hay red
+    } finally {
+      setLoadingTabs(false);
+    }
+  }, [tabs.length]);
+
+  const handleTabSelect = useCallback(
+    async (tab: string) => {
+      setSelectedTabState(tab);
+      setSelectedTab(tab);
+      setMenuOpen(false);
+      // Resincronizar con la nueva pestaña
+      setSyncing(true);
+      setError(null);
+      try {
+        const outcome = await syncNow(tab);
+        setError(outcome.error);
+      } catch (e) {
+        if (e instanceof SessionExpiredError) {
+          router.replace("/login");
+          return;
+        }
+        setError(e instanceof Error ? e.message : "Error de sincronización");
+      } finally {
+        setSyncing(false);
+      }
+    },
+    [router],
+  );
+
   const sync = useCallback(async () => {
     setSyncing(true);
     setError(null);
     try {
-      const outcome = await syncNow();
+      const outcome = await syncNow(selectedTab ?? undefined);
       setError(outcome.error);
     } catch (e) {
       if (e instanceof SessionExpiredError) {
@@ -82,7 +141,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     } finally {
       setSyncing(false);
     }
-  }, [router]);
+  }, [router, selectedTab]);
 
   // Sincroniza al abrir, al recuperar cobertura y al volver a la app.
   // Son los tres momentos en los que puede haber algo nuevo que enviar o
@@ -138,13 +197,40 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 {formatLongDate(todayRoute.date)}
               </p>
             )}
+            {/* Mostrar la pestaña seleccionada */}
+            {(selectedTab || manifest?.sheetTab) && (
+              <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                📋 {selectedTab || manifest?.sheetTab}
+              </p>
+            )}
           </div>
-          {total > 0 && (
-            <p className="shrink-0 text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">{closed.length}</span>
-              /{total}
-            </p>
-          )}
+
+          <div className="flex shrink-0 items-center gap-3">
+            {total > 0 && (
+              <p className="text-sm text-muted-foreground">
+                <span className="font-semibold text-foreground">{closed.length}</span>
+                /{total}
+              </p>
+            )}
+
+            {/* Botón hamburguesa */}
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen((v) => !v);
+                if (!menuOpen) void fetchTabs();
+              }}
+              className="flex size-9 items-center justify-center rounded-lg transition-colors hover:bg-muted"
+              aria-label="Menú"
+              aria-expanded={menuOpen}
+            >
+              {menuOpen ? (
+                <X className="size-5 text-foreground" />
+              ) : (
+                <Menu className="size-5 text-foreground" />
+              )}
+            </button>
+          </div>
         </div>
 
         {total > 0 && (
@@ -173,6 +259,47 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         />
       </header>
 
+      {/* ── Panel del menú hamburguesa ────────────────────────────────── */}
+      {menuOpen && (
+        <div className="animate-fade-in border-b border-border bg-card/95 px-4 py-4 shadow-lg backdrop-blur-md">
+          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Selecciona la hoja
+          </p>
+          {loadingTabs ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              Cargando pestañas…
+            </p>
+          ) : tabs.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              No se han podido cargar las pestañas
+            </p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {tabs.map((tab) => {
+                const isActive =
+                  tab === selectedTab ||
+                  (!selectedTab && tab === manifest?.sheetTab);
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => void handleTabSelect(tab)}
+                    className={cn(
+                      "rounded-lg border px-3 py-2.5 text-xs font-medium transition-all",
+                      isActive
+                        ? "border-foreground bg-foreground text-primary-foreground shadow-sm"
+                        : "border-border bg-background text-foreground hover:border-foreground/30 hover:bg-muted",
+                    )}
+                  >
+                    {tab}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       <main className="flex-1 px-4 py-5 pb-[max(2rem,env(safe-area-inset-bottom))]">
         {loading ? (
           <p className="py-16 text-center text-sm text-muted-foreground">Cargando…</p>
@@ -186,7 +313,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
               <div className="animate-rise-in rounded-xl border border-border bg-card px-6 py-12 text-center shadow-sm">
                 <p className="text-base">
                   {total === 0
-                    ? "Hoy no tienes pedidos asignados"
+                    ? "No hay pedidos en esta hoja"
                     : "Jornada completada"}
                 </p>
                 {total > 0 && (
@@ -289,6 +416,9 @@ function TomorrowRow({ stop }: { stop: Stop }) {
     <li className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
       <p className="font-medium">{stop.customer || stop.address}</p>
       <p className="mt-0.5 text-sm text-muted-foreground">{stop.address}</p>
+      {stop.city && (
+        <p className="text-sm text-muted-foreground">{stop.city}</p>
+      )}
     </li>
   );
 }
@@ -347,7 +477,7 @@ function EmptyState({ online, syncing }: { online: boolean; syncing: boolean }) 
       </p>
       <p className="mt-1.5 text-sm text-muted-foreground">
         {online
-          ? "Pulsa Actualizar para descargar la ruta de hoy."
+          ? "Selecciona una hoja del menú ☰ y pulsa Actualizar."
           : "Conéctate a internet una vez para descargar la ruta. Después podrás trabajar sin cobertura."}
       </p>
     </div>
