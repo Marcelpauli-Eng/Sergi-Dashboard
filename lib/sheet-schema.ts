@@ -50,7 +50,16 @@ export const COLUMNS = {
   /** Medidas del paquete. */
   measures: ["Mides", "Medidas", "Measures", "Dimensiones"],
 
-  notes: ["Observaciones", "Notas", "Comentarios", "Nota", "Notes"],
+  notes: [
+    "Observaciones",
+    "Notas",
+    "Comentarios",
+    "Nota",
+    "Notes",
+    "Comentaris/Observacions",
+    "Observacions",
+    "Comentaris",
+  ],
 
   /** Estado de la entrega. La app ESCRIBE aquí. */
   status: [
@@ -63,10 +72,16 @@ export const COLUMNS = {
   ],
 
   /** Momento de la entrega. La app ESCRIBE aquí. */
-  deliveredAt: ["Hora Entrega", "Fecha Entrega Real", "Entregado El"],
+  deliveredAt: [
+    "Hora Entrega",
+    "Fecha Entrega Real",
+    "Entregado El",
+    "Data entrega",
+    "Data Lliurament",
+  ],
 
   /** Nota de incidencia del transportista. La app ESCRIBE aquí. */
-  incidentNote: ["Incidencia", "Motivo", "Nota Transportista"],
+  incidentNote: ["Incidencia", "Motivo", "Nota Transportista", "Motiu"],
 
   /**
    * Coordenadas cacheadas. La app las ESCRIBE la primera vez que geocodifica

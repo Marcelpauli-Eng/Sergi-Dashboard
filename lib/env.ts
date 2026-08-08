@@ -23,6 +23,12 @@ function optional(name: string, fallback: string): string {
   return value && value.trim() !== "" ? value : fallback;
 }
 
+/** Como `optional`, pero distinguiendo "sin definir" de un valor cualquiera. */
+function optionalOrNull(name: string): string | null {
+  const value = process.env[name];
+  return value && value.trim() !== "" ? value.trim() : null;
+}
+
 /**
  * La clave privada del service account llega con "\n" literales cuando se
  * pega en un panel de variables de entorno (Vercel, por ejemplo). Hay que
@@ -65,8 +71,14 @@ interface Env {
     serviceAccountEmail: string;
     privateKey: string;
     sheetId: string;
-    /** Nombre de la pestaña con los pedidos. */
-    sheetTab: string;
+    /**
+     * Nombre de la pestaña con los pedidos.
+     *
+     * `null` —lo normal— significa "la del mes en curso, búscala tú": la
+     * hoja tiene una pestaña por mes y así no hay que tocar nada cada día 1.
+     * Ver lib/sheet-tab.ts. Definir la variable fuerza una pestaña concreta.
+     */
+    sheetTab: string | null;
     mapsApiKey: string;
   };
   /** Dirección de la central. Es el punto de partida de todas las rutas. */
@@ -100,7 +112,7 @@ const loaders: { [K in keyof Env]: () => Env[K] } = {
     serviceAccountEmail: required("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
     privateKey: parsePrivateKey(required("GOOGLE_PRIVATE_KEY")),
     sheetId: required("GOOGLE_SHEET_ID"),
-    sheetTab: optional("GOOGLE_SHEET_TAB", "Pedidos"),
+    sheetTab: optionalOrNull("GOOGLE_SHEET_TAB"),
     mapsApiKey: required("GOOGLE_MAPS_API_KEY"),
   }),
   depotAddress: () => required("DEPOT_ADDRESS"),

@@ -1,7 +1,8 @@
 import "server-only";
 import { googleAccessToken } from "./google-auth";
 import { env } from "./env";
-import { parseSheetDate, formatSheetTimestamp } from "./dates";
+import { parseSheetDate, formatSheetTimestamp, today } from "./dates";
+import { findMonthTab, findLatestTabUpTo, noTabFoundMessage } from "./sheet-tab";
 import {
   mapHeaders,
   canonicalHeader,
@@ -74,6 +75,8 @@ export async function listSheetTabs(): Promise<string[]> {
 function parseStatus(raw: unknown): DeliveryStatus {
   const text = String(raw ?? "")
     .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // diacríticos
     .toLowerCase();
   // Si la celda está vacía, el pedido está pendiente.
   if (text === "") return "pendiente";
@@ -105,6 +108,32 @@ function parseNumber(raw: unknown): number | null {
   if (raw === null || raw === undefined || raw === "") return null;
   const value = typeof raw === "number" ? raw : Number(String(raw).replace(",", "."));
   return Number.isFinite(value) ? value : null;
+}
+
+/** Sin prioridad: al final de la ruta, pero antes de desbordar el número. */
+const NO_PRIORITY = Number.MAX_SAFE_INTEGER;
+
+/**
+ * Prioridad como número, donde menor = antes.
+ *
+ * La hoja la escribe como texto ("Urgent", "Normal"), no como número, así
+ * que se traduce. Se dejan huecos entre los valores para poder intercalar
+ * niveles nuevos sin renumerar.
+ */
+function parsePriority(raw: unknown): number {
+  const numeric = parseNumber(raw);
+  if (numeric !== null) return numeric;
+
+  const text = plain(raw);
+  if (text === "") return NO_PRIORITY;
+  if (["urgent", "urgente", "alta", "alt", "prioritario", "alta prioridad"].includes(text)) {
+    return 10;
+  }
+  if (["normal", "media", "mitja", "estandar", "standard"].includes(text)) return 20;
+  if (["baja", "baixa", "baix", "bajo"].includes(text)) return 30;
+
+  // Un texto que no reconocemos no debe colarse por delante de nada.
+  return NO_PRIORITY;
 }
 
 function text(raw: unknown): string {
@@ -228,6 +257,7 @@ export async function readSheet(sheetTab?: string): Promise<SheetSnapshot> {
  * Devuelve el headerMap actualizado.
  */
 export async function ensureManagedColumns(
+  tab: string,
   headerMap: Partial<Record<ColumnKey, number>>,
   sheetTab?: string,
 ): Promise<Partial<Record<ColumnKey, number>>> {
@@ -271,6 +301,7 @@ interface CellUpdate {
 }
 
 async function writeCells(
+  tab: string,
   updates: CellUpdate[],
   headerMap: Partial<Record<ColumnKey, number>>,
   sheetTab?: string,
