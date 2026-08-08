@@ -257,7 +257,6 @@ export async function readSheet(sheetTab?: string): Promise<SheetSnapshot> {
  * Devuelve el headerMap actualizado.
  */
 export async function ensureManagedColumns(
-  tab: string,
   headerMap: Partial<Record<ColumnKey, number>>,
   sheetTab?: string,
 ): Promise<Partial<Record<ColumnKey, number>>> {
