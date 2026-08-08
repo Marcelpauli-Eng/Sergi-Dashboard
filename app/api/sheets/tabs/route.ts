@@ -13,7 +13,9 @@ export async function GET() {
   }
 
   try {
-    const tabs = await listSheetTabs();
+    const allTabs = await listSheetTabs();
+    // Solo mostramos las 3 últimas pestañas (las más recientes)
+    const tabs = allTabs.slice(-3);
     return NextResponse.json({ tabs }, {
       headers: { "Cache-Control": "no-store" },
     });
