@@ -31,8 +31,8 @@ export const COLUMNS = {
   /** A qué transportista está asignado. Opcional (el Sheet real no la tiene). */
   driverId: ["Transportista", "Repartidor", "Conductor", "Chofer", "Driver", "Tr"],
 
-  /** Fecha de reparto. Opcional (el Sheet real usa pestañas por mes). */
-  date: ["Fecha", "Data", "Data entrega", "Data de entrega", "Data d'entrega", "Fecha Reparto", "Fecha Entrega", "Dia", "Date"],
+  /** Fecha de reparto (asignada en el calendario). Opcional. */
+  date: ["Data entrega", "Data de entrega", "Data d'entrega", "Fecha Reparto", "Fecha Entrega", "Dia", "Date", "Fecha"],
 
   /** Prioridad. Menor número = antes. Opcional (si falta, todas iguales). */
   priority: ["Prioritat", "Prioridad", "Orden", "Priority"],
