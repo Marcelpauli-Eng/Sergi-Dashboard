@@ -73,10 +73,13 @@ export const COLUMNS = {
 
   /** Momento de la entrega. La app ESCRIBE aquí. */
   deliveredAt: [
+    "Data entrega",
+    "Data de entrega",
+    "Data d'entrega",
     "Hora Entrega",
+    "Hora de Entrega",
     "Fecha Entrega Real",
     "Entregado El",
-    "Data entrega",
     "Data Lliurament",
   ],
 
