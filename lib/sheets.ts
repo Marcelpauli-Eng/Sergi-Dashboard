@@ -210,7 +210,9 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
     const id = text(cell(row, "id"));
     const address = text(cell(row, "address"));
     const driverId = hasDriverId ? text(cell(row, "driverId")).toLowerCase() : "";
-    const creationDate = text(cell(row, "creationDate")) || null;
+    const rawCreation = cell(row, "creationDate");
+    const parsedCreation = parseSheetDate(rawCreation);
+    const creationDate = parsedCreation ?? (text(rawCreation) || null);
     const date = hasDate ? parseSheetDate(cell(row, "date")) : null;
 
     // Filas completamente vacías: se ignoran sin ruido.

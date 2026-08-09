@@ -142,7 +142,7 @@ export default function StopCard({
                 <>
                   <span className="text-[10px] text-muted-foreground/40">•</span>
                   <p className="text-[11px] text-muted-foreground">
-                    Creat: {stop.creationDate}
+                    Creat: {stop.creationDate.match(/^\d{4}-\d{2}-\d{2}$/) ? stop.creationDate.split("-").reverse().join("/") : stop.creationDate}
                   </p>
                 </>
               )}
