@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as {
       orderIds: string[];
       sheetTab?: string;
+      startLocation?: { lat: number; lng: number };
+      forceOrder?: boolean;
     };
 
     if (!body.orderIds || body.orderIds.length === 0) {
@@ -45,8 +47,11 @@ export async function POST(request: NextRequest) {
     }
 
     await fillMissingCoordinates(orders, snapshot);
-    const depot = await getDepotCoord();
-    const result = await optimizeRoute(depot, orders);
+    
+    // Usar la ubicación del usuario si está disponible, o el almacén por defecto.
+    const depot = body.startLocation || await getDepotCoord();
+    
+    const result = await optimizeRoute(depot, orders, body.forceOrder);
 
     const stops: Stop[] = result.ordered.map((order, index) => {
       const { rowNumber: _rowNumber, ...rest } = order;
@@ -62,7 +67,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       stops,
       optimized: result.optimized,
-      fullRouteUrl: fullRouteUrlFor(env.depotAddress, result.ordered),
+      fullRouteUrl: fullRouteUrlFor(
+        body.startLocation ? `${body.startLocation.lat},${body.startLocation.lng}` : env.depotAddress, 
+        result.ordered
+      ),
       totalDistanceMeters: result.totalDistanceMeters,
       totalDurationSeconds: result.totalDurationSeconds,
     }, {

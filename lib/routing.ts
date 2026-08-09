@@ -162,6 +162,7 @@ function applyPriorityTiebreak(
 export async function optimizeRoute(
   depot: Coord,
   orders: Order[],
+  forceOrder: boolean = false,
 ): Promise<OptimizedRoute> {
   const routable = orders.filter((o) => o.lat !== null && o.lng !== null);
 
@@ -177,7 +178,7 @@ export async function optimizeRoute(
       })),
       totalDistanceMeters: null,
       totalDurationSeconds: null,
-      optimized: true,
+      optimized: true, // Se considera optimizada aunque sea 1 sola parada
     };
   }
 
@@ -191,7 +192,7 @@ export async function optimizeRoute(
     intermediates: routable.map((o) => point({ lat: o.lat!, lng: o.lng! })),
     travelMode: "DRIVE",
     routingPreference: "TRAFFIC_AWARE",
-    optimizeWaypointOrder: true,
+    optimizeWaypointOrder: !forceOrder,
     languageCode: "es-ES",
     units: "METRIC",
   };
@@ -240,15 +241,25 @@ export async function optimizeRoute(
   }
 
   const route = data.routes?.[0];
-  const order = route?.optimizedIntermediateWaypointIndex;
+  
+  // Si forceOrder es true, Google no devuelve optimizedIntermediateWaypointIndex
+  // por lo que generamos un array secuencial [0, 1, 2...]
+  const order = forceOrder 
+    ? Array.from({ length: routable.length }, (_, i) => i)
+    : route?.optimizedIntermediateWaypointIndex;
+    
   if (!route || !order || order.length !== routable.length) {
     return fallbackOrder(orders);
   }
 
-  // `optimizedIntermediateWaypointIndex[i]` es el índice original de la
-  // parada que ocupa la posición i en la ruta optimizada.
+  // `order[i]` es el índice original de la parada que ocupa la posición i en la ruta.
   let ordered = order.map((originalIndex) => routable[originalIndex]);
-  ordered = applyPriorityTiebreak(depot, ordered, 500);
+  
+  // Si hemos forzado el orden manualmente, no tiene sentido romperlo aplicando
+  // el desempate por prioridad automático.
+  if (!forceOrder) {
+    ordered = applyPriorityTiebreak(depot, ordered, 500);
+  }
 
   // Los tramos vienen alineados con el orden que devolvió Google. Tras el
   // desempate por prioridad ese emparejamiento deja de ser exacto, así que

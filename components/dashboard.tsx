@@ -132,6 +132,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
   // ── Orden personalizado (drag & drop) ─────────────────────────────────
   const [customOrderIds, setCustomOrderIds] = useState<string[]>([]);
+  const [isManualOrder, setIsManualOrder] = useState(false);
 
   // ── Ruta bajo demanda ─────────────────────────────────────────────────
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
@@ -277,6 +278,28 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     const routeable = todayStops.filter(s => s.statusCategory === "pendent");
     if (routeable.length === 0) return;
     setGeneratingRoute(true);
+    
+    // Obtener la ubicación actual
+    let startLocation: { lat: number; lng: number } | undefined;
+    try {
+      startLocation = await new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+          resolve(undefined);
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          (err) => {
+            console.warn("GPS no disponible:", err);
+            resolve(undefined); // Continuar sin GPS (fallback a central)
+          },
+          { timeout: 5000, enableHighAccuracy: true }
+        );
+      });
+    } catch (e) {
+      console.warn("Error obteniendo ubicación:", e);
+    }
+
     try {
       const res = await fetch("/api/route", {
         method: "POST",
@@ -284,6 +307,8 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         body: JSON.stringify({
           orderIds: routeable.map((s) => s.id),
           sheetTab: selectedSheetTab ?? undefined,
+          startLocation,
+          forceOrder: isManualOrder
         }),
       });
       if (res.status === 401) {
@@ -297,11 +322,13 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       }
       const result = (await res.json()) as RouteResult;
       setRouteResult(result);
+      
+      // Si el cálculo ha sido exitoso, podemos restablecer isManualOrder
+      // ya que la nueva ruta ahora se convierte en la optimizada/calculada base.
+      setIsManualOrder(false);
 
       // Actualizar el orden con el de la ruta optimizada (para todos los de hoy)
-      // Manteniendo los "en curs" que no pasamos a la ruta, por lo que aplicaremos un order parcial
       const newIds = result.stops.map((s) => s.id);
-      // Extraemos los que ya estaban y no se rutearon
       const nonRouteableIds = todayStops.filter(s => s.statusCategory !== "pendent").map(s => s.id);
       const combinedOrder = [...nonRouteableIds, ...newIds];
       
@@ -312,7 +339,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     } finally {
       setGeneratingRoute(false);
     }
-  }, [todayStops, selectedSheetTab, router]);
+  }, [todayStops, selectedSheetTab, router, isManualOrder]);
 
   const handleDelivered = (orderId: string) => {
     void recordDelivery(orderId, "entregado");
@@ -432,12 +459,14 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 routeResult={routeResult}
                 generatingRoute={generatingRoute}
                 online={online}
+                isManualOrder={isManualOrder}
                 onGenerateRoute={generateRoute}
                 onDelivered={handleDelivered}
                 onIncident={handleIncident}
                 customOrderIds={customOrderIds}
                 setCustomOrderIds={setCustomOrderIds}
                 setRouteResult={setRouteResult}
+                setIsManualOrder={setIsManualOrder}
               />
             )}
             {activeTab === "calendari" && (
@@ -503,23 +532,27 @@ function TabAvui({
   routeResult,
   generatingRoute,
   online,
+  isManualOrder,
   onGenerateRoute,
   onDelivered,
   onIncident,
   customOrderIds,
   setCustomOrderIds,
   setRouteResult,
+  setIsManualOrder,
 }: {
   todayStops: Stop[];
   routeResult: RouteResult | null;
   generatingRoute: boolean;
   online: boolean;
+  isManualOrder: boolean;
   onGenerateRoute: () => void;
   onDelivered: (id: string) => void;
   onIncident: (id: string, note: string) => void;
   customOrderIds: string[];
   setCustomOrderIds: (ids: string[]) => void;
   setRouteResult: (res: RouteResult | null) => void;
+  setIsManualOrder: (b: boolean) => void;
 }) {
   const pendents = todayStops.filter((s) => s.statusCategory === "pendent");
   const enCurs = todayStops.filter((s) => s.statusCategory === "en_curs");
@@ -553,10 +586,11 @@ function TabAvui({
     setCustomOrderIds(newIds);
     setCustomOrder(newIds);
     setRouteResult(null);
+    setIsManualOrder(true); // Se ha alterado el orden manualmente
 
     dragItemRef.current = null;
     dragOverItemRef.current = null;
-  }, [todayStops, setCustomOrderIds, setRouteResult]);
+  }, [todayStops, setCustomOrderIds, setRouteResult, setIsManualOrder]);
 
   // Touch handlers
   const touchDragIdx = useRef<number | null>(null);
@@ -613,7 +647,7 @@ function TabAvui({
       {pendents.length > 0 && (
         <div className="mb-6 animate-rise-in">
           {routeResult ? (
-            <RouteSummary route={routeResult} />
+            <RouteSummary route={routeResult} onRecalculate={onGenerateRoute} generating={generatingRoute} />
           ) : (
             <Button
               className="w-full"
@@ -624,7 +658,9 @@ function TabAvui({
               <Route className="size-4" />
               {generatingRoute
                 ? "Calculant ruta…"
-                : `Generar ruta (${pendents.length} parades)`}
+                : isManualOrder 
+                  ? `Calcular ruta (Ordre Manual)` 
+                  : `Generar ruta (${pendents.length} parades)`}
             </Button>
           )}
         </div>
@@ -890,7 +926,7 @@ function FastAssignList({ stops, onAssign }: { stops: Stop[]; onAssign: (id: str
             onPointerMove={cancelPress} // Si el dedo se mueve (scrolling), cancelamos
             className="flex flex-col items-start gap-1 rounded-md border border-border bg-card p-3 text-left shadow-sm transition-colors active:bg-muted select-none touch-none"
           >
-            <span className="font-semibold text-sm pointer-events-none">{stop.id}</span>
+            <span className="font-semibold text-sm pointer-events-none truncate w-full">{stop.customer || stop.id}</span>
             <span className="text-xs text-muted-foreground truncate w-full pointer-events-none">{stop.city || "Sense adreça"}</span>
           </button>
         ))}
@@ -1018,7 +1054,7 @@ function TabHistorial({
 
 // ── Route Summary ──────────────────────────────────────────────────────
 
-function RouteSummary({ route }: { route: RouteResult }) {
+function RouteSummary({ route, onRecalculate, generating }: { route: RouteResult, onRecalculate?: () => void, generating?: boolean }) {
   const distance = formatDistance(route.totalDistanceMeters);
   const duration = formatDuration(route.totalDurationSeconds);
 
@@ -1026,8 +1062,17 @@ function RouteSummary({ route }: { route: RouteResult }) {
     <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            Ruta {route.optimized ? "optimitzada" : "per prioritat"}
+          <p className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+            Ruta {route.optimized ? "optimitzada" : "ordre manual"}
+            {onRecalculate && (
+              <button 
+                onClick={onRecalculate} 
+                disabled={generating}
+                className="text-primary hover:underline font-semibold flex items-center gap-1 disabled:opacity-50"
+              >
+                🔄 {generating ? "Recalculant..." : "Recalcular"}
+              </button>
+            )}
           </p>
           <p className="mt-1 text-xl tracking-tight">
             {[distance, duration].filter(Boolean).join(" · ") || "Calculada"}
@@ -1036,15 +1081,15 @@ function RouteSummary({ route }: { route: RouteResult }) {
         {route.fullRouteUrl && (
           <Button asChild variant="secondary" size="sm">
             <a href={route.fullRouteUrl} target="_blank" rel="noopener noreferrer">
-              <Route className="size-4" />
-              Obrir
+              <Route className="size-4 mr-1" />
+              Obrir Maps
             </a>
           </Button>
         )}
       </div>
       {!route.optimized && (
         <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          No s&apos;ha pogut calcular la ruta òptima. L&apos;ordre mostrat és el de prioritat.
+          Ruta calculada respectant el teu ordre manual.
         </p>
       )}
     </div>
