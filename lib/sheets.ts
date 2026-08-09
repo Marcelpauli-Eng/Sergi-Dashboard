@@ -224,11 +224,7 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
       skipped.push({ rowNumber, reason: `ID duplicado "${id}"` });
       continue;
     }
-    // Solo requerimos fecha si la columna existe
-    if (hasDate && !date) {
-      skipped.push({ rowNumber, reason: "fecha ilegible" });
-      continue;
-    }
+    // Las órdenes sin fecha de reparto son totalmente válidas (se quedan en la bolsa de pendientes).
     if (!address) {
       skipped.push({ rowNumber, reason: "sin dirección" });
       continue;
