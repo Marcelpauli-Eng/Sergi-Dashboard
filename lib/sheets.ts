@@ -105,6 +105,15 @@ function parseStatus(raw: unknown): DeliveryStatus {
   return "pendiente";
 }
 
+function parseStatusCategory(raw: unknown): "pendent" | "en_curs" | "entregat" | "incidencia" {
+  const t = String(raw ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (t === "") return "pendent";
+  if (["entregado", "entregada", "entregat", "si", "ok", "x", "true", "1"].includes(t)) return "entregat";
+  if (["incidencia", "ausente", "rechazado", "rebutjat", "no entregado", "no entregat", "ko"].includes(t)) return "incidencia";
+  if (["en curs", "en curso", "en camino", "en ruta"].includes(t)) return "en_curs";
+  return "pendent";
+}
+
 function parseNumber(raw: unknown): number | null {
   if (raw === null || raw === undefined || raw === "") return null;
   const value = typeof raw === "number" ? raw : Number(String(raw).replace(",", "."));
@@ -242,6 +251,7 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
       notes: text(cell(row, "notes")) || null,
       status: parseStatus(cell(row, "status")),
       rawStatus: text(cell(row, "status")),
+      statusCategory: parseStatusCategory(cell(row, "status")),
       lat: parseNumber(cell(row, "lat")),
       lng: parseNumber(cell(row, "lng")),
       rowNumber,

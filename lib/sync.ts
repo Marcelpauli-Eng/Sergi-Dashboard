@@ -158,6 +158,63 @@ export function setSelectedTab(tab: string): void {
   localStorage.setItem("selectedSheetTab", tab);
 }
 
+const CUSTOM_ORDER_KEY = "customStopOrder";
+
+/**
+ * Recupera el orden personalizado que el transportista ha definido
+ * arrastrando las tarjetas con el dedo.
+ */
+export function getCustomOrder(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(CUSTOM_ORDER_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Guarda el orden personalizado (array de IDs de pedido).
+ */
+export function setCustomOrder(orderIds: string[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(CUSTOM_ORDER_KEY, JSON.stringify(orderIds));
+}
+
+/**
+ * Aplica el orden personalizado a una lista de stops.
+ * Los IDs conocidos mantienen su posición; los nuevos se añaden al final.
+ */
+export function applyCustomOrder<T extends { id: string }>(
+  items: T[],
+  savedOrder: string[],
+): T[] {
+  if (savedOrder.length === 0) return items;
+
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const ordered: T[] = [];
+  const used = new Set<string>();
+
+  // Primero los que están en el orden guardado
+  for (const id of savedOrder) {
+    const item = byId.get(id);
+    if (item) {
+      ordered.push(item);
+      used.add(id);
+    }
+  }
+
+  // Después los nuevos que no estaban en el orden guardado
+  for (const item of items) {
+    if (!used.has(item.id)) {
+      ordered.push(item);
+    }
+  }
+
+  return ordered;
+}
+
 /** Envía al servidor las entregas pendientes. Devuelve cuántas se subieron. */
 export async function flushOutbox(): Promise<number> {
   const pending = await pendingOutbox();

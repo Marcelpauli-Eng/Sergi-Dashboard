@@ -29,6 +29,8 @@ export interface Order {
   status: DeliveryStatus;
   /** Valor original de la celda "Estat de l'entrega", sin transformar. Vacío si la celda no tiene valor. */
   rawStatus: string;
+  /** Categoría de estado derivada del valor original de la celda. */
+  statusCategory: "pendent" | "en_curs" | "entregat" | "incidencia";
   /** Coordenadas cacheadas en el Sheet para no re-geocodificar cada día. */
   lat: number | null;
   lng: number | null;

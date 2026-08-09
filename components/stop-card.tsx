@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Navigation, Phone, TriangleAlert } from "lucide-react";
+import { Check, GripVertical, Navigation, Phone, TriangleAlert } from "lucide-react";
 import type { Stop } from "@/lib/types";
 import { formatDistance, formatDuration, telHref } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -12,7 +12,15 @@ interface Props {
   stop: Stop;
   onDelivered: (orderId: string) => void;
   onIncident: (orderId: string, note: string) => void;
+  /** Si true, muestra el handle de arrastre (≡) a la izquierda. */
+  draggable?: boolean;
 }
+
+const CATEGORY_BADGE: Record<string, { label: string; variant: "success" | "warning" | "secondary" | "default"; className?: string }> = {
+  entregat: { label: "Entregat", variant: "success" },
+  incidencia: { label: "Incidència", variant: "warning" },
+  en_curs: { label: "En curs", variant: "secondary", className: "border-purple-300 bg-purple-50 text-purple-700" },
+};
 
 /**
  * Una parada de la ruta.
@@ -20,17 +28,20 @@ interface Props {
  * Sigue la regla del sistema de diseño: todo en escala de grises salvo el
  * estado de la entrega, que es la única información que merece color.
  */
-export default function StopCard({ stop, onDelivered, onIncident }: Props) {
+export default function StopCard({ stop, onDelivered, onIncident, draggable }: Props) {
   const [showIncident, setShowIncident] = useState(false);
   const [note, setNote] = useState("");
 
-  const done = stop.status !== "pendiente";
+  const isPendent = stop.statusCategory === "pendent";
+  const done = !isPendent;
   const leg = [
     formatDistance(stop.legDistanceMeters),
     formatDuration(stop.legDurationSeconds),
   ]
     .filter(Boolean)
     .join(" · ");
+
+  const badgeInfo = CATEGORY_BADGE[stop.statusCategory ?? ""];
 
   return (
     // Los estilos de Card van directos al <li>: envolverlo en un <div>
@@ -41,7 +52,14 @@ export default function StopCard({ stop, onDelivered, onIncident }: Props) {
         done && "opacity-55",
       )}
     >
-        <div className="flex gap-4 p-5">
+        <div className="flex gap-3 p-5">
+          {/* Handle de arrastre (solo pendientes) */}
+          {draggable && isPendent && (
+            <div className="drag-handle flex shrink-0 items-center text-muted-foreground">
+              <GripVertical className="size-5" />
+            </div>
+          )}
+
           {/* Número de parada */}
           <div
             className={
@@ -51,9 +69,9 @@ export default function StopCard({ stop, onDelivered, onIncident }: Props) {
             }
             aria-hidden
           >
-            {stop.status === "entregado" ? (
+            {stop.statusCategory === "entregat" ? (
               <Check className="size-4" />
-            ) : stop.status === "incidencia" ? (
+            ) : stop.statusCategory === "incidencia" ? (
               <TriangleAlert className="size-4" />
             ) : (
               stop.sequence
@@ -65,9 +83,10 @@ export default function StopCard({ stop, onDelivered, onIncident }: Props) {
               <p className="min-w-0 flex-1 truncate font-semibold leading-tight tracking-tight">
                 {stop.customer || stop.address}
               </p>
-              {stop.status === "entregado" && <Badge variant="success">Entregat</Badge>}
-              {stop.status === "incidencia" && (
-                <Badge variant="warning">Incidència</Badge>
+              {badgeInfo && (
+                <Badge variant={badgeInfo.variant} className={badgeInfo.className}>
+                  {badgeInfo.label}
+                </Badge>
               )}
             </div>
 
@@ -93,9 +112,9 @@ export default function StopCard({ stop, onDelivered, onIncident }: Props) {
               </p>
             )}
 
-            {leg && !done && (
+            {leg && isPendent && (
               <p className="mt-1.5 text-xs text-muted-foreground">
-                {leg} desde la parada anterior
+                {leg} des de la parada anterior
               </p>
             )}
 
@@ -116,7 +135,7 @@ export default function StopCard({ stop, onDelivered, onIncident }: Props) {
                 <Button asChild variant="secondary" size="sm">
                   <a href={telHref(stop.phone)}>
                     <Phone />
-                    Llamar
+                    Trucar
                   </a>
                 </Button>
               )}
@@ -124,7 +143,7 @@ export default function StopCard({ stop, onDelivered, onIncident }: Props) {
           </div>
         </div>
 
-        {!done && (
+        {isPendent && (
           <div className="border-t border-border p-4">
             {!showIncident ? (
               <div className="flex items-center gap-2">

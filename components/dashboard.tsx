@@ -1,9 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ChevronDown, Menu, Route, X } from "lucide-react";
+import {
+  ChevronDown,
+  GripVertical,
+  Menu,
+  Route,
+  X,
+} from "lucide-react";
 import { db } from "@/lib/db";
 import {
   recordDelivery,
@@ -11,6 +17,9 @@ import {
   SessionExpiredError,
   getSelectedTab,
   setSelectedTab,
+  getCustomOrder,
+  setCustomOrder,
+  applyCustomOrder,
 } from "@/lib/sync";
 import { formatDistance, formatDuration } from "@/lib/format";
 import { formatLongDate } from "@/lib/dates";
@@ -21,13 +30,8 @@ import { Badge } from "@/components/ui/badge";
 import StopCard from "./stop-card";
 import SyncBar from "./sync-bar";
 
-/**
- * Suscripción al estado de conexión del navegador.
- *
- * Se usa con `useSyncExternalStore` en vez de un `useEffect` + `setState`:
- * el valor inicial se lee directamente de `navigator.onLine` en el primer
- * render, sin provocar un segundo renderizado en cascada.
- */
+// ── Connectivity hook ──────────────────────────────────────────────────
+
 function subscribeToConnectivity(onChange: () => void): () => void {
   window.addEventListener("online", onChange);
   window.addEventListener("offline", onChange);
@@ -37,20 +41,57 @@ function subscribeToConnectivity(onChange: () => void): () => void {
   };
 }
 
-/**
- * Pantalla principal.
- *
- * Lee exclusivamente de IndexedDB mediante `useLiveQuery`, de modo que
- * cualquier cambio local (marcar una entrega) se refleja al instante y sin
- * pasar por la red. La sincronización ocurre aparte, en segundo plano.
- */
+// ── Status category types ──────────────────────────────────────────────
+
+type StatusCategory = "pendent" | "en_curs" | "entregat" | "incidencia";
+
+const CATEGORY_CONFIG: Record<
+  StatusCategory,
+  { label: string; color: string; bgColor: string; defaultOpen: boolean }
+> = {
+  pendent: {
+    label: "Pendents",
+    color: "text-status-pendent",
+    bgColor: "bg-gray-100",
+    defaultOpen: true,
+  },
+  en_curs: {
+    label: "En curs",
+    color: "text-status-en-curs",
+    bgColor: "bg-purple-50",
+    defaultOpen: true,
+  },
+  entregat: {
+    label: "Entregats",
+    color: "text-status-entregat",
+    bgColor: "bg-green-50",
+    defaultOpen: false,
+  },
+  incidencia: {
+    label: "Incidència",
+    color: "text-status-incidencia",
+    bgColor: "bg-orange-50",
+    defaultOpen: false,
+  },
+};
+
+const CATEGORY_ORDER: StatusCategory[] = ["pendent", "en_curs", "entregat", "incidencia"];
+
+// ── Route generation types ─────────────────────────────────────────────
+
+interface RouteResult {
+  stops: Stop[];
+  optimized: boolean;
+  fullRouteUrl: string | null;
+  totalDistanceMeters: number | null;
+  totalDurationSeconds: number | null;
+}
+
+// ── Main Dashboard ─────────────────────────────────────────────────────
+
 export default function Dashboard({ driverName }: { driverName: string }) {
   const router = useRouter();
 
-  // Se envuelve el resultado en un objeto para poder distinguir "todavía
-  // consultando IndexedDB" (undefined) de "consultado y no hay nada"
-  // ({ value: undefined }). Sin esto, un móvil sin datos descargados se
-  // quedaría en "Cargando…" para siempre.
   const query = useLiveQuery(
     async () => ({ value: await db.manifest.get("current") }),
     [],
@@ -64,14 +105,10 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   const online = useSyncExternalStore(
     subscribeToConnectivity,
     () => navigator.onLine,
-    // En el servidor se asume conectado: es lo que verá el usuario en el
-    // primer pintado, antes de que el navegador pueda opinar.
     () => true,
   );
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showTomorrow, setShowTomorrow] = useState(false);
-  const [showDone, setShowDone] = useState(false);
 
   // ── Menú hamburguesa & selector de pestaña ────────────────────────────
   const [menuOpen, setMenuOpen] = useState(false);
@@ -79,15 +116,31 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   const [selectedTab, setSelectedTabState] = useState<string | null>(null);
   const [loadingTabs, setLoadingTabs] = useState(false);
 
-  // Inicializar tab seleccionada desde localStorage
+  // ── Secciones colapsables ─────────────────────────────────────────────
+  const [openSections, setOpenSections] = useState<Record<StatusCategory, boolean>>({
+    pendent: true,
+    en_curs: true,
+    entregat: false,
+    incidencia: false,
+  });
+
+  // ── Orden personalizado (drag & drop) ─────────────────────────────────
+  const [customOrderIds, setCustomOrderIds] = useState<string[]>([]);
+
+  // ── Ruta bajo demanda ─────────────────────────────────────────────────
+  const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
+  const [generatingRoute, setGeneratingRoute] = useState(false);
+
+  // Inicializar tab y orden personalizado desde localStorage
   useEffect(() => {
     const saved = getSelectedTab();
     if (saved) setSelectedTabState(saved);
+    setCustomOrderIds(getCustomOrder());
   }, []);
 
   // Cargar pestañas del Sheet cuando se abre el menú
   const fetchTabs = useCallback(async () => {
-    if (tabs.length > 0) return; // ya las tenemos
+    if (tabs.length > 0) return;
     setLoadingTabs(true);
     try {
       const res = await fetch("/api/sheets/tabs");
@@ -107,7 +160,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       setSelectedTabState(tab);
       setSelectedTab(tab);
       setMenuOpen(false);
-      // Resincronizar con la nueva pestaña
+      setRouteResult(null); // Reset route on tab change
       setSyncing(true);
       setError(null);
       try {
@@ -144,18 +197,12 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   }, [router, selectedTab]);
 
   // Sincroniza al abrir, al recuperar cobertura y al volver a la app.
-  // Son los tres momentos en los que puede haber algo nuevo que enviar o
-  // recibir, y cubrirlos evita tener que pedirle nada al transportista.
   useEffect(() => {
-    // Se lanza fuera del ciclo de render (no de forma síncrona dentro del
-    // efecto) para no encadenar un segundo renderizado con el primero.
     const initial = setTimeout(() => void sync(), 0);
-
     const onOnline = () => void sync();
     const onVisible = () => {
       if (document.visibilityState === "visible" && navigator.onLine) void sync();
     };
-
     window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -166,16 +213,152 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   }, [sync]);
 
   const manifest = stored?.data;
-  const todayRoute = manifest?.today;
-  const pending = (todayRoute?.stops ?? []).filter((s) => s.status === "pendiente");
-  const closed = (todayRoute?.stops ?? []).filter((s) => s.status !== "pendiente");
-  const total = (todayRoute?.stops ?? []).length;
+  const allStops = manifest?.today?.stops ?? [];
+
+  // Agrupar stops por categoría
+  const grouped = useMemo(() => {
+    const groups: Record<StatusCategory, Stop[]> = {
+      pendent: [],
+      en_curs: [],
+      entregat: [],
+      incidencia: [],
+    };
+    for (const stop of allStops) {
+      const cat = (stop.statusCategory ?? "pendent") as StatusCategory;
+      if (groups[cat]) {
+        groups[cat].push(stop);
+      } else {
+        groups.pendent.push(stop);
+      }
+    }
+    // Aplicar orden personalizado solo a pendientes
+    groups.pendent = applyCustomOrder(groups.pendent, customOrderIds);
+    return groups;
+  }, [allStops, customOrderIds]);
+
+  const totalPendent = grouped.pendent.length;
+
+  // ── Drag & drop handlers ──────────────────────────────────────────────
+  const dragItemRef = useRef<number | null>(null);
+  const dragOverItemRef = useRef<number | null>(null);
+
+  const handleDragStart = useCallback((index: number) => {
+    dragItemRef.current = index;
+  }, []);
+
+  const handleDragOver = useCallback((index: number) => {
+    dragOverItemRef.current = index;
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    const from = dragItemRef.current;
+    const to = dragOverItemRef.current;
+    if (from === null || to === null || from === to) {
+      dragItemRef.current = null;
+      dragOverItemRef.current = null;
+      return;
+    }
+
+    const newOrder = [...grouped.pendent];
+    const [moved] = newOrder.splice(from, 1);
+    newOrder.splice(to, 0, moved);
+
+    const newIds = newOrder.map((s) => s.id);
+    setCustomOrderIds(newIds);
+    setCustomOrder(newIds);
+    setRouteResult(null); // Reset route when order changes
+
+    dragItemRef.current = null;
+    dragOverItemRef.current = null;
+  }, [grouped.pendent]);
+
+  // ── Touch drag handlers ───────────────────────────────────────────────
+  const touchStartY = useRef<number>(0);
+  const touchDragIdx = useRef<number | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  const handleTouchStart = useCallback((index: number, e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+    touchDragIdx.current = index;
+    dragItemRef.current = index;
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (touchDragIdx.current === null || !listRef.current) return;
+    e.preventDefault();
+
+    const y = e.touches[0].clientY;
+    const items = listRef.current.querySelectorAll("[data-drag-item]");
+    for (let i = 0; i < items.length; i++) {
+      const rect = items[i].getBoundingClientRect();
+      if (y >= rect.top && y <= rect.bottom) {
+        dragOverItemRef.current = i;
+
+        // Visual feedback
+        items.forEach((el) => el.classList.remove("drag-over"));
+        if (i !== touchDragIdx.current) {
+          items[i].classList.add("drag-over");
+        }
+        break;
+      }
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (listRef.current) {
+      listRef.current.querySelectorAll("[data-drag-item]").forEach((el) => {
+        el.classList.remove("drag-over");
+      });
+    }
+    touchDragIdx.current = null;
+    handleDragEnd();
+  }, [handleDragEnd]);
+
+  // ── Generar ruta bajo demanda ─────────────────────────────────────────
+  const generateRoute = useCallback(async () => {
+    if (grouped.pendent.length === 0) return;
+    setGeneratingRoute(true);
+    try {
+      const res = await fetch("/api/route", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderIds: grouped.pendent.map((s) => s.id),
+          sheetTab: selectedTab ?? undefined,
+        }),
+      });
+      if (res.status === 401) {
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(body.error ?? "Error generando la ruta");
+        return;
+      }
+      const result = (await res.json()) as RouteResult;
+      setRouteResult(result);
+
+      // Actualizar el orden con el de la ruta optimizada
+      const newIds = result.stops.map((s) => s.id);
+      setCustomOrderIds(newIds);
+      setCustomOrder(newIds);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error generando la ruta");
+    } finally {
+      setGeneratingRoute(false);
+    }
+  }, [grouped.pendent, selectedTab, router]);
 
   const handleDelivered = (orderId: string) => {
     void recordDelivery(orderId, "entregado");
   };
   const handleIncident = (orderId: string, note: string) => {
     void recordDelivery(orderId, "incidencia", note || null);
+  };
+
+  const toggleSection = (cat: StatusCategory) => {
+    setOpenSections((prev) => ({ ...prev, [cat]: !prev[cat] }));
   };
 
   return (
@@ -190,14 +373,11 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         <div className="flex items-baseline justify-between gap-4 px-4 pb-2.5 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <div className="min-w-0">
             <h1 className="truncate text-lg tracking-tight">{driverName}</h1>
-            {/* `capitalize` pondría mayúscula en cada palabra ("4 De
-                Agosto"); solo queremos la inicial de la frase. */}
-            {todayRoute && (
+            {manifest?.today && (
               <p className="text-xs text-muted-foreground first-letter:uppercase">
-                {formatLongDate(todayRoute.date)}
+                {formatLongDate(manifest.today.date)}
               </p>
             )}
-            {/* Mostrar la pestaña seleccionada */}
             {(selectedTab || manifest?.sheetTab) && (
               <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 📋 {selectedTab || manifest?.sheetTab}
@@ -206,14 +386,15 @@ export default function Dashboard({ driverName }: { driverName: string }) {
           </div>
 
           <div className="flex shrink-0 items-center gap-3">
-            {total > 0 && (
+            {allStops.length > 0 && (
               <p className="text-sm text-muted-foreground">
-                <span className="font-semibold text-foreground">{closed.length}</span>
-                /{total}
+                <span className="font-semibold text-foreground">
+                  {grouped.entregat.length}
+                </span>
+                /{allStops.length}
               </p>
             )}
 
-            {/* Botón hamburguesa */}
             <button
               type="button"
               onClick={() => {
@@ -232,22 +413,6 @@ export default function Dashboard({ driverName }: { driverName: string }) {
             </button>
           </div>
         </div>
-
-        {total > 0 && (
-          <div
-            className="mx-4 mb-2 h-0.5 overflow-hidden rounded-full bg-muted"
-            role="progressbar"
-            aria-valuenow={closed.length}
-            aria-valuemin={0}
-            aria-valuemax={total}
-            aria-label="Progreso de la jornada"
-          >
-            <div
-              className="h-full bg-foreground transition-all duration-500"
-              style={{ width: `${(closed.length / total) * 100}%` }}
-            />
-          </div>
-        )}
 
         <SyncBar
           online={online}
@@ -305,70 +470,102 @@ export default function Dashboard({ driverName }: { driverName: string }) {
           <p className="py-16 text-center text-sm text-muted-foreground">Cargando…</p>
         ) : !manifest ? (
           <EmptyState online={online} syncing={syncing} />
+        ) : allStops.length === 0 ? (
+          <div className="animate-rise-in rounded-xl border border-border bg-card px-6 py-12 text-center shadow-sm">
+            <p className="text-base">No hay pedidos en esta hoja</p>
+          </div>
         ) : (
           <>
-            {todayRoute && <RouteSummary route={todayRoute} />}
-
-            {pending.length === 0 ? (
-              <div className="animate-rise-in rounded-xl border border-border bg-card px-6 py-12 text-center shadow-sm">
-                <p className="text-base">
-                  {total === 0
-                    ? "No hay pedidos en esta hoja"
-                    : "Jornada completada"}
-                </p>
-                {total > 0 && (
-                  <p className="mt-1.5 text-sm text-muted-foreground">
-                    {total} {total === 1 ? "parada cerrada" : "paradas cerradas"}
-                  </p>
+            {/* ── Botón generar ruta (solo si hay pendientes) ─────────── */}
+            {totalPendent > 0 && (
+              <div className="mb-4 animate-rise-in">
+                {routeResult ? (
+                  <RouteSummary route={routeResult} />
+                ) : (
+                  <Button
+                    className="w-full"
+                    size="touch"
+                    onClick={() => void generateRoute()}
+                    disabled={generatingRoute || !online}
+                  >
+                    <Route className="size-4" />
+                    {generatingRoute
+                      ? "Calculant ruta…"
+                      : `Generar ruta (${totalPendent} parades)`}
+                  </Button>
                 )}
               </div>
-            ) : (
-              <ul className="space-y-3">
-                {pending.map((stop) => (
-                  <StopCard
-                    key={stop.id}
-                    stop={stop}
-                    onDelivered={handleDelivered}
-                    onIncident={handleIncident}
-                  />
-                ))}
-              </ul>
             )}
 
-            {closed.length > 0 && (
-              <Section
-                title="Cerrados hoy"
-                count={closed.length}
-                open={showDone}
-                onToggle={() => setShowDone((v) => !v)}
-              >
-                <ul className="space-y-3">
-                  {closed.map((stop) => (
-                    <StopCard
-                      key={stop.id}
-                      stop={stop}
-                      onDelivered={handleDelivered}
-                      onIncident={handleIncident}
-                    />
-                  ))}
-                </ul>
-              </Section>
-            )}
+            {/* ── Secciones por categoría ─────────────────────────────── */}
+            {CATEGORY_ORDER.map((cat) => {
+              const stops = grouped[cat];
+              if (stops.length === 0) return null;
+              const config = CATEGORY_CONFIG[cat];
+              const isOpen = openSections[cat];
 
-            {manifest.tomorrow && manifest.tomorrow.stops.length > 0 && (
-              <Section
-                title="Mañana"
-                count={manifest.tomorrow.stops.length}
-                open={showTomorrow}
-                onToggle={() => setShowTomorrow((v) => !v)}
-              >
-                <ul className="space-y-2">
-                  {manifest.tomorrow.stops.map((stop) => (
-                    <TomorrowRow key={stop.id} stop={stop} />
-                  ))}
-                </ul>
-              </Section>
-            )}
+              return (
+                <CategorySection
+                  key={cat}
+                  category={cat}
+                  label={config.label}
+                  color={config.color}
+                  bgColor={config.bgColor}
+                  count={stops.length}
+                  open={isOpen}
+                  onToggle={() => toggleSection(cat)}
+                >
+                  {cat === "pendent" ? (
+                    <ul ref={listRef} className="space-y-3">
+                      {stops.map((stop, index) => (
+                        <li
+                          key={stop.id}
+                          data-drag-item
+                          draggable
+                          onDragStart={() => handleDragStart(index)}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            handleDragOver(index);
+                          }}
+                          onDragEnd={handleDragEnd}
+                          onTouchStart={(e) => handleTouchStart(index, e)}
+                          onTouchMove={handleTouchMove}
+                          onTouchEnd={handleTouchEnd}
+                          className="transition-transform"
+                        >
+                          <StopCard
+                            stop={{
+                              ...stop,
+                              sequence: index + 1,
+                              legDistanceMeters:
+                                routeResult?.stops.find((s) => s.id === stop.id)
+                                  ?.legDistanceMeters ?? null,
+                              legDurationSeconds:
+                                routeResult?.stops.find((s) => s.id === stop.id)
+                                  ?.legDurationSeconds ?? null,
+                            }}
+                            onDelivered={handleDelivered}
+                            onIncident={handleIncident}
+                            draggable
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <ul className="space-y-3">
+                      {stops.map((stop) => (
+                        <StopCard
+                          key={stop.id}
+                          stop={stop}
+                          onDelivered={handleDelivered}
+                          onIncident={handleIncident}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </CategorySection>
+              );
+            })}
           </>
         )}
       </main>
@@ -376,78 +573,78 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   );
 }
 
-function RouteSummary({ route }: { route: RouteDay }) {
+// ── Route Summary (solo cuando se ha generado) ─────────────────────────
+
+function RouteSummary({ route }: { route: RouteResult }) {
   const distance = formatDistance(route.totalDistanceMeters);
   const duration = formatDuration(route.totalDurationSeconds);
-  if (!distance && !duration && !route.fullRouteUrl) return null;
 
   return (
-    <div className="mb-3 animate-rise-in rounded-xl border border-border bg-card p-5 shadow-sm">
+    <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            Ruta de hoy
+            Ruta {route.optimized ? "optimitzada" : "per prioritat"}
           </p>
           <p className="mt-1 text-xl tracking-tight">
-            {[distance, duration].filter(Boolean).join(" · ") || "Sin calcular"}
+            {[distance, duration].filter(Boolean).join(" · ") || "Calculada"}
           </p>
         </div>
         {route.fullRouteUrl && (
           <Button asChild variant="secondary" size="sm">
             <a href={route.fullRouteUrl} target="_blank" rel="noopener noreferrer">
-              <Route />
-              Abrir ruta
+              <Route className="size-4" />
+              Obrir
             </a>
           </Button>
         )}
       </div>
       {!route.optimized && (
         <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          No se ha podido calcular la ruta óptima. El orden mostrado es el de
-          prioridad del listado.
+          No s&apos;ha pogut calcular la ruta òptima. L&apos;ordre mostrat és el de prioritat.
         </p>
       )}
     </div>
   );
 }
 
-function TomorrowRow({ stop }: { stop: Stop }) {
-  return (
-    <li className="rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
-      <p className="font-medium">{stop.customer || stop.address}</p>
-      <p className="mt-0.5 text-sm text-muted-foreground">{stop.address}</p>
-      {stop.city && (
-        <p className="text-sm text-muted-foreground">{stop.city}</p>
-      )}
-    </li>
-  );
-}
+// ── Category Section ───────────────────────────────────────────────────
 
-function Section({
-  title,
+function CategorySection({
+  label,
+  color,
+  bgColor,
   count,
   open,
   onToggle,
   children,
 }: {
-  title: string;
+  category: StatusCategory;
+  label: string;
+  color: string;
+  bgColor: string;
   count: number;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <section className="mt-6">
+    <section className="mb-4">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="mb-3 flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-muted"
+        className={cn(
+          "mb-3 flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors",
+          bgColor,
+        )}
       >
-        <span className="text-xs uppercase tracking-wide text-muted-foreground">
-          {title}
+        <span className={cn("text-xs font-semibold uppercase tracking-wide", color)}>
+          {label}
         </span>
-        <Badge variant="secondary">{count}</Badge>
+        <Badge variant="secondary" className={cn("text-xs", color)}>
+          {count}
+        </Badge>
         <ChevronDown
           className={cn(
             "ml-auto size-4 text-muted-foreground transition-transform",
@@ -461,11 +658,13 @@ function Section({
   );
 }
 
+// ── Empty state ────────────────────────────────────────────────────────
+
 function EmptyState({ online, syncing }: { online: boolean; syncing: boolean }) {
   if (syncing) {
     return (
       <p className="py-16 text-center text-sm text-muted-foreground">
-        Descargando tu ruta…
+        Descarregant la teva ruta…
       </p>
     );
   }
@@ -473,12 +672,12 @@ function EmptyState({ online, syncing }: { online: boolean; syncing: boolean }) 
   return (
     <div className="animate-rise-in rounded-xl border border-border bg-card px-6 py-12 text-center shadow-sm">
       <p className="text-base">
-        {online ? "Todavía no hay datos" : "Sin datos descargados"}
+        {online ? "Encara no hi ha dades" : "Sense dades descarregades"}
       </p>
       <p className="mt-1.5 text-sm text-muted-foreground">
         {online
-          ? "Selecciona una hoja del menú ☰ y pulsa Actualizar."
-          : "Conéctate a internet una vez para descargar la ruta. Después podrás trabajar sin cobertura."}
+          ? "Selecciona una fulla del menú ☰ i prem Actualitzar."
+          : "Connecta't a internet una vegada per descarregar la ruta. Després podràs treballar sense cobertura."}
       </p>
     </div>
   );
