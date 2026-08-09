@@ -254,17 +254,36 @@ export async function optimizeRoute(
 
   // `order[i]` es el índice original de la parada que ocupa la posición i en la ruta.
   let ordered = order.map((originalIndex) => routable[originalIndex]);
+  let legsData = route.legs ?? [];
   
   // Si hemos forzado el orden manualmente, no tiene sentido romperlo aplicando
   // el desempate por prioridad automático.
   if (!forceOrder) {
+    // Asegurarnos de que empezamos por la parada más cercana (Google a veces da la vuelta
+    // al revés porque la ruta es circular).
+    if (ordered.length > 1) {
+      const dFirst = haversine(depot, { lat: ordered[0].lat!, lng: ordered[0].lng! });
+      const dLast = haversine(depot, { lat: ordered[ordered.length - 1].lat!, lng: ordered[ordered.length - 1].lng! });
+      
+      if (dLast < dFirst) {
+        ordered.reverse();
+        if (legsData.length > ordered.length) {
+          const reversedLegs = [];
+          for (let i = ordered.length; i >= 1; i--) {
+            reversedLegs.push(legsData[i]);
+          }
+          legsData = reversedLegs;
+        }
+      }
+    }
+
     ordered = applyPriorityTiebreak(depot, ordered, 500);
   }
 
   // Los tramos vienen alineados con el orden que devolvió Google. Tras el
   // desempate por prioridad ese emparejamiento deja de ser exacto, así que
   // se conservan como estimación del tramo, no como dato al metro.
-  const legs = (route.legs ?? []).slice(0, ordered.length).map((leg) => ({
+  const legs = legsData.slice(0, ordered.length).map((leg) => ({
     distanceMeters: leg.distanceMeters ?? null,
     durationSeconds: leg.duration ? parseInt(leg.duration, 10) : null,
   }));
