@@ -195,10 +195,10 @@ export async function buildManifest(
     mine = snapshot.orders;
   }
 
-  // Solo nos interesan los pedidos cuya celda de estado está vacía
-  // (sin valor en el desplegable). Los que ya tienen "Entregat",
-  // "Incidència" o cualquier otro valor ya están gestionados.
-  mine = mine.filter((o) => o.status === "pendiente");
+  // Solo nos interesan los pedidos cuya celda de estado está
+  // completamente vacía (sin ningún valor en el desplegable).
+  // "Pendent", "En curs", "Entregat"… todos tienen un valor → se excluyen.
+  mine = mine.filter((o) => o.rawStatus === "");
 
   await fillMissingCoordinates(mine, snapshot);
   const depot = await getDepotCoord();

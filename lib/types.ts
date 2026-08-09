@@ -27,6 +27,8 @@ export interface Order {
   measures: string | null;
   notes: string | null;
   status: DeliveryStatus;
+  /** Valor original de la celda "Estat de l'entrega", sin transformar. Vacío si la celda no tiene valor. */
+  rawStatus: string;
   /** Coordenadas cacheadas en el Sheet para no re-geocodificar cada día. */
   lat: number | null;
   lng: number | null;

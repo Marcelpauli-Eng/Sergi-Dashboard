@@ -241,6 +241,7 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
       measures: text(cell(row, "measures")) || null,
       notes: text(cell(row, "notes")) || null,
       status: parseStatus(cell(row, "status")),
+      rawStatus: text(cell(row, "status")),
       lat: parseNumber(cell(row, "lat")),
       lng: parseNumber(cell(row, "lng")),
       rowNumber,

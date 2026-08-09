@@ -147,6 +147,7 @@ function toStop(sample: Sample, date: string, sequence: number): Stop {
     measures: null,
     notes: sample.notes ?? null,
     status: recorded?.status ?? "pendiente",
+    rawStatus: recorded ? (recorded.status === "entregado" ? "Entregat" : "Incidència") : "",
     lat: sample.lat,
     lng: sample.lng,
     sequence,
