@@ -95,3 +95,47 @@ export function formatSheetTimestamp(iso: string, timezone: string): string {
     minute: "2-digit",
   }).format(new Date(iso));
 }
+
+/**
+ * Obtiene todos los días de un mes (con los padding del mes anterior y siguiente
+ * para cuadrar con semanas que empiezan en lunes).
+ */
+export function getMonthGrid(year: number, month: number): DateString[] {
+  const grid: DateString[] = [];
+  
+  // Día 1 del mes
+  const firstDay = new Date(Date.UTC(year, month - 1, 1));
+  let dayOfWeek = firstDay.getDay(); // 0 is Sunday, 1 is Monday
+  const padStart = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  
+  // Días del mes anterior
+  for (let i = padStart; i > 0; i--) {
+    const d = new Date(Date.UTC(year, month - 1, 1 - i));
+    grid.push(d.toISOString().slice(0, 10));
+  }
+  
+  // Días del mes actual
+  const lastDay = new Date(Date.UTC(year, month, 0)).getDate();
+  for (let i = 1; i <= lastDay; i++) {
+    const d = new Date(Date.UTC(year, month - 1, i));
+    grid.push(d.toISOString().slice(0, 10));
+  }
+  
+  // Días del mes siguiente (para rellenar la última semana)
+  const remaining = grid.length % 7;
+  if (remaining > 0) {
+    const padEnd = 7 - remaining;
+    for (let i = 1; i <= padEnd; i++) {
+      const d = new Date(Date.UTC(year, month - 1, lastDay + i));
+      grid.push(d.toISOString().slice(0, 10));
+    }
+  }
+  
+  return grid;
+}
+
+/** Extrae el año y mes de una DateString */
+export function getYearMonth(dateStr: DateString): { year: number, month: number } {
+  const [y, m] = dateStr.split("-").map(Number);
+  return { year: y, month: m };
+}

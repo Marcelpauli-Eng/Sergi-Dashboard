@@ -27,7 +27,7 @@ import {
   applyCustomOrder,
 } from "@/lib/sync";
 import { formatDistance, formatDuration } from "@/lib/format";
-import { formatLongDate, addDays } from "@/lib/dates";
+import { formatLongDate, addDays, getMonthGrid, getYearMonth } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { RouteDay, Stop } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -92,17 +92,8 @@ interface RouteResult {
 
 // ── Helper Dates ───────────────────────────────────────────────────────
 
-function getWeekDays(todayStr: string): string[] {
-  if (!todayStr) return [];
-  const [y, m, d] = todayStr.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
-  const dayOfWeek = date.getDay(); // 0 is Sunday
-  const distToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-  const mondayStr = addDays(todayStr, -distToMonday);
-  return Array.from({ length: 7 }, (_, i) => addDays(mondayStr, i));
-}
-
-const WEEKDAY_NAMES = ["Dilluns", "Dimarts", "Dimecres", "Dijous", "Divendres", "Dissabte", "Diumenge"];
+const WEEKDAY_NAMES = ["Dl", "Dt", "Dc", "Dj", "Dv", "Ds", "Dg"];
+const MONTH_NAMES = ["Gener", "Febrer", "Març", "Abril", "Maig", "Juny", "Juliol", "Agost", "Setembre", "Octubre", "Novembre", "Desembre"];
 
 // ── Main Dashboard ─────────────────────────────────────────────────────
 
@@ -710,99 +701,137 @@ function TabCalendari({
   calendarStopsByDate: Record<string, Stop[]>;
   onAssignDate: (orderId: string, date: string | null) => void;
 }) {
-  const weekDays = useMemo(() => getWeekDays(todayDate), [todayDate]);
-  
-  // Drag handling state (from unassigned to day)
-  const [draggedOrder, setDraggedOrder] = useState<string | null>(null);
-  
-  const handleDragStart = (e: React.DragEvent, id: string) => {
-    setDraggedOrder(id);
-    e.dataTransfer.setData("text/plain", id);
-    e.currentTarget.classList.add("dragging");
+  const [currentMonth, setCurrentMonth] = useState(() => getYearMonth(todayDate || new Date().toISOString().slice(0, 10)));
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  const grid = useMemo(() => getMonthGrid(currentMonth.year, currentMonth.month), [currentMonth.year, currentMonth.month]);
+
+  const prevMonth = () => {
+    setCurrentMonth(prev => {
+      let m = prev.month - 1;
+      let y = prev.year;
+      if (m < 1) { m = 12; y--; }
+      return { year: y, month: m };
+    });
   };
 
-  const handleDragEnd = (e: React.DragEvent) => {
-    setDraggedOrder(null);
-    e.currentTarget.classList.remove("dragging");
+  const nextMonth = () => {
+    setCurrentMonth(prev => {
+      let m = prev.month + 1;
+      let y = prev.year;
+      if (m > 12) { m = 1; y++; }
+      return { year: y, month: m };
+    });
   };
 
-  const handleDrop = (e: React.DragEvent, targetDate: string) => {
-    e.preventDefault();
-    const id = e.dataTransfer.getData("text/plain");
-    if (id) {
-      onAssignDate(id, targetDate);
-    }
-  };
+  if (selectedDate) {
+    const assigned = calendarStopsByDate[selectedDate] || [];
+    const isToday = selectedDate === todayDate;
+    
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" onClick={() => setSelectedDate(null)}>
+            ← Tornar
+          </Button>
+          <h2 className="text-lg font-semibold tracking-tight">
+            Repartiment del {selectedDate.split("-").reverse().join("/")}
+            {isToday && " (Avui)"}
+          </h2>
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comandes Assignades ({assigned.length})</h3>
+          {assigned.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No hi ha comandes assignades a aquest dia.</p>
+          ) : (
+            <ul className="space-y-3">
+              {assigned.map((stop) => (
+                <StopCard
+                  key={stop.id}
+                  stop={stop}
+                  onDelivered={() => {}} // No-op: los estados solo se marcan en "Avui"
+                  onIncident={() => {}} // No-op
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="space-y-3 pt-4 border-t border-border">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-status-pendent">Afegir Comanda Ràpid</h3>
+          <p className="text-xs text-muted-foreground">Toca una comanda per afegir-la automàticament a aquest dia.</p>
+          {unassignedStops.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No et queden comandes pendents d'assignar.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {unassignedStops.map((stop) => (
+                <button
+                  key={stop.id}
+                  onClick={() => onAssignDate(stop.id, selectedDate)}
+                  className="flex flex-col items-start gap-1 rounded-md border border-border bg-card p-3 text-left shadow-sm transition-colors active:bg-muted"
+                >
+                  <span className="font-semibold text-sm">{stop.id}</span>
+                  <span className="text-xs text-muted-foreground truncate w-full">{stop.city || "Sense adreça"}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-        <h2 className="mb-3 text-lg font-semibold tracking-tight">Sense assignar</h2>
-        {unassignedStops.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No hi ha cap comanda pendent d'assignar.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {unassignedStops.map((stop) => (
-              <div
-                key={stop.id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, stop.id)}
-                onDragEnd={handleDragEnd}
-                className="cursor-grab rounded-md border border-border bg-muted px-3 py-2 text-sm shadow-sm active:cursor-grabbing"
+        <div className="mb-4 flex items-center justify-between">
+          <Button variant="ghost" size="sm" onClick={prevMonth}>←</Button>
+          <h2 className="text-base font-semibold tracking-tight">
+            {MONTH_NAMES[currentMonth.month - 1]} {currentMonth.year}
+          </h2>
+          <Button variant="ghost" size="sm" onClick={nextMonth}>→</Button>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1 mb-2 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+          {WEEKDAY_NAMES.map(d => <div key={d}>{d}</div>)}
+        </div>
+        
+        <div className="grid grid-cols-7 gap-1">
+          {grid.map((date) => {
+            const isToday = date === todayDate;
+            const assignedCount = (calendarStopsByDate[date] || []).length;
+            const { month: dMonth } = getYearMonth(date);
+            const isCurrentMonth = dMonth === currentMonth.month;
+            const dayNum = date.split("-")[2].replace(/^0/, "");
+
+            return (
+              <button
+                key={date}
+                onClick={() => setSelectedDate(date)}
+                className={cn(
+                  "flex aspect-square flex-col items-center justify-center rounded-lg border transition-colors relative",
+                  isCurrentMonth ? "bg-card" : "bg-muted/30 text-muted-foreground/50",
+                  isToday ? "border-foreground" : "border-transparent hover:border-border",
+                )}
               >
-                <div className="font-semibold">{stop.id}</div>
-                <div className="text-xs text-muted-foreground">{stop.city || "Sense adreça"}</div>
-              </div>
-            ))}
-          </div>
-        )}
+                <span className={cn("text-sm", isToday && "font-bold")}>{dayNum}</span>
+                {assignedCount > 0 && (
+                  <span className="absolute bottom-1 right-1 flex size-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
+                    {assignedCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="space-y-3">
-        <h2 className="text-lg font-semibold tracking-tight">Aquesta Setmana</h2>
-        {weekDays.map((date, index) => {
-          const isToday = date === todayDate;
-          const assigned = calendarStopsByDate[date] || [];
-          
-          return (
-            <div
-              key={date}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => handleDrop(e, date)}
-              className={cn(
-                "rounded-xl border p-4 shadow-sm transition-colors",
-                isToday ? "border-foreground bg-secondary" : "border-border bg-card",
-                draggedOrder && "hover:border-primary hover:bg-muted"
-              )}
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <p className={cn("font-medium", isToday && "font-bold")}>
-                  {WEEKDAY_NAMES[index]}{isToday && " (Avui)"}
-                </p>
-                <p className="text-xs text-muted-foreground">{date.split("-").reverse().join("/")}</p>
-              </div>
-              
-              {assigned.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Arrossega una comanda aquí per assignar-la</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {assigned.map((stop) => (
-                    <div key={stop.id} className="flex items-center gap-2 rounded bg-background px-2 py-1 text-xs border border-border">
-                      <span className="font-medium">{stop.id}</span>
-                      <button 
-                        onClick={() => onAssignDate(stop.id, null)}
-                        className="text-muted-foreground hover:text-destructive"
-                        aria-label="Desassignar"
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+      <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <h2 className="mb-3 text-sm font-semibold tracking-tight">Bossa de Comandes ({unassignedStops.length})</h2>
+        <p className="text-xs text-muted-foreground">
+          Clica en un dia del calendari per assignar aquestes comandes.
+        </p>
       </div>
     </div>
   );
