@@ -14,6 +14,8 @@ export interface Order {
   id: string;
   /** Código del transportista al que está asignado. Vacío si el Sheet no tiene esa columna. */
   driverId: string;
+  /** Fecha de creación o de registro en el Sheet por parte de la empresa. */
+  creationDate: string | null;
   /** Fecha de reparto en formato YYYY-MM-DD. Vacío si el Sheet usa pestañas por mes. */
   date: string;
   /** Prioridad tal cual viene del Sheet. Menor número = más prioritario. */

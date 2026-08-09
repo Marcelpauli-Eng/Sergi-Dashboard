@@ -133,10 +133,20 @@ export default function StopCard({
               </p>
             )}
 
-            {/* Nº Comanda */}
-            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-              {stop.id}
-            </p>
+            {/* Nº Comanda y Fecha Creación */}
+            <div className="mt-1 flex items-center gap-2">
+              <p className="font-mono text-[11px] text-muted-foreground">
+                {stop.id}
+              </p>
+              {stop.creationDate && (
+                <>
+                  <span className="text-[10px] text-muted-foreground/40">•</span>
+                  <p className="text-[11px] text-muted-foreground">
+                    Creat: {stop.creationDate}
+                  </p>
+                </>
+              )}
+            </div>
 
             {/* Medidas */}
             {stop.measures && (

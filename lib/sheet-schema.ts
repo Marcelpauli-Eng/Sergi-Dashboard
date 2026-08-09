@@ -31,6 +31,9 @@ export const COLUMNS = {
   /** A qué transportista está asignado. Opcional (el Sheet real no la tiene). */
   driverId: ["Transportista", "Repartidor", "Conductor", "Chofer", "Driver", "Tr"],
 
+  /** Fecha de creación / registro original (columna A). */
+  creationDate: ["Data", "Fecha de creación", "Fecha creacion", "Creado", "Fecha de registro"],
+
   /** Fecha de reparto (asignada en el calendario). Opcional. */
   date: ["Data entrega", "Data de entrega", "Data d'entrega", "Fecha Reparto", "Fecha Entrega", "Dia", "Date", "Fecha"],
 

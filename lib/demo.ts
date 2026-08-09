@@ -138,6 +138,7 @@ function toStop(sample: Sample, date: string, sequence: number): Stop {
   return {
     id: sample.id,
     driverId: DEMO_DRIVER.id,
+    creationDate: null,
     date,
     priority: sample.priority,
     customer: sample.customer,
