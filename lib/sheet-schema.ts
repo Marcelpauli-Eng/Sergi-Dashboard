@@ -32,7 +32,7 @@ export const COLUMNS = {
   driverId: ["Transportista", "Repartidor", "Conductor", "Chofer", "Driver", "Tr"],
 
   /** Fecha de reparto. Opcional (el Sheet real usa pestañas por mes). */
-  date: ["Fecha", "Data", "Fecha Reparto", "Fecha Entrega", "Dia", "Date"],
+  date: ["Fecha", "Data", "Data entrega", "Data de entrega", "Data d'entrega", "Fecha Reparto", "Fecha Entrega", "Dia", "Date"],
 
   /** Prioridad. Menor número = antes. Opcional (si falta, todas iguales). */
   priority: ["Prioritat", "Prioridad", "Orden", "Priority"],
@@ -71,11 +71,8 @@ export const COLUMNS = {
     "Entregado",
   ],
 
-  /** Momento de la entrega. La app ESCRIBE aquí. */
+  /** Momento de la entrega (timestamp real de cuando el repartidor lo entrega). La app ESCRIBE aquí. */
   deliveredAt: [
-    "Data entrega",
-    "Data de entrega",
-    "Data d'entrega",
     "Hora Entrega",
     "Hora de Entrega",
     "Fecha Entrega Real",
