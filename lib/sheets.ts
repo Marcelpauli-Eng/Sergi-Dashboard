@@ -370,21 +370,31 @@ export async function writeDeliveries(
       continue;
     }
 
-    updates.push({
-      rowNumber: order.rowNumber,
-      column: "status",
-      value: record.status === "entregado" ? "Entregat" : "Incidència",
-    });
-    updates.push({
-      rowNumber: order.rowNumber,
-      column: "deliveredAt",
-      value: formatSheetTimestamp(record.recordedAt, env.timezone),
-    });
-    if (record.note) {
+    const type = record.type || "status";
+
+    if (type === "status") {
       updates.push({
         rowNumber: order.rowNumber,
-        column: "incidentNote",
-        value: record.note,
+        column: "status",
+        value: record.status === "entregado" ? "Entregat" : "Incidència",
+      });
+      updates.push({
+        rowNumber: order.rowNumber,
+        column: "deliveredAt",
+        value: formatSheetTimestamp(record.recordedAt, env.timezone),
+      });
+      if (record.note) {
+        updates.push({
+          rowNumber: order.rowNumber,
+          column: "incidentNote",
+          value: record.note,
+        });
+      }
+    } else if (type === "date") {
+      updates.push({
+        rowNumber: order.rowNumber,
+        column: "date",
+        value: record.date ? record.date : "",
       });
     }
 

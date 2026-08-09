@@ -4,8 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
+  CalendarDays,
+  CheckCircle2,
   ChevronDown,
+  Clock,
   GripVertical,
+  History,
   Menu,
   Route,
   X,
@@ -13,6 +17,7 @@ import {
 import { db } from "@/lib/db";
 import {
   recordDelivery,
+  recordDateAssignment,
   syncNow,
   SessionExpiredError,
   getSelectedTab,
@@ -22,7 +27,7 @@ import {
   applyCustomOrder,
 } from "@/lib/sync";
 import { formatDistance, formatDuration } from "@/lib/format";
-import { formatLongDate } from "@/lib/dates";
+import { formatLongDate, addDays } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { RouteDay, Stop } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -65,17 +70,15 @@ const CATEGORY_CONFIG: Record<
     label: "Entregats",
     color: "text-status-entregat",
     bgColor: "bg-green-50",
-    defaultOpen: false,
+    defaultOpen: true,
   },
   incidencia: {
     label: "Incidència",
     color: "text-status-incidencia",
     bgColor: "bg-orange-50",
-    defaultOpen: false,
+    defaultOpen: true,
   },
 };
-
-const CATEGORY_ORDER: StatusCategory[] = ["pendent", "en_curs", "entregat", "incidencia"];
 
 // ── Route generation types ─────────────────────────────────────────────
 
@@ -87,7 +90,23 @@ interface RouteResult {
   totalDurationSeconds: number | null;
 }
 
+// ── Helper Dates ───────────────────────────────────────────────────────
+
+function getWeekDays(todayStr: string): string[] {
+  if (!todayStr) return [];
+  const [y, m, d] = todayStr.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const dayOfWeek = date.getDay(); // 0 is Sunday
+  const distToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const mondayStr = addDays(todayStr, -distToMonday);
+  return Array.from({ length: 7 }, (_, i) => addDays(mondayStr, i));
+}
+
+const WEEKDAY_NAMES = ["Dilluns", "Dimarts", "Dimecres", "Dijous", "Divendres", "Dissabte", "Diumenge"];
+
 // ── Main Dashboard ─────────────────────────────────────────────────────
+
+type TabValue = "avui" | "calendari" | "historial";
 
 export default function Dashboard({ driverName }: { driverName: string }) {
   const router = useRouter();
@@ -110,19 +129,14 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Menú hamburguesa & selector de pestaña ────────────────────────────
+  // ── Navegación principal ──────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<TabValue>("avui");
+
+  // ── Menú hamburguesa & selector de pestaña de Sheets ──────────────────
   const [menuOpen, setMenuOpen] = useState(false);
   const [tabs, setTabs] = useState<string[]>([]);
-  const [selectedTab, setSelectedTabState] = useState<string | null>(null);
+  const [selectedSheetTab, setSelectedSheetTab] = useState<string | null>(null);
   const [loadingTabs, setLoadingTabs] = useState(false);
-
-  // ── Secciones colapsables ─────────────────────────────────────────────
-  const [openSections, setOpenSections] = useState<Record<StatusCategory, boolean>>({
-    pendent: true,
-    en_curs: true,
-    entregat: false,
-    incidencia: false,
-  });
 
   // ── Orden personalizado (drag & drop) ─────────────────────────────────
   const [customOrderIds, setCustomOrderIds] = useState<string[]>([]);
@@ -134,11 +148,10 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   // Inicializar tab y orden personalizado desde localStorage
   useEffect(() => {
     const saved = getSelectedTab();
-    if (saved) setSelectedTabState(saved);
+    if (saved) setSelectedSheetTab(saved);
     setCustomOrderIds(getCustomOrder());
   }, []);
 
-  // Cargar pestañas del Sheet cuando se abre el menú
   const fetchTabs = useCallback(async () => {
     if (tabs.length > 0) return;
     setLoadingTabs(true);
@@ -157,7 +170,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
   const handleTabSelect = useCallback(
     async (tab: string) => {
-      setSelectedTabState(tab);
+      setSelectedSheetTab(tab);
       setSelectedTab(tab);
       setMenuOpen(false);
       setRouteResult(null); // Reset route on tab change
@@ -183,7 +196,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     setSyncing(true);
     setError(null);
     try {
-      const outcome = await syncNow(selectedTab ?? undefined);
+      const outcome = await syncNow(selectedSheetTab ?? undefined);
       setError(outcome.error);
     } catch (e) {
       if (e instanceof SessionExpiredError) {
@@ -194,9 +207,8 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     } finally {
       setSyncing(false);
     }
-  }, [router, selectedTab]);
+  }, [router, selectedSheetTab]);
 
-  // Sincroniza al abrir, al recuperar cobertura y al volver a la app.
   useEffect(() => {
     const initial = setTimeout(() => void sync(), 0);
     const onOnline = () => void sync();
@@ -213,118 +225,73 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   }, [sync]);
 
   const manifest = stored?.data;
-  const allStops = manifest?.today?.stops ?? [];
+  const allStops = manifest?.today?.stops ?? []; // manifest.today.stops is now all stops in the sheet!
+  const todayDate = manifest?.today?.date ?? ""; // The "today" date on the server
 
-  // Agrupar stops por categoría
-  const grouped = useMemo(() => {
-    const groups: Record<StatusCategory, Stop[]> = {
-      pendent: [],
-      en_curs: [],
+  // Clasificación de todos los pedidos
+  const {
+    todayStops,
+    unassignedStops,
+    calendarStopsByDate,
+    historyStops,
+  } = useMemo(() => {
+    const todayStops: Stop[] = [];
+    const unassignedStops: Stop[] = [];
+    const historyStops: { entregat: Stop[]; incidencia: Stop[] } = {
       entregat: [],
       incidencia: [],
     };
+    const calendarStopsByDate: Record<string, Stop[]> = {};
+
     for (const stop of allStops) {
       const cat = (stop.statusCategory ?? "pendent") as StatusCategory;
-      if (groups[cat]) {
-        groups[cat].push(stop);
+      
+      // Historial
+      if (cat === "entregat") {
+        historyStops.entregat.push(stop);
+        continue;
+      }
+      if (cat === "incidencia") {
+        historyStops.incidencia.push(stop);
+        continue;
+      }
+
+      // Si no es historial, es pendiente o en_curs
+      if (!stop.date) {
+        unassignedStops.push(stop);
       } else {
-        groups.pendent.push(stop);
-      }
-    }
-    // Aplicar orden personalizado solo a pendientes
-    groups.pendent = applyCustomOrder(groups.pendent, customOrderIds);
-    return groups;
-  }, [allStops, customOrderIds]);
+        if (!calendarStopsByDate[stop.date]) calendarStopsByDate[stop.date] = [];
+        calendarStopsByDate[stop.date].push(stop);
 
-  const totalPendent = grouped.pendent.length;
-
-  // ── Drag & drop handlers ──────────────────────────────────────────────
-  const dragItemRef = useRef<number | null>(null);
-  const dragOverItemRef = useRef<number | null>(null);
-
-  const handleDragStart = useCallback((index: number) => {
-    dragItemRef.current = index;
-  }, []);
-
-  const handleDragOver = useCallback((index: number) => {
-    dragOverItemRef.current = index;
-  }, []);
-
-  const handleDragEnd = useCallback(() => {
-    const from = dragItemRef.current;
-    const to = dragOverItemRef.current;
-    if (from === null || to === null || from === to) {
-      dragItemRef.current = null;
-      dragOverItemRef.current = null;
-      return;
-    }
-
-    const newOrder = [...grouped.pendent];
-    const [moved] = newOrder.splice(from, 1);
-    newOrder.splice(to, 0, moved);
-
-    const newIds = newOrder.map((s) => s.id);
-    setCustomOrderIds(newIds);
-    setCustomOrder(newIds);
-    setRouteResult(null); // Reset route when order changes
-
-    dragItemRef.current = null;
-    dragOverItemRef.current = null;
-  }, [grouped.pendent]);
-
-  // ── Touch drag handlers ───────────────────────────────────────────────
-  const touchStartY = useRef<number>(0);
-  const touchDragIdx = useRef<number | null>(null);
-  const listRef = useRef<HTMLUListElement>(null);
-
-  const handleTouchStart = useCallback((index: number, e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY;
-    touchDragIdx.current = index;
-    dragItemRef.current = index;
-  }, []);
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (touchDragIdx.current === null || !listRef.current) return;
-    e.preventDefault();
-
-    const y = e.touches[0].clientY;
-    const items = listRef.current.querySelectorAll("[data-drag-item]");
-    for (let i = 0; i < items.length; i++) {
-      const rect = items[i].getBoundingClientRect();
-      if (y >= rect.top && y <= rect.bottom) {
-        dragOverItemRef.current = i;
-
-        // Visual feedback
-        items.forEach((el) => el.classList.remove("drag-over"));
-        if (i !== touchDragIdx.current) {
-          items[i].classList.add("drag-over");
+        if (stop.date === todayDate) {
+          todayStops.push(stop);
         }
-        break;
       }
     }
-  }, []);
 
-  const handleTouchEnd = useCallback(() => {
-    if (listRef.current) {
-      listRef.current.querySelectorAll("[data-drag-item]").forEach((el) => {
-        el.classList.remove("drag-over");
-      });
-    }
-    touchDragIdx.current = null;
-    handleDragEnd();
-  }, [handleDragEnd]);
+    // Ordenar los de hoy con el orden personalizado
+    const orderedToday = applyCustomOrder(todayStops, customOrderIds);
 
-  // ── Generar ruta bajo demanda ─────────────────────────────────────────
+    return {
+      todayStops: orderedToday,
+      unassignedStops,
+      calendarStopsByDate,
+      historyStops,
+    };
+  }, [allStops, customOrderIds, todayDate]);
+
   const generateRoute = useCallback(async () => {
-    if (grouped.pendent.length === 0) return;
+    // Only generate route for "pendents" in today's active stops
+    const routeable = todayStops.filter(s => s.statusCategory === "pendent");
+    if (routeable.length === 0) return;
     setGeneratingRoute(true);
     try {
       const res = await fetch("/api/route", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          orderIds: grouped.pendent.map((s) => s.id),
-          sheetTab: selectedTab ?? undefined,
+          orderIds: routeable.map((s) => s.id),
+          sheetTab: selectedSheetTab ?? undefined,
         }),
       });
       if (res.status === 401) {
@@ -339,16 +306,21 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       const result = (await res.json()) as RouteResult;
       setRouteResult(result);
 
-      // Actualizar el orden con el de la ruta optimizada
+      // Actualizar el orden con el de la ruta optimizada (para todos los de hoy)
+      // Manteniendo los "en curs" que no pasamos a la ruta, por lo que aplicaremos un order parcial
       const newIds = result.stops.map((s) => s.id);
-      setCustomOrderIds(newIds);
-      setCustomOrder(newIds);
+      // Extraemos los que ya estaban y no se rutearon
+      const nonRouteableIds = todayStops.filter(s => s.statusCategory !== "pendent").map(s => s.id);
+      const combinedOrder = [...nonRouteableIds, ...newIds];
+      
+      setCustomOrderIds(combinedOrder);
+      setCustomOrder(combinedOrder);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error generando la ruta");
     } finally {
       setGeneratingRoute(false);
     }
-  }, [grouped.pendent, selectedTab, router]);
+  }, [todayStops, selectedSheetTab, router]);
 
   const handleDelivered = (orderId: string) => {
     void recordDelivery(orderId, "entregado");
@@ -356,13 +328,12 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   const handleIncident = (orderId: string, note: string) => {
     void recordDelivery(orderId, "incidencia", note || null);
   };
-
-  const toggleSection = (cat: StatusCategory) => {
-    setOpenSections((prev) => ({ ...prev, [cat]: !prev[cat] }));
+  const handleDateAssignment = (orderId: string, newDate: string | null) => {
+    void recordDateAssignment(orderId, newDate);
   };
 
   return (
-    <div className="mx-auto flex min-h-svh max-w-2xl flex-col">
+    <div className="mx-auto flex min-h-svh max-w-2xl flex-col bg-background pb-20">
       {manifest?.demo && (
         <p className="bg-amber-100 px-4 py-1.5 text-center text-[10px] font-medium uppercase tracking-wide text-amber-800">
           Modo demo · pedidos de ejemplo
@@ -373,28 +344,19 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         <div className="flex items-baseline justify-between gap-4 px-4 pb-2.5 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <div className="min-w-0">
             <h1 className="truncate text-lg tracking-tight">{driverName}</h1>
-            {manifest?.today && (
+            {todayDate && (
               <p className="text-xs text-muted-foreground first-letter:uppercase">
-                {formatLongDate(manifest.today.date)}
+                {formatLongDate(todayDate)}
               </p>
             )}
-            {(selectedTab || manifest?.sheetTab) && (
+            {(selectedSheetTab || manifest?.sheetTab) && (
               <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                📋 {selectedTab || manifest?.sheetTab}
+                📋 {selectedSheetTab || manifest?.sheetTab}
               </p>
             )}
           </div>
 
           <div className="flex shrink-0 items-center gap-3">
-            {allStops.length > 0 && (
-              <p className="text-sm text-muted-foreground">
-                <span className="font-semibold text-foreground">
-                  {grouped.entregat.length}
-                </span>
-                /{allStops.length}
-              </p>
-            )}
-
             <button
               type="button"
               onClick={() => {
@@ -442,8 +404,8 @@ export default function Dashboard({ driverName }: { driverName: string }) {
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
               {tabs.map((tab) => {
                 const isActive =
-                  tab === selectedTab ||
-                  (!selectedTab && tab === manifest?.sheetTab);
+                  tab === selectedSheetTab ||
+                  (!selectedSheetTab && tab === manifest?.sheetTab);
                 return (
                   <button
                     key={tab}
@@ -465,115 +427,439 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         </div>
       )}
 
-      <main className="flex-1 px-4 py-5 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <main className="flex-1 px-4 py-5">
         {loading ? (
           <p className="py-16 text-center text-sm text-muted-foreground">Cargando…</p>
         ) : !manifest ? (
           <EmptyState online={online} syncing={syncing} />
-        ) : allStops.length === 0 ? (
-          <div className="animate-rise-in rounded-xl border border-border bg-card px-6 py-12 text-center shadow-sm">
-            <p className="text-base">No hay pedidos en esta hoja</p>
-          </div>
         ) : (
           <>
-            {/* ── Botón generar ruta (solo si hay pendientes) ─────────── */}
-            {totalPendent > 0 && (
-              <div className="mb-4 animate-rise-in">
-                {routeResult ? (
-                  <RouteSummary route={routeResult} />
-                ) : (
-                  <Button
-                    className="w-full"
-                    size="touch"
-                    onClick={() => void generateRoute()}
-                    disabled={generatingRoute || !online}
-                  >
-                    <Route className="size-4" />
-                    {generatingRoute
-                      ? "Calculant ruta…"
-                      : `Generar ruta (${totalPendent} parades)`}
-                  </Button>
-                )}
-              </div>
+            {activeTab === "avui" && (
+              <TabAvui
+                todayStops={todayStops}
+                routeResult={routeResult}
+                generatingRoute={generatingRoute}
+                online={online}
+                onGenerateRoute={generateRoute}
+                onDelivered={handleDelivered}
+                onIncident={handleIncident}
+                customOrderIds={customOrderIds}
+                setCustomOrderIds={setCustomOrderIds}
+                setRouteResult={setRouteResult}
+              />
             )}
-
-            {/* ── Secciones por categoría ─────────────────────────────── */}
-            {CATEGORY_ORDER.map((cat) => {
-              const stops = grouped[cat];
-              if (stops.length === 0) return null;
-              const config = CATEGORY_CONFIG[cat];
-              const isOpen = openSections[cat];
-
-              return (
-                <CategorySection
-                  key={cat}
-                  category={cat}
-                  label={config.label}
-                  color={config.color}
-                  bgColor={config.bgColor}
-                  count={stops.length}
-                  open={isOpen}
-                  onToggle={() => toggleSection(cat)}
-                >
-                  {cat === "pendent" ? (
-                    <ul ref={listRef} className="space-y-3">
-                      {stops.map((stop, index) => (
-                        <li
-                          key={stop.id}
-                          data-drag-item
-                          draggable
-                          onDragStart={() => handleDragStart(index)}
-                          onDragOver={(e) => {
-                            e.preventDefault();
-                            handleDragOver(index);
-                          }}
-                          onDragEnd={handleDragEnd}
-                          onTouchStart={(e) => handleTouchStart(index, e)}
-                          onTouchMove={handleTouchMove}
-                          onTouchEnd={handleTouchEnd}
-                          className="transition-transform"
-                        >
-                          <StopCard
-                            stop={{
-                              ...stop,
-                              sequence: index + 1,
-                              legDistanceMeters:
-                                routeResult?.stops.find((s) => s.id === stop.id)
-                                  ?.legDistanceMeters ?? null,
-                              legDurationSeconds:
-                                routeResult?.stops.find((s) => s.id === stop.id)
-                                  ?.legDurationSeconds ?? null,
-                            }}
-                            onDelivered={handleDelivered}
-                            onIncident={handleIncident}
-                            draggable
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <ul className="space-y-3">
-                      {stops.map((stop) => (
-                        <StopCard
-                          key={stop.id}
-                          stop={stop}
-                          onDelivered={handleDelivered}
-                          onIncident={handleIncident}
-                        />
-                      ))}
-                    </ul>
-                  )}
-                </CategorySection>
-              );
-            })}
+            {activeTab === "calendari" && (
+              <TabCalendari
+                todayDate={todayDate}
+                unassignedStops={unassignedStops}
+                calendarStopsByDate={calendarStopsByDate}
+                onAssignDate={handleDateAssignment}
+              />
+            )}
+            {activeTab === "historial" && (
+              <TabHistorial
+                historyStops={historyStops}
+                onDelivered={handleDelivered}
+                onIncident={handleIncident}
+              />
+            )}
           </>
         )}
       </main>
+
+      {/* ── Bottom Navigation ─────────────────────────────────────────── */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 flex border-t border-border bg-card/95 backdrop-blur-md pb-[max(env(safe-area-inset-bottom),0.5rem)] text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <button
+          onClick={() => setActiveTab("avui")}
+          className={cn(
+            "flex flex-1 flex-col items-center justify-center gap-1 py-3 transition-colors",
+            activeTab === "avui" ? "text-foreground" : "hover:text-foreground/80",
+          )}
+        >
+          <Clock className="size-5" strokeWidth={activeTab === "avui" ? 2.5 : 2} />
+          Avui
+        </button>
+        <button
+          onClick={() => setActiveTab("calendari")}
+          className={cn(
+            "flex flex-1 flex-col items-center justify-center gap-1 py-3 transition-colors",
+            activeTab === "calendari" ? "text-foreground" : "hover:text-foreground/80",
+          )}
+        >
+          <CalendarDays className="size-5" strokeWidth={activeTab === "calendari" ? 2.5 : 2} />
+          Calendari
+        </button>
+        <button
+          onClick={() => setActiveTab("historial")}
+          className={cn(
+            "flex flex-1 flex-col items-center justify-center gap-1 py-3 transition-colors",
+            activeTab === "historial" ? "text-foreground" : "hover:text-foreground/80",
+          )}
+        >
+          <History className="size-5" strokeWidth={activeTab === "historial" ? 2.5 : 2} />
+          Historial
+        </button>
+      </nav>
     </div>
   );
 }
 
-// ── Route Summary (solo cuando se ha generado) ─────────────────────────
+// ── Tab: Avui ──────────────────────────────────────────────────────────
+
+function TabAvui({
+  todayStops,
+  routeResult,
+  generatingRoute,
+  online,
+  onGenerateRoute,
+  onDelivered,
+  onIncident,
+  customOrderIds,
+  setCustomOrderIds,
+  setRouteResult,
+}: {
+  todayStops: Stop[];
+  routeResult: RouteResult | null;
+  generatingRoute: boolean;
+  online: boolean;
+  onGenerateRoute: () => void;
+  onDelivered: (id: string) => void;
+  onIncident: (id: string, note: string) => void;
+  customOrderIds: string[];
+  setCustomOrderIds: (ids: string[]) => void;
+  setRouteResult: (res: RouteResult | null) => void;
+}) {
+  const pendents = todayStops.filter((s) => s.statusCategory === "pendent");
+  const enCurs = todayStops.filter((s) => s.statusCategory === "en_curs");
+
+  const listRef = useRef<HTMLUListElement>(null);
+  const dragItemRef = useRef<number | null>(null);
+  const dragOverItemRef = useRef<number | null>(null);
+
+  const handleDragStart = useCallback((index: number) => {
+    dragItemRef.current = index;
+  }, []);
+
+  const handleDragOver = useCallback((index: number) => {
+    dragOverItemRef.current = index;
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    const from = dragItemRef.current;
+    const to = dragOverItemRef.current;
+    if (from === null || to === null || from === to) {
+      dragItemRef.current = null;
+      dragOverItemRef.current = null;
+      return;
+    }
+
+    const newOrder = [...todayStops];
+    const [moved] = newOrder.splice(from, 1);
+    newOrder.splice(to, 0, moved);
+
+    const newIds = newOrder.map((s) => s.id);
+    setCustomOrderIds(newIds);
+    setCustomOrder(newIds);
+    setRouteResult(null);
+
+    dragItemRef.current = null;
+    dragOverItemRef.current = null;
+  }, [todayStops, setCustomOrderIds, setRouteResult]);
+
+  // Touch handlers
+  const touchDragIdx = useRef<number | null>(null);
+
+  const handleTouchStart = useCallback((index: number, e: React.TouchEvent) => {
+    touchDragIdx.current = index;
+    dragItemRef.current = index;
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (touchDragIdx.current === null || !listRef.current) return;
+    e.preventDefault();
+
+    const y = e.touches[0].clientY;
+    const items = listRef.current.querySelectorAll("[data-drag-item]");
+    for (let i = 0; i < items.length; i++) {
+      const rect = items[i].getBoundingClientRect();
+      if (y >= rect.top && y <= rect.bottom) {
+        dragOverItemRef.current = i;
+        items.forEach((el) => el.classList.remove("drag-over"));
+        if (i !== touchDragIdx.current) {
+          items[i].classList.add("drag-over");
+        }
+        break;
+      }
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (listRef.current) {
+      listRef.current.querySelectorAll("[data-drag-item]").forEach((el) => {
+        el.classList.remove("drag-over");
+      });
+    }
+    touchDragIdx.current = null;
+    handleDragEnd();
+  }, [handleDragEnd]);
+
+  if (todayStops.length === 0) {
+    return (
+      <div className="animate-rise-in rounded-xl border border-border bg-card px-6 py-12 text-center shadow-sm">
+        <p className="text-base">No tens comandes programades per a avui</p>
+        <p className="mt-2 text-sm text-muted-foreground">Ves al Calendari per assignar comandes al dia d'avui.</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold tracking-tight">Repartiment d'avui</h2>
+      </div>
+
+      {pendents.length > 0 && (
+        <div className="mb-6 animate-rise-in">
+          {routeResult ? (
+            <RouteSummary route={routeResult} />
+          ) : (
+            <Button
+              className="w-full"
+              size="touch"
+              onClick={() => void onGenerateRoute()}
+              disabled={generatingRoute || !online}
+            >
+              <Route className="size-4" />
+              {generatingRoute
+                ? "Calculant ruta…"
+                : `Generar ruta (${pendents.length} parades)`}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {enCurs.length > 0 && (
+        <div className="mb-6 space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-status-en-curs">En Curs</h3>
+          {enCurs.map((stop) => (
+            <StopCard
+              key={stop.id}
+              stop={stop}
+              onDelivered={onDelivered}
+              onIncident={onIncident}
+            />
+          ))}
+        </div>
+      )}
+
+      {pendents.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-status-pendent">Pendents</h3>
+          <ul ref={listRef} className="space-y-3">
+            {todayStops.map((stop, index) => {
+              if (stop.statusCategory !== "pendent") return null;
+              return (
+                <li
+                  key={stop.id}
+                  data-drag-item
+                  draggable
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    handleDragOver(index);
+                  }}
+                  onDragEnd={handleDragEnd}
+                  onTouchStart={(e) => handleTouchStart(index, e)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                  className="transition-transform"
+                >
+                  <StopCard
+                    stop={{
+                      ...stop,
+                      sequence: index + 1,
+                      legDistanceMeters:
+                        routeResult?.stops.find((s) => s.id === stop.id)?.legDistanceMeters ?? null,
+                      legDurationSeconds:
+                        routeResult?.stops.find((s) => s.id === stop.id)?.legDurationSeconds ?? null,
+                    }}
+                    onDelivered={onDelivered}
+                    onIncident={onIncident}
+                    draggable
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── Tab: Calendari ─────────────────────────────────────────────────────
+
+function TabCalendari({
+  todayDate,
+  unassignedStops,
+  calendarStopsByDate,
+  onAssignDate,
+}: {
+  todayDate: string;
+  unassignedStops: Stop[];
+  calendarStopsByDate: Record<string, Stop[]>;
+  onAssignDate: (orderId: string, date: string | null) => void;
+}) {
+  const weekDays = useMemo(() => getWeekDays(todayDate), [todayDate]);
+  
+  // Drag handling state (from unassigned to day)
+  const [draggedOrder, setDraggedOrder] = useState<string | null>(null);
+  
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedOrder(id);
+    e.dataTransfer.setData("text/plain", id);
+    e.currentTarget.classList.add("dragging");
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    setDraggedOrder(null);
+    e.currentTarget.classList.remove("dragging");
+  };
+
+  const handleDrop = (e: React.DragEvent, targetDate: string) => {
+    e.preventDefault();
+    const id = e.dataTransfer.getData("text/plain");
+    if (id) {
+      onAssignDate(id, targetDate);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <h2 className="mb-3 text-lg font-semibold tracking-tight">Sense assignar</h2>
+        {unassignedStops.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No hi ha cap comanda pendent d'assignar.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {unassignedStops.map((stop) => (
+              <div
+                key={stop.id}
+                draggable
+                onDragStart={(e) => handleDragStart(e, stop.id)}
+                onDragEnd={handleDragEnd}
+                className="cursor-grab rounded-md border border-border bg-muted px-3 py-2 text-sm shadow-sm active:cursor-grabbing"
+              >
+                <div className="font-semibold">{stop.id}</div>
+                <div className="text-xs text-muted-foreground">{stop.city || "Sense adreça"}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        <h2 className="text-lg font-semibold tracking-tight">Aquesta Setmana</h2>
+        {weekDays.map((date, index) => {
+          const isToday = date === todayDate;
+          const assigned = calendarStopsByDate[date] || [];
+          
+          return (
+            <div
+              key={date}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => handleDrop(e, date)}
+              className={cn(
+                "rounded-xl border p-4 shadow-sm transition-colors",
+                isToday ? "border-foreground bg-secondary" : "border-border bg-card",
+                draggedOrder && "hover:border-primary hover:bg-muted"
+              )}
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <p className={cn("font-medium", isToday && "font-bold")}>
+                  {WEEKDAY_NAMES[index]}{isToday && " (Avui)"}
+                </p>
+                <p className="text-xs text-muted-foreground">{date.split("-").reverse().join("/")}</p>
+              </div>
+              
+              {assigned.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Arrossega una comanda aquí per assignar-la</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {assigned.map((stop) => (
+                    <div key={stop.id} className="flex items-center gap-2 rounded bg-background px-2 py-1 text-xs border border-border">
+                      <span className="font-medium">{stop.id}</span>
+                      <button 
+                        onClick={() => onAssignDate(stop.id, null)}
+                        className="text-muted-foreground hover:text-destructive"
+                        aria-label="Desassignar"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Tab: Historial ─────────────────────────────────────────────────────
+
+function TabHistorial({
+  historyStops,
+  onDelivered,
+  onIncident,
+}: {
+  historyStops: { entregat: Stop[]; incidencia: Stop[] };
+  onDelivered: (id: string) => void;
+  onIncident: (id: string, note: string) => void;
+}) {
+  const [openEntregat, setOpenEntregat] = useState(false);
+  const [openIncidencia, setOpenIncidencia] = useState(true);
+
+  return (
+    <div className="space-y-4">
+      <CategorySection
+        category="incidencia"
+        label="Incidències globals"
+        color="text-status-incidencia"
+        bgColor="bg-orange-50"
+        count={historyStops.incidencia.length}
+        open={openIncidencia}
+        onToggle={() => setOpenIncidencia(!openIncidencia)}
+      >
+        <ul className="space-y-3">
+          {historyStops.incidencia.map((stop) => (
+            <StopCard key={stop.id} stop={stop} onDelivered={onDelivered} onIncident={onIncident} />
+          ))}
+        </ul>
+      </CategorySection>
+
+      <CategorySection
+        category="entregat"
+        label="Entregats totals"
+        color="text-status-entregat"
+        bgColor="bg-green-50"
+        count={historyStops.entregat.length}
+        open={openEntregat}
+        onToggle={() => setOpenEntregat(!openEntregat)}
+      >
+        <ul className="space-y-3">
+          {historyStops.entregat.map((stop) => (
+            <StopCard key={stop.id} stop={stop} onDelivered={onDelivered} onIncident={onIncident} />
+          ))}
+        </ul>
+      </CategorySection>
+    </div>
+  );
+}
+
+// ── Route Summary ──────────────────────────────────────────────────────
 
 function RouteSummary({ route }: { route: RouteResult }) {
   const distance = formatDistance(route.totalDistanceMeters);
@@ -628,6 +914,7 @@ function CategorySection({
   onToggle: () => void;
   children: React.ReactNode;
 }) {
+  if (count === 0) return null;
   return (
     <section className="mb-4">
       <button
@@ -664,7 +951,7 @@ function EmptyState({ online, syncing }: { online: boolean; syncing: boolean }) 
   if (syncing) {
     return (
       <p className="py-16 text-center text-sm text-muted-foreground">
-        Descarregant la teva ruta…
+        Descarregant...
       </p>
     );
   }
@@ -676,8 +963,8 @@ function EmptyState({ online, syncing }: { online: boolean; syncing: boolean }) 
       </p>
       <p className="mt-1.5 text-sm text-muted-foreground">
         {online
-          ? "Selecciona una fulla del menú ☰ i prem Actualitzar."
-          : "Connecta't a internet una vegada per descarregar la ruta. Després podràs treballar sense cobertura."}
+          ? "Selecciona una fulla del menú ☰ y prem Actualitzar."
+          : "Connecta't a internet una vegada per descarregar les dades."}
       </p>
     </div>
   );

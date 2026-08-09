@@ -99,11 +99,14 @@ export interface DeliveryRecord {
   /** UUID generado en el cliente. Garantiza idempotencia si se reintenta. */
   clientId: string;
   orderId: string;
-  status: Exclude<DeliveryStatus, "pendiente">;
+  /** Tipo de actualización. Si no se especifica, por retrocompatibilidad se asume "status". */
+  type?: "status" | "date";
+  status?: Exclude<DeliveryStatus, "pendiente">;
+  date?: string | null;
   /** ISO timestamp del momento real en que se pulsó el botón, no del envío. */
   recordedAt: string;
   /** Texto libre, solo para incidencias. */
-  note: string | null;
+  note?: string | null;
 }
 
 /** Datos públicos de un transportista. El PIN nunca sale del servidor. */

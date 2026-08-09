@@ -90,7 +90,12 @@ function applyOutbox(manifest: Manifest, items: OutboxItem[]): Manifest {
     ...day,
     stops: day.stops.map((stop) => {
       const pending = byOrderId.get(stop.id);
-      return pending ? { ...stop, status: pending.status } : stop;
+      if (!pending) return stop;
+      const type = pending.type || "status";
+      if (type === "date") {
+        return { ...stop, date: pending.date ?? "" };
+      }
+      return { ...stop, status: pending.status ?? stop.status };
     }),
   });
 
@@ -116,6 +121,7 @@ export async function recordDelivery(
   const item: OutboxItem = {
     clientId: crypto.randomUUID(),
     orderId,
+    type: "status",
     status,
     recordedAt: new Date().toISOString(),
     note,
@@ -136,8 +142,39 @@ export async function recordDelivery(
     }
   });
 
-  // Intento inmediato, sin bloquear a quien llamó: si no hay cobertura
-  // fallará en silencio y quedará para el próximo flush.
+  void flushOutbox().catch(() => {});
+}
+
+/**
+ * Asigna una fecha a un pedido en el calendario.
+ */
+export async function recordDateAssignment(
+  orderId: string,
+  date: string | null,
+): Promise<void> {
+  const item: OutboxItem = {
+    clientId: crypto.randomUUID(),
+    orderId,
+    type: "date",
+    date: date,
+    recordedAt: new Date().toISOString(),
+    syncedAt: null,
+    attempts: 0,
+    lastError: null,
+  };
+
+  await db.transaction("rw", db.outbox, db.manifest, async () => {
+    await db.outbox.put(item);
+
+    const stored = await loadManifest();
+    if (stored) {
+      await db.manifest.put({
+        ...stored,
+        data: applyOutbox(stored.data, [item]),
+      });
+    }
+  });
+
   void flushOutbox().catch(() => {});
 }
 
@@ -227,10 +264,12 @@ export async function flushOutbox(): Promise<number> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      records: pending.map(({ clientId, orderId, status, recordedAt, note }) => ({
+      records: pending.map(({ clientId, orderId, type, status, date, recordedAt, note }) => ({
         clientId,
         orderId,
+        type: type || "status",
         status,
+        date,
         recordedAt,
         note,
       })),
