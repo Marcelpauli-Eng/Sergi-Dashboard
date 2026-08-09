@@ -99,14 +99,7 @@ export async function buildManifest(
 
   let mine: Order[];
 
-  if (hasDriverColumn && hasDateColumn) {
-    const tomorrowDate = addDays(todayDate, 1);
-    mine = snapshot.orders.filter(
-      (order) =>
-        order.driverId === normalizedDriver &&
-        (order.date === todayDate || order.date === tomorrowDate),
-    );
-  } else if (hasDriverColumn) {
+  if (hasDriverColumn) {
     mine = snapshot.orders.filter(
       (order) => order.driverId === normalizedDriver,
     );
@@ -129,18 +122,6 @@ export async function buildManifest(
     };
   });
 
-  let todayStops: Stop[];
-  let tomorrowStops: Stop[];
-
-  if (hasDateColumn) {
-    const tomorrowDate = addDays(todayDate, 1);
-    todayStops = stops.filter((s) => s.date === todayDate);
-    tomorrowStops = stops.filter((s) => s.date === tomorrowDate);
-  } else {
-    todayStops = stops;
-    tomorrowStops = [];
-  }
-
   return {
     driverId: normalizedDriver,
     driverName,
@@ -148,19 +129,12 @@ export async function buildManifest(
     sheetTab: snapshot.sheetTab ?? "",
     today: {
       date: todayDate,
-      stops: todayStops,
+      stops: stops, // Enviamos TODOS los stops aquí para que el dashboard los reparta
       optimized: false,
       fullRouteUrl: null,
       totalDistanceMeters: null,
       totalDurationSeconds: null,
     },
-    tomorrow: tomorrowStops.length > 0 ? {
-      date: hasDateColumn ? addDays(todayDate, 1) : todayDate,
-      stops: tomorrowStops,
-      optimized: false,
-      fullRouteUrl: null,
-      totalDistanceMeters: null,
-      totalDurationSeconds: null,
-    } : null,
+    tomorrow: null,
   };
 }
