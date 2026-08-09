@@ -32,7 +32,7 @@ export const COLUMNS = {
   driverId: ["Transportista", "Repartidor", "Conductor", "Chofer", "Driver", "Tr"],
 
   /** Fecha de reparto. Opcional (el Sheet real usa pestañas por mes). */
-  date: ["Fecha", "Fecha Reparto", "Fecha Entrega", "Dia", "Date"],
+  date: ["Fecha", "Data", "Fecha Reparto", "Fecha Entrega", "Dia", "Date"],
 
   /** Prioridad. Menor número = antes. Opcional (si falta, todas iguales). */
   priority: ["Prioritat", "Prioridad", "Orden", "Priority"],
@@ -112,6 +112,7 @@ export const MANAGED_COLUMNS: ColumnKey[] = [
   "incidentNote",
   "lat",
   "lng",
+  "date",
 ];
 
 /**
