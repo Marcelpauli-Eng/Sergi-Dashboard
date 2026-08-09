@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, GripVertical, Navigation, Phone, TriangleAlert } from "lucide-react";
+import { Check, GripVertical, Navigation, Phone, TriangleAlert, ChevronDown } from "lucide-react";
 import type { Stop } from "@/lib/types";
 import { formatDistance, formatDuration, telHref } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -12,8 +12,12 @@ interface Props {
   stop: Stop;
   onDelivered: (orderId: string) => void;
   onIncident: (orderId: string, note: string) => void;
-  /** Si true, muestra el handle de arrastre (≡) a la izquierda. */
-  draggable?: boolean;
+  /** Si true, muestra los botones de subir/bajar. */
+  reorderable?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
 }
 
 const CATEGORY_BADGE: Record<string, { label: string; variant: "success" | "warning" | "secondary" | "default"; className?: string }> = {
@@ -28,8 +32,18 @@ const CATEGORY_BADGE: Record<string, { label: string; variant: "success" | "warn
  * Sigue la regla del sistema de diseño: todo en escala de grises salvo el
  * estado de la entrega, que es la única información que merece color.
  */
-export default function StopCard({ stop, onDelivered, onIncident, draggable }: Props) {
+export default function StopCard({ 
+  stop, 
+  onDelivered, 
+  onIncident, 
+  reorderable,
+  onMoveUp,
+  onMoveDown,
+  isFirst,
+  isLast
+}: Props) {
   const [showIncident, setShowIncident] = useState(false);
+  const [showNav, setShowNav] = useState(false);
   const [note, setNote] = useState("");
 
   const isPendent = stop.statusCategory === "pendent";
@@ -53,10 +67,25 @@ export default function StopCard({ stop, onDelivered, onIncident, draggable }: P
       )}
     >
         <div className="flex gap-3 p-5">
-          {/* Handle de arrastre (solo pendientes) */}
-          {draggable && isPendent && (
-            <div className="drag-handle flex shrink-0 items-center text-muted-foreground">
-              <GripVertical className="size-5" />
+          {/* Controles de orden manual (solo pendientes) */}
+          {reorderable && isPendent && (
+            <div className="flex shrink-0 flex-col items-center justify-center gap-2 text-muted-foreground">
+              <button 
+                className="p-1 disabled:opacity-30" 
+                onClick={onMoveUp} 
+                disabled={isFirst}
+                aria-label="Pujar"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+              </button>
+              <button 
+                className="p-1 disabled:opacity-30" 
+                onClick={onMoveDown} 
+                disabled={isLast}
+                aria-label="Baixar"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
             </div>
           )}
 
@@ -124,20 +153,49 @@ export default function StopCard({ stop, onDelivered, onIncident, draggable }: P
               </p>
             )}
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button asChild variant="secondary" size="sm">
-                <a href={stop.navUrl} target="_blank" rel="noopener noreferrer">
-                  <Navigation />
-                  Navegar
-                </a>
-              </Button>
-              {stop.phone && (
-                <Button asChild variant="secondary" size="sm">
-                  <a href={telHref(stop.phone)}>
-                    <Phone />
-                    Trucar
-                  </a>
+            <div className="mt-4 flex flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" size="sm" onClick={() => setShowNav(!showNav)}>
+                  <Navigation className="mr-1 size-4" />
+                  Navegar {showNav ? <ChevronDown className="ml-1 size-3 rotate-180 transition-transform" /> : <ChevronDown className="ml-1 size-3 transition-transform" />}
                 </Button>
+                {stop.phone && (
+                  <Button asChild variant="secondary" size="sm">
+                    <a href={telHref(stop.phone)}>
+                      <Phone className="mr-1 size-4" />
+                      Trucar
+                    </a>
+                  </Button>
+                )}
+              </div>
+              
+              {showNav && (
+                <div className="flex flex-wrap gap-2 mt-1 animate-fade-in">
+                  <Button asChild variant="outline" size="sm" className="flex-1 text-[10px]">
+                    <a 
+                      href={stop.lat ? `https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}&travelmode=driving` : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stop.address)}&travelmode=driving`} 
+                      target="_blank" rel="noopener noreferrer"
+                    >
+                      Google Maps
+                    </a>
+                  </Button>
+                  <Button asChild variant="outline" size="sm" className="flex-1 text-[10px]">
+                    <a 
+                      href={stop.lat ? `https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes` : `https://waze.com/ul?q=${encodeURIComponent(stop.address)}&navigate=yes`} 
+                      target="_blank" rel="noopener noreferrer"
+                    >
+                      Waze
+                    </a>
+                  </Button>
+                  <Button asChild variant="outline" size="sm" className="flex-1 text-[10px]">
+                    <a 
+                      href={stop.lat ? `http://maps.apple.com/?daddr=${stop.lat},${stop.lng}&dirflg=d` : `http://maps.apple.com/?daddr=${encodeURIComponent(stop.address)}&dirflg=d`} 
+                      target="_blank" rel="noopener noreferrer"
+                    >
+                      Apple Maps
+                    </a>
+                  </Button>
+                </div>
               )}
             </div>
           </div>

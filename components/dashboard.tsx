@@ -557,77 +557,31 @@ function TabAvui({
   const pendents = todayStops.filter((s) => s.statusCategory === "pendent");
   const enCurs = todayStops.filter((s) => s.statusCategory === "en_curs");
 
-  const listRef = useRef<HTMLUListElement>(null);
-  const dragItemRef = useRef<number | null>(null);
-  const dragOverItemRef = useRef<number | null>(null);
-
-  const handleDragStart = useCallback((index: number) => {
-    dragItemRef.current = index;
-  }, []);
-
-  const handleDragOver = useCallback((index: number) => {
-    dragOverItemRef.current = index;
-  }, []);
-
-  const handleDragEnd = useCallback(() => {
-    const from = dragItemRef.current;
-    const to = dragOverItemRef.current;
-    if (from === null || to === null || from === to) {
-      dragItemRef.current = null;
-      dragOverItemRef.current = null;
-      return;
-    }
-
+  const handleMoveUp = useCallback((index: number) => {
+    if (index <= 0) return;
     const newOrder = [...todayStops];
-    const [moved] = newOrder.splice(from, 1);
-    newOrder.splice(to, 0, moved);
+    const [moved] = newOrder.splice(index, 1);
+    newOrder.splice(index - 1, 0, moved);
 
     const newIds = newOrder.map((s) => s.id);
     setCustomOrderIds(newIds);
     setCustomOrder(newIds);
     setRouteResult(null);
-    setIsManualOrder(true); // Se ha alterado el orden manualmente
-
-    dragItemRef.current = null;
-    dragOverItemRef.current = null;
+    setIsManualOrder(true);
   }, [todayStops, setCustomOrderIds, setRouteResult, setIsManualOrder]);
 
-  // Touch handlers
-  const touchDragIdx = useRef<number | null>(null);
+  const handleMoveDown = useCallback((index: number) => {
+    if (index >= todayStops.length - 1) return;
+    const newOrder = [...todayStops];
+    const [moved] = newOrder.splice(index, 1);
+    newOrder.splice(index + 1, 0, moved);
 
-  const handleTouchStart = useCallback((index: number, e: React.TouchEvent) => {
-    touchDragIdx.current = index;
-    dragItemRef.current = index;
-  }, []);
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (touchDragIdx.current === null || !listRef.current) return;
-    e.preventDefault();
-
-    const y = e.touches[0].clientY;
-    const items = listRef.current.querySelectorAll("[data-drag-item]");
-    for (let i = 0; i < items.length; i++) {
-      const rect = items[i].getBoundingClientRect();
-      if (y >= rect.top && y <= rect.bottom) {
-        dragOverItemRef.current = i;
-        items.forEach((el) => el.classList.remove("drag-over"));
-        if (i !== touchDragIdx.current) {
-          items[i].classList.add("drag-over");
-        }
-        break;
-      }
-    }
-  }, []);
-
-  const handleTouchEnd = useCallback(() => {
-    if (listRef.current) {
-      listRef.current.querySelectorAll("[data-drag-item]").forEach((el) => {
-        el.classList.remove("drag-over");
-      });
-    }
-    touchDragIdx.current = null;
-    handleDragEnd();
-  }, [handleDragEnd]);
+    const newIds = newOrder.map((s) => s.id);
+    setCustomOrderIds(newIds);
+    setCustomOrder(newIds);
+    setRouteResult(null);
+    setIsManualOrder(true);
+  }, [todayStops, setCustomOrderIds, setRouteResult, setIsManualOrder]);
 
   if (todayStops.length === 0) {
     return (
@@ -683,25 +637,16 @@ function TabAvui({
       {pendents.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-status-pendent">Pendents</h3>
-          <ul ref={listRef} className="space-y-3">
+          <ul className="space-y-3">
             {todayStops.map((stop, index) => {
               if (stop.statusCategory !== "pendent") return null;
+              
+              // Calcular si es el primer o último pendiente
+              const firstPendentIndex = todayStops.findIndex(s => s.statusCategory === "pendent");
+              const lastPendentIndex = todayStops.findLastIndex(s => s.statusCategory === "pendent");
+              
               return (
-                <li
-                  key={stop.id}
-                  data-drag-item
-                  draggable
-                  onDragStart={() => handleDragStart(index)}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    handleDragOver(index);
-                  }}
-                  onDragEnd={handleDragEnd}
-                  onTouchStart={(e) => handleTouchStart(index, e)}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={handleTouchEnd}
-                  className="transition-transform"
-                >
+                <li key={stop.id}>
                   <StopCard
                     stop={{
                       ...stop,
@@ -713,7 +658,11 @@ function TabAvui({
                     }}
                     onDelivered={onDelivered}
                     onIncident={onIncident}
-                    draggable
+                    reorderable
+                    onMoveUp={() => handleMoveUp(index)}
+                    onMoveDown={() => handleMoveDown(index)}
+                    isFirst={index === firstPendentIndex}
+                    isLast={index === lastPendentIndex}
                   />
                 </li>
               );
@@ -1064,28 +1013,32 @@ function RouteSummary({ route, onRecalculate, generating }: { route: RouteResult
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-2">
             Ruta {route.optimized ? "optimitzada" : "ordre manual"}
-            {onRecalculate && (
-              <button 
-                onClick={onRecalculate} 
-                disabled={generating}
-                className="text-primary hover:underline font-semibold flex items-center gap-1 disabled:opacity-50"
-              >
-                🔄 {generating ? "Recalculant..." : "Recalcular"}
-              </button>
-            )}
           </p>
           <p className="mt-1 text-xl tracking-tight">
             {[distance, duration].filter(Boolean).join(" · ") || "Calculada"}
           </p>
         </div>
-        {route.fullRouteUrl && (
-          <Button asChild variant="secondary" size="sm">
-            <a href={route.fullRouteUrl} target="_blank" rel="noopener noreferrer">
-              <Route className="size-4 mr-1" />
-              Obrir Maps
-            </a>
-          </Button>
-        )}
+        <div className="flex flex-col gap-2">
+          {route.fullRouteUrl && (
+            <Button asChild variant="secondary" size="sm">
+              <a href={route.fullRouteUrl} target="_blank" rel="noopener noreferrer">
+                <Route className="size-4 mr-1" />
+                Obrir Maps
+              </a>
+            </Button>
+          )}
+          {onRecalculate && (
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={onRecalculate} 
+              disabled={generating}
+              className="text-primary border-primary/20 bg-primary/5 hover:bg-primary/10"
+            >
+              🔄 {generating ? "Calculant..." : "Recalcular"}
+            </Button>
+          )}
+        </div>
       </div>
       {!route.optimized && (
         <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
