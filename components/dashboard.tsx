@@ -12,6 +12,7 @@ import {
   History,
   Menu,
   Route,
+  Search,
   X,
 } from "lucide-react";
 import { db } from "@/lib/db";
@@ -747,12 +748,28 @@ function TabCalendari({
           ) : (
             <ul className="space-y-3">
               {assigned.map((stop) => (
-                <StopCard
-                  key={stop.id}
-                  stop={stop}
-                  onDelivered={() => {}} // No-op: los estados solo se marcan en "Avui"
-                  onIncident={() => {}} // No-op
-                />
+                <div key={stop.id} className="relative">
+                  <StopCard
+                    stop={stop}
+                    onDelivered={() => {}} // No-op: los estados solo se marcan en "Avui"
+                    onIncident={() => {}} // No-op
+                  />
+                  {/* Botón para desasignar (volver a la lista) */}
+                  <div className="absolute right-3 top-3">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-7 text-[10px] px-2 shadow-sm border-red-200 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAssignDate(stop.id, null);
+                      }}
+                    >
+                      <X className="size-3 mr-1" />
+                      Treure
+                    </Button>
+                  </div>
+                </div>
               ))}
             </ul>
           )}
@@ -760,22 +777,11 @@ function TabCalendari({
 
         <div className="space-y-3 pt-4 border-t border-border">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-status-pendent">Afegir Comanda Ràpid</h3>
-          <p className="text-xs text-muted-foreground">Toca una comanda per afegir-la automàticament a aquest dia.</p>
+          <p className="text-xs text-muted-foreground">Toca per assignar o <strong className="text-foreground">mantén premut</strong> per previsualitzar la comanda.</p>
           {unassignedStops.length === 0 ? (
             <p className="text-sm text-muted-foreground">No et queden comandes pendents d'assignar.</p>
           ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {unassignedStops.map((stop) => (
-                <button
-                  key={stop.id}
-                  onClick={() => onAssignDate(stop.id, selectedDate)}
-                  className="flex flex-col items-start gap-1 rounded-md border border-border bg-card p-3 text-left shadow-sm transition-colors active:bg-muted"
-                >
-                  <span className="font-semibold text-sm">{stop.id}</span>
-                  <span className="text-xs text-muted-foreground truncate w-full">{stop.city || "Sense adreça"}</span>
-                </button>
-              ))}
-            </div>
+            <FastAssignList stops={unassignedStops} onAssign={(id) => onAssignDate(id, selectedDate)} />
           )}
         </div>
       </div>
@@ -837,6 +843,87 @@ function TabCalendari({
   );
 }
 
+// ── Fast Assign List with Long Press ───────────────────────────────────
+
+function FastAssignList({ stops, onAssign }: { stops: Stop[]; onAssign: (id: string) => void }) {
+  const [previewStop, setPreviewStop] = useState<Stop | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const cancelRef = useRef(false);
+
+  const startPress = (stop: Stop) => {
+    cancelRef.current = false;
+    timerRef.current = setTimeout(() => {
+      if (!cancelRef.current) {
+        setPreviewStop(stop);
+      }
+      timerRef.current = null;
+    }, 500); // 500ms long press
+  };
+
+  const endPress = (stop: Stop) => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+      if (!cancelRef.current) {
+        onAssign(stop.id);
+      }
+    }
+  };
+
+  const cancelPress = () => {
+    cancelRef.current = true;
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-2">
+        {stops.map((stop) => (
+          <button
+            key={stop.id}
+            onPointerDown={() => startPress(stop)}
+            onPointerUp={() => endPress(stop)}
+            onPointerLeave={cancelPress}
+            onPointerMove={cancelPress} // Si el dedo se mueve (scrolling), cancelamos
+            className="flex flex-col items-start gap-1 rounded-md border border-border bg-card p-3 text-left shadow-sm transition-colors active:bg-muted select-none touch-none"
+          >
+            <span className="font-semibold text-sm pointer-events-none">{stop.id}</span>
+            <span className="text-xs text-muted-foreground truncate w-full pointer-events-none">{stop.city || "Sense adreça"}</span>
+          </button>
+        ))}
+      </div>
+
+      {previewStop && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in" onClick={() => setPreviewStop(null)}>
+          <div className="w-full max-w-md relative" onClick={(e) => e.stopPropagation()}>
+            <Button 
+              variant="secondary" 
+              size="icon" 
+              className="absolute -top-12 right-0 rounded-full bg-white/10 hover:bg-white/20 text-white border-0"
+              onClick={() => setPreviewStop(null)}
+            >
+              <X className="size-5" />
+            </Button>
+            <StopCard stop={previewStop} onDelivered={() => {}} onIncident={() => {}} />
+            <Button 
+              className="w-full mt-4" 
+              onClick={() => {
+                onAssign(previewStop.id);
+                setPreviewStop(null);
+              }}
+            >
+              Assignar comanda
+            </Button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── Tab: Historial ─────────────────────────────────────────────────────
 
 function TabHistorial({
@@ -848,42 +935,83 @@ function TabHistorial({
   onDelivered: (id: string) => void;
   onIncident: (id: string, note: string) => void;
 }) {
-  const [openEntregat, setOpenEntregat] = useState(false);
-  const [openIncidencia, setOpenIncidencia] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const allHistory = useMemo(() => [...historyStops.entregat, ...historyStops.incidencia], [historyStops]);
+
+  const filteredHistory = useMemo(() => {
+    if (!searchTerm.trim()) return allHistory;
+    const q = searchTerm.toLowerCase();
+    return allHistory.filter(stop => 
+      stop.id.toLowerCase().includes(q) ||
+      (stop.customer && stop.customer.toLowerCase().includes(q)) ||
+      (stop.address && stop.address.toLowerCase().includes(q)) ||
+      (stop.city && stop.city.toLowerCase().includes(q))
+    );
+  }, [allHistory, searchTerm]);
+
+  // Agrupar por fecha ("date")
+  const groupedByDate = useMemo(() => {
+    const map = new Map<string, Stop[]>();
+    for (const stop of filteredHistory) {
+      const d = stop.date || "Sense data";
+      if (!map.has(d)) map.set(d, []);
+      map.get(d)!.push(stop);
+    }
+    // Ordenar fechas de más reciente a más antigua
+    const sortedDates = Array.from(map.keys()).sort((a, b) => {
+      if (a === "Sense data") return 1;
+      if (b === "Sense data") return -1;
+      return b.localeCompare(a); // "2026-08-09" > "2026-08-08"
+    });
+    return sortedDates.map(date => ({ date, stops: map.get(date)! }));
+  }, [filteredHistory]);
 
   return (
-    <div className="space-y-4">
-      <CategorySection
-        category="incidencia"
-        label="Incidències globals"
-        color="text-status-incidencia"
-        bgColor="bg-orange-50"
-        count={historyStops.incidencia.length}
-        open={openIncidencia}
-        onToggle={() => setOpenIncidencia(!openIncidencia)}
-      >
-        <ul className="space-y-3">
-          {historyStops.incidencia.map((stop) => (
-            <StopCard key={stop.id} stop={stop} onDelivered={onDelivered} onIncident={onIncident} />
-          ))}
-        </ul>
-      </CategorySection>
+    <div className="space-y-6">
+      <div className="flex items-center gap-4 bg-card rounded-xl p-4 shadow-sm border border-border">
+        <div className="flex-1">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Entregats</p>
+          <p className="text-2xl font-semibold text-status-entregat">{historyStops.entregat.length}</p>
+        </div>
+        <div className="w-px h-10 bg-border" />
+        <div className="flex-1">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Incidències</p>
+          <p className="text-2xl font-semibold text-status-incidencia">{historyStops.incidencia.length}</p>
+        </div>
+      </div>
 
-      <CategorySection
-        category="entregat"
-        label="Entregats totals"
-        color="text-status-entregat"
-        bgColor="bg-green-50"
-        count={historyStops.entregat.length}
-        open={openEntregat}
-        onToggle={() => setOpenEntregat(!openEntregat)}
-      >
-        <ul className="space-y-3">
-          {historyStops.entregat.map((stop) => (
-            <StopCard key={stop.id} stop={stop} onDelivered={onDelivered} onIncident={onIncident} />
-          ))}
-        </ul>
-      </CategorySection>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+        <input 
+          type="search"
+          placeholder="Cerca per comanda, client o adreça..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full bg-card border border-border rounded-lg pl-9 pr-4 py-2.5 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/15"
+        />
+      </div>
+
+      <div className="space-y-6">
+        {groupedByDate.length === 0 ? (
+          <p className="text-center text-sm text-muted-foreground py-8">
+            No hi ha resultats a l'historial.
+          </p>
+        ) : (
+          groupedByDate.map(group => (
+            <div key={group.date} className="space-y-3">
+              <h3 className="text-sm font-semibold tracking-tight text-foreground sticky top-16 bg-background/95 backdrop-blur py-1 z-10 border-b border-border/50">
+                {group.date === "Sense data" ? group.date : formatLongDate(group.date)}
+              </h3>
+              <ul className="space-y-3">
+                {group.stops.map((stop) => (
+                  <StopCard key={stop.id} stop={stop} onDelivered={onDelivered} onIncident={onIncident} />
+                ))}
+              </ul>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }
