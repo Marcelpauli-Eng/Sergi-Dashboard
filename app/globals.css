@@ -49,6 +49,12 @@
   --warning-surface: #ff950026;
   --warning-foreground: #8a5200;
 
+  /* systemPurple: único color nuevo, para el estado "en curso" (reparto ya
+     empezado). Los otros tres estados reutilizan el azul/verde/naranja de
+     arriba: no hace falta un color por estado si ya hay uno con el
+     significado correcto. */
+  --status-en-curs: #af52de;
+
   --radius: 0.875rem;
 }
 
@@ -79,6 +85,8 @@
 
     --warning-surface: #ff9f0a26;
     --warning-foreground: #ffb340;
+
+    --status-en-curs: #bf5af2;
   }
 }
 
@@ -302,18 +310,16 @@ html {
   cursor: grabbing;
 }
 
-/* ── Status category accent colors ───────────────────────────────────── */
-:root {
-  --status-pendent: #6b7280;
-  --status-en-curs: #7c3aed;
-  --status-entregat: #16a34a;
-  --status-incidencia: #ea580c;
-}
-
+/*
+ * Colores por categoría de estado (pendent/en_curs/entregat/incidencia).
+ * Pendent/entregat/incidencia reutilizan el azul/verde/naranja del sistema
+ * (mismo significado en toda la app); en_curs es el único color nuevo,
+ * definido más arriba junto al resto de la paleta.
+ */
 @theme inline {
-  --color-status-pendent: var(--status-pendent);
+  --color-status-pendent: var(--primary);
   --color-status-en-curs: var(--status-en-curs);
-  --color-status-entregat: var(--status-entregat);
-  --color-status-incidencia: var(--status-incidencia);
+  --color-status-entregat: var(--success);
+  --color-status-incidencia: var(--warning);
 }
 
