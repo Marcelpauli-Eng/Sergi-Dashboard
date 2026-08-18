@@ -8,7 +8,7 @@ import {
   fullRouteUrlFor,
   type Coord,
 } from "./routing";
-import { today, addDays, type DateString } from "./dates";
+import { today, type DateString } from "./dates";
 import type { Manifest, Order, RouteDay, Stop } from "./types";
 
 /**
@@ -156,39 +156,39 @@ export async function buildManifest(
   }
 
   const todayDate = today(env.timezone);
-  const tomorrowDate = addDays(todayDate, 1);
   const normalizedDriver = driverId.toLowerCase();
 
-  // Sin columna de transportista en la hoja hay un solo repartidor, y todos
-  // los pedidos del día son suyos. En cuanto la columna exista, el filtro se
-  // aplica solo, sin tocar nada aquí.
+  // Qué entra en la ruta: todo lo que no está entregado.
+  //
+  // No se filtra por fecha a propósito. En la hoja no hay ninguna columna
+  // que diga qué día toca entregar cada pedido —la fecha que tiene es la de
+  // cuándo entró— y quién decide el orden y el día es el propio
+  // transportista. Filtrar por fecha dejaría la pantalla vacía.
+  //
+  // Los ya entregados se quedan fuera: son la mayoría de la hoja y no hay
+  // nada que hacer con ellos. Las incidencias sí entran, porque siguen
+  // pendientes de resolver; buildRouteDay las coloca al final, fuera de la
+  // ruta optimizada.
+  //
+  // Sin columna de transportista hay un solo repartidor y no se filtra por
+  // él. En cuanto la columna exista, el filtro se aplica solo.
   const mine = snapshot.orders.filter(
     (order) =>
       (!snapshot.hasDriverColumn || order.driverId === normalizedDriver) &&
-      (order.date === todayDate || order.date === tomorrowDate),
+      order.status !== "entregado",
   );
 
   await fillMissingCoordinates(mine, snapshot);
   const depot = await getDepotCoord();
 
-  const [todayRoute, tomorrowRoute] = await Promise.all([
-    buildRouteDay(
-      todayDate,
-      mine.filter((o) => o.date === todayDate),
-      depot,
-    ),
-    buildRouteDay(
-      tomorrowDate,
-      mine.filter((o) => o.date === tomorrowDate),
-      depot,
-    ),
-  ]);
+  const todayRoute = await buildRouteDay(todayDate, mine, depot);
 
   return {
     driverId: normalizedDriver,
     driverName,
     generatedAt: new Date().toISOString(),
     today: todayRoute,
-    tomorrow: tomorrowRoute.stops.length > 0 ? tomorrowRoute : null,
+    // Sin fecha de reparto no hay forma de saber qué es "mañana".
+    tomorrow: null,
   };
 }

@@ -280,6 +280,8 @@ for (const key of Object.keys(COLUMNS) as ColumnKey[]) {
   } else if (required) {
     bad(`${label} → NO ENCONTRADA  (obligatoria)`);
     missingRequired++;
+  } else if (key === "date") {
+    warn(`${label} → no existe: es informativa, no decide qué se enseña`);
   } else if (key === "driverId") {
     warn(`${label} → no existe: un solo transportista, verá todos los pedidos`);
   } else if (key === "town") {
@@ -314,8 +316,21 @@ const badDates = dataRows.filter(
   (row) => parseSheetDate(headerMap.date !== undefined ? row[headerMap.date] : null) === null,
 );
 if (badDates.length > 0) {
-  warn(`${badDates.length} fila(s) con fecha ilegible: se ignorarán`);
+  warn(`${badDates.length} fila(s) sin fecha legible`);
+  dim("No pasa nada: la fecha es informativa y esas filas se enseñan igual.");
 }
+
+// Lo que de verdad determina qué ve el transportista.
+const porEstado = new Map<string, number>();
+for (const row of dataRows) {
+  const raw = cell(row, "status") || "(vacía)";
+  porEstado.set(raw, (porEstado.get(raw) ?? 0) + 1);
+}
+console.log(`\nEstados en la columna "${canonicalHeader("status")}":`);
+for (const [estado, n] of [...porEstado].sort((a, b) => b[1] - a[1])) {
+  dim(`${String(n).padStart(4)}  ${estado}`);
+}
+dim("Al transportista se le enseña todo lo que NO esté entregado.");
 
 if (headerMap.driverId === undefined) {
   console.log(`\nSin columna de transportista:`);

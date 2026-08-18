@@ -37,12 +37,14 @@ export const COLUMNS = {
   driverId: ["Transportista", "Repartidor", "Conductor", "Chofer", "Driver", "Xofer"],
 
   /**
-   * Fecha de reparto: el día en que toca entregar. Obligatoria.
+   * Fecha del pedido. OPCIONAL: es informativa, no decide nada.
+   *
+   * En esta hoja es la fecha de ALTA, no la de reparto — cuándo toca
+   * entregar lo decide el transportista, no la hoja. Ver lib/manifest.ts.
    *
    * NO confundir con "Data entrega", que es donde la oficina anota la hora a
-   * la que llegó el pedido y por tanto está vacía en todo lo que aún no se
-   * ha entregado — justo lo que el transportista necesita ver. Usarla aquí
-   * descartaría casi todas las filas por "fecha ilegible".
+   * la que llegó el pedido: esa está vacía en todo lo que aún no se ha
+   * entregado, que es justo lo que hay que enseñar.
    */
   date: ["Fecha", "Fecha Reparto", "Fecha Entrega", "Dia", "Date", "Data"],
 
@@ -119,10 +121,11 @@ export type ColumnKey = keyof typeof COLUMNS;
 /**
  * Columnas sin las cuales no podemos funcionar.
  *
- * `driverId` NO está aquí a propósito: con un solo transportista la hoja no
- * necesita decir a quién va cada pedido. Ver el comentario de `driverId`.
+ * Ni `driverId` ni `date` están aquí a propósito: con un solo transportista
+ * la hoja no necesita decir a quién va cada pedido, y la fecha es
+ * informativa. Ver los comentarios de cada uno.
  */
-export const REQUIRED_COLUMNS: ColumnKey[] = ["id", "date", "address"];
+export const REQUIRED_COLUMNS: ColumnKey[] = ["id", "address"];
 
 /** Columnas que la app crea automáticamente si no existen en la hoja. */
 export const MANAGED_COLUMNS: ColumnKey[] = [

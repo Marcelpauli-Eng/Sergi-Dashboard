@@ -14,8 +14,11 @@ export interface Order {
   id: string;
   /** Código del transportista al que está asignado. */
   driverId: string;
-  /** Fecha de reparto en formato YYYY-MM-DD. */
-  date: string;
+  /**
+   * Fecha del pedido en formato YYYY-MM-DD, o `null` si la hoja no la trae.
+   * Es informativa: no decide qué se enseña. Ver lib/manifest.ts.
+   */
+  date: string | null;
   /** Prioridad tal cual viene del Sheet. Menor número = más prioritario. */
   priority: number;
   customer: string;

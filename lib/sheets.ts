@@ -260,10 +260,6 @@ export async function readSheet(): Promise<SheetSnapshot> {
       skipped.push({ rowNumber, reason: `ID duplicado "${id}"` });
       continue;
     }
-    if (!date) {
-      skipped.push({ rowNumber, reason: "fecha ilegible" });
-      continue;
-    }
     if (!address) {
       skipped.push({ rowNumber, reason: "sin dirección" });
       continue;
