@@ -24,8 +24,10 @@ import {
   getSelectedTab,
   setSelectedTab,
   getCustomOrder,
+  getCustomOrderServer,
   setCustomOrder,
   applyCustomOrder,
+  subscribeLocalPrefs,
 } from "@/lib/sync";
 import { formatDistance, formatDuration } from "@/lib/format";
 import { formatLongDate, addDays, getMonthGrid, getYearMonth } from "@/lib/dates";
@@ -127,23 +129,27 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   // ── Menú hamburguesa & selector de pestaña de Sheets ──────────────────
   const [menuOpen, setMenuOpen] = useState(false);
   const [tabs, setTabs] = useState<string[]>([]);
-  const [selectedSheetTab, setSelectedSheetTab] = useState<string | null>(null);
+  // Se leen del store de preferencias en vez de copiarlas al estado desde un
+  // efecto: localStorage no existe durante el render de servidor, y
+  // useSyncExternalStore resuelve justo ese caso sin renders en cascada.
+  const selectedSheetTab = useSyncExternalStore(
+    subscribeLocalPrefs,
+    getSelectedTab,
+    () => null,
+  );
   const [loadingTabs, setLoadingTabs] = useState(false);
 
   // ── Orden personalizado (drag & drop) ─────────────────────────────────
-  const [customOrderIds, setCustomOrderIds] = useState<string[]>([]);
+  const customOrderIds = useSyncExternalStore(
+    subscribeLocalPrefs,
+    getCustomOrder,
+    getCustomOrderServer,
+  );
   const [isManualOrder, setIsManualOrder] = useState(false);
 
   // ── Ruta bajo demanda ─────────────────────────────────────────────────
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
   const [generatingRoute, setGeneratingRoute] = useState(false);
-
-  // Inicializar tab y orden personalizado desde localStorage
-  useEffect(() => {
-    const saved = getSelectedTab();
-    if (saved) setSelectedSheetTab(saved);
-    setCustomOrderIds(getCustomOrder());
-  }, []);
 
   const fetchTabs = useCallback(async () => {
     if (tabs.length > 0) return;
@@ -163,7 +169,6 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
   const handleTabSelect = useCallback(
     async (tab: string) => {
-      setSelectedSheetTab(tab);
       setSelectedTab(tab);
       setMenuOpen(false);
       setRouteResult(null); // Reset route on tab change
@@ -332,7 +337,6 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       const nonRouteableIds = todayStops.filter(s => s.statusCategory !== "pendent").map(s => s.id);
       const combinedOrder = [...nonRouteableIds, ...newIds];
       
-      setCustomOrderIds(combinedOrder);
       setCustomOrder(combinedOrder);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error generando la ruta");
@@ -470,7 +474,6 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 onDelivered={handleDelivered}
                 onIncident={handleIncident}
                 customOrderIds={customOrderIds}
-                setCustomOrderIds={setCustomOrderIds}
                 setRouteResult={setRouteResult}
                 setIsManualOrder={setIsManualOrder}
               />
@@ -543,7 +546,6 @@ function TabAvui({
   onDelivered,
   onIncident,
   customOrderIds,
-  setCustomOrderIds,
   setRouteResult,
   setIsManualOrder,
 }: {
@@ -555,8 +557,7 @@ function TabAvui({
   onGenerateRoute: () => void;
   onDelivered: (id: string) => void;
   onIncident: (id: string, note: string) => void;
-  customOrderIds: string[];
-  setCustomOrderIds: (ids: string[]) => void;
+  customOrderIds: readonly string[];
   setRouteResult: (res: RouteResult | null) => void;
   setIsManualOrder: (b: boolean) => void;
 }) {
@@ -570,11 +571,10 @@ function TabAvui({
     newOrder.splice(index - 1, 0, moved);
 
     const newIds = newOrder.map((s) => s.id);
-    setCustomOrderIds(newIds);
     setCustomOrder(newIds);
     setRouteResult(null);
     setIsManualOrder(true);
-  }, [todayStops, setCustomOrderIds, setRouteResult, setIsManualOrder]);
+  }, [todayStops, setRouteResult, setIsManualOrder]);
 
   const handleMoveDown = useCallback((index: number) => {
     if (index >= todayStops.length - 1) return;
@@ -583,17 +583,16 @@ function TabAvui({
     newOrder.splice(index + 1, 0, moved);
 
     const newIds = newOrder.map((s) => s.id);
-    setCustomOrderIds(newIds);
     setCustomOrder(newIds);
     setRouteResult(null);
     setIsManualOrder(true);
-  }, [todayStops, setCustomOrderIds, setRouteResult, setIsManualOrder]);
+  }, [todayStops, setRouteResult, setIsManualOrder]);
 
   if (todayStops.length === 0) {
     return (
       <div className="animate-rise-in rounded-xl border border-border bg-card px-6 py-12 text-center shadow-sm">
         <p className="text-base">No tens comandes programades per a avui</p>
-        <p className="mt-2 text-sm text-muted-foreground">Ves al Calendari per assignar comandes al dia d'avui.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Ves al Calendari per assignar comandes al dia d&apos;avui.</p>
       </div>
     );
   }
@@ -601,7 +600,7 @@ function TabAvui({
   return (
     <>
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold tracking-tight">Repartiment d'avui</h2>
+        <h2 className="text-lg font-semibold tracking-tight">Repartiment d&apos;avui</h2>
       </div>
 
       {pendents.length > 0 && (
@@ -1002,7 +1001,7 @@ function TabHistorial({
       <div className="space-y-6">
         {groupedByDate.length === 0 ? (
           <p className="text-center text-sm text-muted-foreground py-8">
-            No hi ha resultats a l'historial.
+            No hi ha resultats a l&apos;historial.
           </p>
         ) : (
           groupedByDate.map(group => (

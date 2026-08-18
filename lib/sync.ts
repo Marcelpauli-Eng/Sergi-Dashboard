@@ -205,6 +205,29 @@ export async function recordDateAssignment(
  * Obtiene la pestaña del Sheet actualmente seleccionada.
  * Se guarda en localStorage para persistir entre sesiones.
  */
+/**
+ * Preferencias que viven en localStorage (pestaña elegida, orden manual).
+ *
+ * Se exponen como un "store externo" para poder leerlas con
+ * `useSyncExternalStore` en vez de copiarlas al estado desde un efecto.
+ * localStorage no existe en el servidor, así que durante el render de
+ * servidor se devuelve el valor por defecto y React vuelve a preguntar ya en
+ * el cliente, sin el render en cascada que provoca un `setState` en un
+ * `useEffect`.
+ */
+const prefListeners = new Set<() => void>();
+
+export function subscribeLocalPrefs(listener: () => void): () => void {
+  prefListeners.add(listener);
+  return () => {
+    prefListeners.delete(listener);
+  };
+}
+
+function emitLocalPrefs(): void {
+  for (const listener of prefListeners) listener();
+}
+
 export function getSelectedTab(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("selectedSheetTab");
@@ -216,6 +239,7 @@ export function getSelectedTab(): string | null {
 export function setSelectedTab(tab: string): void {
   if (typeof window === "undefined") return;
   localStorage.setItem("selectedSheetTab", tab);
+  emitLocalPrefs();
 }
 
 const CUSTOM_ORDER_KEY = "customStopOrder";
@@ -224,14 +248,38 @@ const CUSTOM_ORDER_KEY = "customStopOrder";
  * Recupera el orden personalizado que el transportista ha definido
  * arrastrando las tarjetas con el dedo.
  */
-export function getCustomOrder(): string[] {
-  if (typeof window === "undefined") return [];
+/**
+ * Referencia estable para "no hay orden guardado".
+ *
+ * `useSyncExternalStore` compara los snapshots por identidad: devolver un
+ * array nuevo en cada llamada lo haría renderizar sin parar.
+ */
+const SIN_ORDEN: readonly string[] = [];
+
+let ordenCache: { raw: string | null; valor: readonly string[] } = {
+  raw: null,
+  valor: SIN_ORDEN,
+};
+
+export function getCustomOrder(): readonly string[] {
+  if (typeof window === "undefined") return SIN_ORDEN;
+
+  const raw = localStorage.getItem(CUSTOM_ORDER_KEY);
+  if (raw === ordenCache.raw) return ordenCache.valor;
+
+  let valor: readonly string[] = SIN_ORDEN;
   try {
-    const raw = localStorage.getItem(CUSTOM_ORDER_KEY);
-    return raw ? (JSON.parse(raw) as string[]) : [];
+    if (raw) valor = JSON.parse(raw) as string[];
   } catch {
-    return [];
+    valor = SIN_ORDEN;
   }
+  ordenCache = { raw, valor };
+  return valor;
+}
+
+/** Snapshot para el render de servidor: siempre la misma referencia. */
+export function getCustomOrderServer(): readonly string[] {
+  return SIN_ORDEN;
 }
 
 /**
@@ -240,6 +288,7 @@ export function getCustomOrder(): string[] {
 export function setCustomOrder(orderIds: string[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(CUSTOM_ORDER_KEY, JSON.stringify(orderIds));
+  emitLocalPrefs();
 }
 
 /**
@@ -248,7 +297,7 @@ export function setCustomOrder(orderIds: string[]): void {
  */
 export function applyCustomOrder<T extends { id: string }>(
   items: T[],
-  savedOrder: string[],
+  savedOrder: readonly string[],
 ): T[] {
   if (savedOrder.length === 0) return items;
 
