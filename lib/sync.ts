@@ -7,7 +7,7 @@ import {
   pendingOutbox,
   type OutboxItem,
 } from "./db";
-import type { DeliveryStatus, Manifest } from "./types";
+import type { DeliveryStatus, Manifest, Stop } from "./types";
 
 /**
  * Motor de sincronización.
@@ -82,7 +82,25 @@ async function pruneOutbox(): Promise<void> {
  * Sin esto, cada sincronización devolvería los pedidos a "pendiente" y el
  * transportista vería reaparecer paradas que ya ha hecho.
  */
-function applyOutbox(manifest: Manifest, items: OutboxItem[]): Manifest {
+/**
+ * La categoría que le toca a un estado recién marcado.
+ *
+ * El dashboard reparte los pedidos por `statusCategory`, no por `status`.
+ * Parchear solo el segundo dejaba la parada en la pestaña donde estaba: se
+ * marcaba entregada, la hoja se actualizaba correctamente, y en la pantalla
+ * seguía apareciendo en Avui hasta la siguiente descarga completa del
+ * manifiesto. Y como este manifiesto parcheado se guarda en IndexedDB, el
+ * estado incoherente sobrevivía a cerrar la app.
+ */
+const CATEGORIA_DE: Record<
+  Exclude<DeliveryStatus, "pendiente">,
+  Stop["statusCategory"]
+> = {
+  entregado: "entregat",
+  incidencia: "incidencia",
+};
+
+export function applyOutbox(manifest: Manifest, items: OutboxItem[]): Manifest {
   if (items.length === 0) return manifest;
 
   const byOrderId = new Map(items.map((item) => [item.orderId, item]));
@@ -95,7 +113,12 @@ function applyOutbox(manifest: Manifest, items: OutboxItem[]): Manifest {
       if (type === "date") {
         return { ...stop, date: pending.date ?? "" };
       }
-      return { ...stop, status: pending.status ?? stop.status };
+      if (!pending.status) return stop;
+      return {
+        ...stop,
+        status: pending.status,
+        statusCategory: CATEGORIA_DE[pending.status],
+      };
     }),
   });
 
