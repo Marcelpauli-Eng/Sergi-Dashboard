@@ -47,64 +47,67 @@ export default function LoginForm() {
     }
   }
 
+  // Fila de formulario agrupado de iOS: etiqueta a la izquierda, campo a la
+  // derecha, dentro de un único bloque blanco con separadores de medio píxel.
   const field =
-    "w-full rounded-md border border-input bg-card px-3.5 py-3 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/15";
+    "min-w-0 flex-1 bg-transparent text-right text-base outline-none placeholder:text-tertiary-foreground";
 
   return (
-    <main className="flex min-h-svh flex-col justify-center px-6 py-12">
+    <main className="flex min-h-svh flex-col justify-center px-4 py-12">
       <div className="mx-auto w-full max-w-sm animate-rise-in">
-        <div className="mb-10">
-          <h1 className="text-3xl tracking-tight">Reparto</h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">
+        <div className="mb-8 px-2">
+          <h1 className="text-3xl font-bold">Reparto</h1>
+          <p className="mt-1 text-base text-muted-foreground">
             Entra con tu código y tu PIN
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label
-              htmlFor="driverId"
-              className="mb-1.5 block text-sm font-medium"
-            >
-              Código de transportista
-            </label>
-            <input
-              id="driverId"
-              name="driverId"
-              type="text"
-              inputMode="text"
-              autoCapitalize="none"
-              autoCorrect="off"
-              autoComplete="username"
-              required
-              value={driverId}
-              onChange={(e) => setDriverId(e.target.value)}
-              className={field}
-            />
-          </div>
+        <form onSubmit={handleSubmit}>
+          <div className="overflow-hidden rounded-xl bg-card">
+            <div className="flex items-center gap-4 px-4 py-3">
+              <label htmlFor="driverId" className="shrink-0 text-base">
+                Código
+              </label>
+              <input
+                id="driverId"
+                name="driverId"
+                type="text"
+                inputMode="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                autoComplete="username"
+                placeholder="Obligatorio"
+                required
+                value={driverId}
+                onChange={(e) => setDriverId(e.target.value)}
+                className={field}
+              />
+            </div>
 
-          <div>
-            <label htmlFor="pin" className="mb-1.5 block text-sm font-medium">
-              PIN
-            </label>
-            <input
-              id="pin"
-              name="pin"
-              type="password"
-              // Teclado numérico directamente, sin tener que cambiarlo a mano.
-              inputMode="numeric"
-              autoComplete="current-password"
-              required
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              className={`${field} tracking-[0.3em]`}
-            />
+            <div className="hairline flex items-center gap-4 px-4 py-3">
+              <label htmlFor="pin" className="shrink-0 text-base">
+                PIN
+              </label>
+              <input
+                id="pin"
+                name="pin"
+                type="password"
+                // Teclado numérico directamente, sin tener que cambiarlo a mano.
+                inputMode="numeric"
+                autoComplete="current-password"
+                placeholder="Obligatorio"
+                required
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                className={`${field} tracking-[0.3em]`}
+              />
+            </div>
           </div>
 
           {error && (
             <p
               role="alert"
-              className="rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700"
+              className="mt-3 rounded-xl bg-[color-mix(in_srgb,var(--destructive)_12%,transparent)] px-4 py-3 text-sm text-destructive"
             >
               {error}
             </p>
@@ -113,14 +116,14 @@ export default function LoginForm() {
           <Button
             type="submit"
             size="touch"
-            className="w-full"
+            className="mt-5 w-full"
             disabled={busy || !driverId || !pin}
           >
             {busy ? "Entrando…" : "Entrar"}
           </Button>
         </form>
 
-        <p className="mt-8 text-xs leading-relaxed text-muted-foreground">
+        <p className="mt-6 px-2 text-xs text-muted-foreground">
           Solo necesitas internet para entrar. Después, la app funciona sin
           cobertura.
         </p>

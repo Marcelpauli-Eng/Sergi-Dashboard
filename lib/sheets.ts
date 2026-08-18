@@ -157,8 +157,30 @@ export interface SheetSnapshot {
   headerMap: Partial<Record<ColumnKey, number>>;
   /** Filas que se descartaron y por qué, para poder avisar en logs. */
   skipped: { rowNumber: number; reason: string }[];
+<<<<<<< HEAD
+  /**
+   * Pestaña de la que salió este snapshot. Viaja con él para que la escritura
+   * de vuelta vaya exactamente a la misma, aunque entretanto cambie el mes.
+   */
+  tab: string;
+  /**
+   * `false` si la hoja no tiene columna de transportista. En ese caso hay un
+   * único transportista y no se filtra por él: ver lib/manifest.ts.
+   */
+  hasDriverColumn: boolean;
+  /**
+   * Con qué palabra escribe la hoja cada estado, aprendido de sus propios
+   * valores. La columna de estado suele ser un desplegable con una lista
+   * cerrada de opciones ("Entregat", "Pendent", "Incidència"), y escribir
+   * ahí un término de fuera deja la celda en un valor que el desplegable no
+   * reconoce. Devolviendo la misma palabra que ya usa la hoja, la app habla
+   * su idioma sea cual sea.
+   */
+  statusWords: Partial<Record<DeliveryStatus, string>>;
+=======
   /** Nombre de la pestaña que se leyó. */
   sheetTab: string | null;
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
 }
 
 /**
@@ -198,6 +220,7 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
   const orders: Order[] = [];
   const skipped: SheetSnapshot["skipped"] = [];
   const seenIds = new Set<string>();
+  const statusWords: Partial<Record<DeliveryStatus, string>> = {};
 
   // Comprobar si hay columna driverId y date
   const hasDriverId = headerMap["driverId"] !== undefined;
@@ -226,7 +249,10 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
       skipped.push({ rowNumber, reason: `ID duplicado "${id}"` });
       continue;
     }
+<<<<<<< HEAD
+=======
     // Las órdenes sin fecha de reparto son totalmente válidas (se quedan en la bolsa de pendientes).
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
     if (!address) {
       skipped.push({ rowNumber, reason: "sin dirección" });
       continue;
@@ -234,8 +260,16 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
 
     seenIds.add(id);
 
+<<<<<<< HEAD
+    // La primera vez que se ve cada estado se guarda tal cual lo escribe la
+    // hoja, para poder devolvérselo con su misma ortografía.
+    const rawStatus = text(cell(row, "status"));
+    const parsedStatus = parseStatus(rawStatus);
+    if (rawStatus && !statusWords[parsedStatus]) statusWords[parsedStatus] = rawStatus;
+=======
     // Construir dirección completa con la ciudad si existe
     const city = text(cell(row, "city")) || null;
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
 
     orders.push({
       id,
@@ -249,16 +283,31 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
       phone: text(cell(row, "phone")) || null,
       measures: text(cell(row, "measures")) || null,
       notes: text(cell(row, "notes")) || null,
+<<<<<<< HEAD
+      status: parsedStatus,
+=======
       status: parseStatus(cell(row, "status")),
       rawStatus: text(cell(row, "status")),
       statusCategory: parseStatusCategory(cell(row, "status")),
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
       lat: parseNumber(cell(row, "lat")),
       lng: parseNumber(cell(row, "lng")),
       rowNumber,
     });
   }
 
+<<<<<<< HEAD
+  return {
+    orders,
+    headerMap,
+    skipped,
+    tab,
+    hasDriverColumn: headerMap.driverId !== undefined,
+    statusWords,
+  };
+=======
   return { orders, headerMap, skipped, sheetTab: tab };
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
 }
 
 /**
@@ -347,6 +396,81 @@ async function writeCells(
   });
 }
 
+/**
+ * Las opciones del desplegable de la columna de estado, si lo tiene.
+ *
+ * Es la fuente autorizada sobre qué palabras admite esa columna: los valores
+ * ya escritos solo sirven mientras haya alguno, y una pestaña de mes recién
+ * creada suele venir con el desplegable puesto pero sin ninguna fila todavía.
+ *
+ * Devuelve un mapa vacío si la columna no tiene validación, si la llamada
+ * falla o si ninguna opción se reconoce: nunca hace fallar una entrega por
+ * esto, que sería cambiar un problema cosmético por uno real.
+ */
+async function dropdownStatusWords(
+  tab: string,
+  headerMap: Partial<Record<ColumnKey, number>>,
+): Promise<Partial<Record<DeliveryStatus, string>>> {
+  const columnIndex = headerMap.status;
+  if (columnIndex === undefined) return {};
+
+  const cell = `${columnLetter(columnIndex)}2`;
+  try {
+    const data = (await sheetsFetch(
+      `?ranges=${encodeURIComponent(range(tab, `${cell}:${cell}`))}` +
+        `&includeGridData=true` +
+        `&fields=${encodeURIComponent("sheets(data(rowData(values(dataValidation))))")}`,
+    )) as {
+      sheets?: {
+        data?: {
+          rowData?: {
+            values?: {
+              dataValidation?: { condition?: { values?: { userEnteredValue?: string }[] } };
+            }[];
+          }[];
+        }[];
+      }[];
+    };
+
+    const options =
+      data.sheets?.[0]?.data?.[0]?.rowData?.[0]?.values?.[0]?.dataValidation?.condition
+        ?.values ?? [];
+
+    const words: Partial<Record<DeliveryStatus, string>> = {};
+    for (const option of options) {
+      const value = option.userEnteredValue;
+      // Las fórmulas ("=Hoja2!A1:A5") no son literales que podamos escribir.
+      if (!value || value.startsWith("=")) continue;
+      const status = parseStatus(value);
+      if (!words[status]) words[status] = value;
+    }
+    return words;
+  } catch (error) {
+    console.warn("No se han podido leer las opciones del desplegable:", error);
+    return {};
+  }
+}
+
+/** Castellano por defecto, para una hoja que aún no tenga ningún estado escrito. */
+const STATUS_POR_DEFECTO: Record<Exclude<DeliveryStatus, "pendiente">, string> = {
+  entregado: "Entregado",
+  incidencia: "Incidencia",
+};
+
+/**
+ * La palabra con la que hay que escribir un estado en esta hoja concreta.
+ *
+ * Por orden: lo que admite el desplegable, lo que la hoja ya venía usando, y
+ * por último el castellano.
+ */
+function statusWord(
+  fromDropdown: Partial<Record<DeliveryStatus, string>>,
+  fromSheet: Partial<Record<DeliveryStatus, string>>,
+  status: Exclude<DeliveryStatus, "pendiente">,
+): string {
+  return fromDropdown[status] ?? fromSheet[status] ?? STATUS_POR_DEFECTO[status];
+}
+
 export interface WriteResult {
   /** IDs de pedido escritos correctamente. */
   applied: string[];
@@ -371,6 +495,7 @@ export async function writeDeliveries(
   const snapshot = await readSheet(sheetTab);
   const headerMap = await ensureManagedColumns(snapshot.headerMap, sheetTab);
   const byId = new Map(snapshot.orders.map((order) => [order.id, order]));
+  const dropdown = await dropdownStatusWords(snapshot.tab, headerMap);
 
   const updates: CellUpdate[] = [];
   const applied: string[] = [];
@@ -383,9 +508,23 @@ export async function writeDeliveries(
       continue;
     }
 
+<<<<<<< HEAD
+    updates.push({
+      rowNumber: order.rowNumber,
+      column: "status",
+      value: statusWord(dropdown, snapshot.statusWords, record.status),
+    });
+    updates.push({
+      rowNumber: order.rowNumber,
+      column: "deliveredAt",
+      value: formatSheetTimestamp(record.recordedAt, env.timezone),
+    });
+    if (record.note) {
+=======
     const type = record.type || "status";
 
     if (type === "status") {
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
       updates.push({
         rowNumber: order.rowNumber,
         column: "status",

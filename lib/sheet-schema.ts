@@ -31,8 +31,22 @@ export const COLUMNS = {
   /** A qué transportista está asignado. Opcional (el Sheet real no la tiene). */
   driverId: ["Transportista", "Repartidor", "Conductor", "Chofer", "Driver", "Tr"],
 
+<<<<<<< HEAD
+  /**
+   * Fecha del pedido. OPCIONAL: es informativa, no decide nada.
+   *
+   * En esta hoja es la fecha de ALTA, no la de reparto — cuándo toca
+   * entregar lo decide el transportista, no la hoja. Ver lib/manifest.ts.
+   *
+   * NO confundir con "Data entrega", que es donde la oficina anota la hora a
+   * la que llegó el pedido: esa está vacía en todo lo que aún no se ha
+   * entregado, que es justo lo que hay que enseñar.
+   */
+  date: ["Fecha", "Fecha Reparto", "Fecha Entrega", "Dia", "Date", "Data"],
+=======
   /** Fecha de creación / registro original (columna A). */
   creationDate: ["Data", "Fecha de creación", "Fecha creacion", "Creado", "Fecha de registro"],
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
 
   /** Fecha de reparto (asignada en el calendario). Opcional. */
   date: ["Data entrega", "Data de entrega", "Data d'entrega", "Fecha Reparto", "Fecha Entrega", "Dia", "Date", "Fecha"],
@@ -112,8 +126,15 @@ export type ColumnKey = keyof typeof COLUMNS;
 
 /**
  * Columnas sin las cuales no podemos funcionar.
+<<<<<<< HEAD
+ *
+ * Ni `driverId` ni `date` están aquí a propósito: con un solo transportista
+ * la hoja no necesita decir a quién va cada pedido, y la fecha es
+ * informativa. Ver los comentarios de cada uno.
+=======
  * Solo id y address son realmente obligatorias — el Sheet real no tiene
  * ni driverId ni date (usa pestañas por mes).
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
  */
 export const REQUIRED_COLUMNS: ColumnKey[] = ["id", "address"];
 

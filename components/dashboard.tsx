@@ -1,6 +1,16 @@
 "use client";
 
+<<<<<<< HEAD
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+=======
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
@@ -34,7 +44,6 @@ import { formatLongDate, addDays, getMonthGrid, getYearMonth } from "@/lib/dates
 import { cn } from "@/lib/utils";
 import type { RouteDay, Stop } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import StopCard from "./stop-card";
 import SyncBar from "./sync-bar";
 
@@ -222,6 +231,26 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     };
   }, [sync]);
 
+  /*
+   * Título grande de iOS: se ve entero arriba del todo y, al desplazar, se
+   * pliega en la barra fija. El observador vigila el propio <h1>: cuando
+   * pasa por detrás de la barra (de ahí el margen negativo, que es su
+   * altura aproximada), el nombre reaparece arriba en pequeño.
+   */
+  const largeTitle = useRef<HTMLHeadingElement>(null);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    const el = largeTitle.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setCollapsed(!entry.isIntersecting),
+      { rootMargin: "-88px 0px 0px 0px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const manifest = stored?.data;
   const allStops = manifest?.today?.stops ?? []; // manifest.today.stops is now all stops in the sheet!
   const todayDate = manifest?.today?.date ?? ""; // The "today" date on the server
@@ -364,11 +393,49 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   return (
     <div className="mx-auto flex min-h-svh max-w-2xl flex-col bg-background pb-20">
       {manifest?.demo && (
-        <p className="bg-amber-100 px-4 py-1.5 text-center text-[10px] font-medium uppercase tracking-wide text-amber-800">
+        // Texto negro sobre el naranja del sistema: en blanco no hay
+        // contraste suficiente y este aviso tiene que leerse sí o sí.
+        <p className="bg-warning px-4 py-1 text-center text-xs font-semibold text-black">
           Modo demo · pedidos de ejemplo
         </p>
       )}
 
+<<<<<<< HEAD
+      <header
+        className={cn(
+          "material sticky top-0 z-10 pt-[env(safe-area-inset-top)] transition-[border-color] duration-200",
+          // El separador de la barra solo aparece cuando hay contenido
+          // pasando por debajo: es el "borde de scroll" de iOS.
+          collapsed ? "border-b border-border" : "border-b border-transparent",
+        )}
+      >
+        <div className="flex h-11 items-center gap-3 px-4">
+          {/* Contrapeso del contador: mantiene el título centrado de verdad,
+              como la barra de navegación de iOS. */}
+          {total > 0 && <span className="w-7 shrink-0" aria-hidden />}
+          <p
+            className={cn(
+              "min-w-0 flex-1 truncate text-center text-base font-semibold transition-opacity duration-200",
+              collapsed ? "opacity-100" : "opacity-0",
+            )}
+            aria-hidden={!collapsed}
+          >
+            {driverName}
+          </p>
+          {total > 0 && (
+            <p
+              className={cn(
+                "shrink-0 text-sm tabular-nums text-muted-foreground transition-opacity duration-200",
+                collapsed ? "opacity-100" : "opacity-0",
+              )}
+              aria-hidden
+            >
+              {closed.length}/{total}
+            </p>
+          )}
+        </div>
+
+=======
       <header className="sticky top-0 z-10 border-b border-border bg-background/85 backdrop-blur-md">
         <div className="flex items-baseline justify-between gap-4 px-4 pb-2.5 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <div className="min-w-0">
@@ -405,6 +472,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
           </div>
         </div>
 
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
         <SyncBar
           online={online}
           syncing={syncing}
@@ -415,6 +483,113 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         />
       </header>
 
+<<<<<<< HEAD
+      <main className="flex-1 px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3">
+        <h1 ref={largeTitle} className="text-3xl font-bold">
+          {driverName}
+        </h1>
+        {todayRoute && (
+          // `capitalize` pondría mayúscula en cada palabra ("4 De Agosto");
+          // solo queremos la inicial de la frase.
+          <p className="mt-0.5 text-sm text-muted-foreground first-letter:uppercase">
+            {formatLongDate(todayRoute.date)}
+            {total > 0 && ` · ${closed.length} de ${total} entregadas`}
+          </p>
+        )}
+
+        {total > 0 && (
+          <div
+            className="mt-3 h-1 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-valuenow={closed.length}
+            aria-valuemin={0}
+            aria-valuemax={total}
+            aria-label="Progreso de la jornada"
+          >
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
+              style={{ width: `${(closed.length / total) * 100}%` }}
+            />
+          </div>
+        )}
+
+        <div className="mt-5">
+          {loading ? (
+            <p className="py-16 text-center text-base text-muted-foreground">
+              Cargando…
+            </p>
+          ) : !manifest ? (
+            <EmptyState online={online} syncing={syncing} />
+          ) : (
+            <>
+              {todayRoute && <RouteSummary route={todayRoute} />}
+
+              {pending.length === 0 ? (
+                <div className="animate-rise-in rounded-xl bg-card px-6 py-12 text-center">
+                  <p className="text-base font-medium">
+                    {total === 0
+                      ? "Hoy no tienes pedidos asignados"
+                      : "Jornada completada"}
+                  </p>
+                  {total > 0 && (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {total} {total === 1 ? "parada cerrada" : "paradas cerradas"}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {pending.map((stop) => (
+                    <StopCard
+                      key={stop.id}
+                      stop={stop}
+                      onDelivered={handleDelivered}
+                      onIncident={handleIncident}
+                    />
+                  ))}
+                </ul>
+              )}
+
+              {closed.length > 0 && (
+                <Section
+                  title="Cerrados hoy"
+                  count={closed.length}
+                  open={showDone}
+                  onToggle={() => setShowDone((v) => !v)}
+                >
+                  <ul className="space-y-3">
+                    {closed.map((stop) => (
+                      <StopCard
+                        key={stop.id}
+                        stop={stop}
+                        onDelivered={handleDelivered}
+                        onIncident={handleIncident}
+                      />
+                    ))}
+                  </ul>
+                </Section>
+              )}
+
+              {manifest.tomorrow && manifest.tomorrow.stops.length > 0 && (
+                <Section
+                  title="Mañana"
+                  count={manifest.tomorrow.stops.length}
+                  open={showTomorrow}
+                  onToggle={() => setShowTomorrow((v) => !v)}
+                >
+                  {/* Lista agrupada de iOS: un solo bloque, con las filas
+                      separadas por una línea de medio píxel. */}
+                  <ul className="overflow-hidden rounded-xl bg-card">
+                    {manifest.tomorrow.stops.map((stop) => (
+                      <TomorrowRow key={stop.id} stop={stop} />
+                    ))}
+                  </ul>
+                </Section>
+              )}
+            </>
+          )}
+        </div>
+=======
       {/* ── Panel del menú hamburguesa ────────────────────────────────── */}
       {menuOpen && (
         <div className="animate-fade-in border-b border-border bg-card/95 px-4 py-4 shadow-lg backdrop-blur-md">
@@ -495,6 +670,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
             )}
           </>
         )}
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
       </main>
 
       {/* ── Bottom Navigation ─────────────────────────────────────────── */}
@@ -598,6 +774,14 @@ function TabAvui({
   }
 
   return (
+<<<<<<< HEAD
+    <div className="mb-3 animate-rise-in rounded-xl bg-card p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm text-muted-foreground">Ruta de hoy</p>
+          <p className="mt-0.5 text-xl font-semibold">
+            {[distance, duration].filter(Boolean).join(" · ") || "Sin calcular"}
+=======
     <>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold tracking-tight">Repartiment d&apos;avui</h2>
@@ -1037,6 +1221,7 @@ function RouteSummary({ route, onRecalculate, generating }: { route: RouteResult
           </p>
           <p className="mt-1 text-xl tracking-tight">
             {[distance, duration].filter(Boolean).join(" · ") || "Calculada"}
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
           </p>
         </div>
         <div className="flex flex-col gap-2">
@@ -1062,15 +1247,32 @@ function RouteSummary({ route, onRecalculate, generating }: { route: RouteResult
         </div>
       </div>
       {!route.optimized && (
+<<<<<<< HEAD
+        <p className="mt-3 rounded-lg bg-warning-surface px-3 py-2 text-sm text-warning-foreground">
+          No se ha podido calcular la ruta óptima. El orden mostrado es el de
+          prioridad del listado.
+=======
         <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           Ruta calculada respectant el teu ordre manual.
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
         </p>
       )}
     </div>
   );
 }
 
+<<<<<<< HEAD
+function TomorrowRow({ stop }: { stop: Stop }) {
+  return (
+    <li className="px-4 py-3 [&+li]:hairline">
+      <p className="text-base font-medium">{stop.customer || stop.address}</p>
+      <p className="mt-0.5 text-sm text-muted-foreground">{stop.address}</p>
+    </li>
+  );
+}
+=======
 // ── Category Section ───────────────────────────────────────────────────
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
 
 function CategorySection({
   label,
@@ -1092,11 +1294,25 @@ function CategorySection({
 }) {
   if (count === 0) return null;
   return (
+<<<<<<< HEAD
+    <section className="mt-7">
+=======
     <section className="mb-4">
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
+<<<<<<< HEAD
+        className="pressable mb-2 flex w-full items-center gap-1.5 px-1 py-1 text-left"
+      >
+        <span className="text-sm font-semibold text-muted-foreground">
+          {title}
+        </span>
+        <span className="text-sm tabular-nums text-tertiary-foreground">
+          {count}
+        </span>
+=======
         className={cn(
           "mb-3 flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors",
           bgColor,
@@ -1108,9 +1324,10 @@ function CategorySection({
         <Badge variant="secondary" className={cn("text-xs", color)}>
           {count}
         </Badge>
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
         <ChevronDown
           className={cn(
-            "ml-auto size-4 text-muted-foreground transition-transform",
+            "ml-auto size-5 text-tertiary-foreground transition-transform duration-300",
             open && "rotate-180",
           )}
           aria-hidden
@@ -1126,18 +1343,29 @@ function CategorySection({
 function EmptyState({ online, syncing }: { online: boolean; syncing: boolean }) {
   if (syncing) {
     return (
+<<<<<<< HEAD
+      <p className="py-16 text-center text-base text-muted-foreground">
+        Descargando tu ruta…
+=======
       <p className="py-16 text-center text-sm text-muted-foreground">
         Descarregant...
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
       </p>
     );
   }
 
   return (
+<<<<<<< HEAD
+    <div className="animate-rise-in rounded-xl bg-card px-6 py-12 text-center">
+      <p className="text-base font-medium">
+        {online ? "Todavía no hay datos" : "Sin datos descargados"}
+=======
     <div className="animate-rise-in rounded-xl border border-border bg-card px-6 py-12 text-center shadow-sm">
       <p className="text-base">
         {online ? "Encara no hi ha dades" : "Sense dades descarregades"}
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
       </p>
-      <p className="mt-1.5 text-sm text-muted-foreground">
+      <p className="mt-1 text-sm text-muted-foreground">
         {online
           ? "Selecciona una fulla del menú ☰ y prem Actualitzar."
           : "Connecta't a internet una vegada per descarregar les dades."}

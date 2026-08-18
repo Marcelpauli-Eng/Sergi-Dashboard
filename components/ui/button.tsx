@@ -4,31 +4,33 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
+/**
+ * Botones al estilo iOS: cápsulas, azul del sistema para la acción y gris
+ * de relleno para lo secundario. No cambian de color al pasar el ratón
+ * (en un móvil no hay ratón); la respuesta es el hundido al pulsar, que
+ * llega en el instante en que el dedo toca la pantalla.
+ */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "pressable inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default:
-          "bg-primary text-primary-foreground shadow-sm hover:bg-primary/85 active:bg-primary/85",
-        secondary:
-          "bg-secondary text-secondary-foreground border border-border hover:bg-muted active:bg-muted",
-        ghost:
-          "text-muted-foreground hover:bg-muted hover:text-foreground active:bg-muted",
-        outline:
-          "border border-border bg-transparent text-foreground hover:bg-muted active:bg-muted",
+        default: "bg-primary text-primary-foreground",
+        secondary: "bg-secondary text-primary",
+        ghost: "text-primary",
+        outline: "border border-border bg-transparent text-primary",
       },
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-10 rounded-md px-6",
+        default: "h-9 px-4 text-base [&_svg]:size-4",
+        sm: "h-8 px-3.5 text-sm [&_svg]:size-4",
+        lg: "h-11 px-6 text-base [&_svg]:size-5",
         /**
          * Talla añadida para esta app: el botón principal de cada parada.
          * Se pulsa con el pulgar, muchas veces de pie junto a la furgoneta,
          * así que necesita bastante más superficie que en un escritorio.
          */
-        touch: "h-12 rounded-lg px-6 text-base [&_svg]:size-5",
-        icon: "size-9",
+        touch: "h-13 px-6 text-base font-semibold [&_svg]:size-5",
+        icon: "size-9 [&_svg]:size-5",
       },
     },
     defaultVariants: {

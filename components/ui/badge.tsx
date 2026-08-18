@@ -3,17 +3,25 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
+/**
+ * Etiqueta de estado. Cápsula con el color del sistema al 15 %: el mismo
+ * recurso que usa iOS para teñir un fondo sin que compita con el texto.
+ * Sin mayúsculas forzadas, que en iOS no se estilan así.
+ */
 const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide transition-colors",
+  "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
   {
     variants: {
       variant: {
-        default: "border-border bg-muted text-foreground",
-        secondary: "border-border bg-muted text-muted-foreground",
-        outline: "border-border text-muted-foreground",
-        success: "border-green-300 bg-green-50 text-green-700",
-        warning: "border-amber-300 bg-amber-50 text-amber-700",
-        danger: "border-red-300 bg-red-50 text-red-700",
+        default: "bg-muted text-foreground",
+        secondary: "bg-muted text-muted-foreground",
+        outline: "border border-border text-muted-foreground",
+        success:
+          "bg-[color-mix(in_srgb,var(--success)_15%,transparent)] text-success",
+        warning:
+          "bg-[color-mix(in_srgb,var(--warning)_15%,transparent)] text-warning",
+        danger:
+          "bg-[color-mix(in_srgb,var(--destructive)_15%,transparent)] text-destructive",
       },
     },
     defaultVariants: {

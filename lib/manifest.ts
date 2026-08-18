@@ -6,8 +6,13 @@ import {
   navUrlFor,
   type Coord,
 } from "./routing";
+<<<<<<< HEAD
+import { today, type DateString } from "./dates";
+import type { Manifest, Order, RouteDay, Stop } from "./types";
+=======
 import { today, addDays } from "./dates";
 import type { Manifest, Order, Stop } from "./types";
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
 
 /**
  * Coordenadas de la central. Se geocodifican una sola vez por instancia:
@@ -94,6 +99,32 @@ export async function buildManifest(
   const todayDate = today(env.timezone);
   const normalizedDriver = driverId.toLowerCase();
 
+<<<<<<< HEAD
+  // Qué entra en la ruta: todo lo que no está entregado.
+  //
+  // No se filtra por fecha a propósito. En la hoja no hay ninguna columna
+  // que diga qué día toca entregar cada pedido —la fecha que tiene es la de
+  // cuándo entró— y quién decide el orden y el día es el propio
+  // transportista. Filtrar por fecha dejaría la pantalla vacía.
+  //
+  // Los ya entregados se quedan fuera: son la mayoría de la hoja y no hay
+  // nada que hacer con ellos. Las incidencias sí entran, porque siguen
+  // pendientes de resolver; buildRouteDay las coloca al final, fuera de la
+  // ruta optimizada.
+  //
+  // Sin columna de transportista hay un solo repartidor y no se filtra por
+  // él. En cuanto la columna exista, el filtro se aplica solo.
+  const mine = snapshot.orders.filter(
+    (order) =>
+      (!snapshot.hasDriverColumn || order.driverId === normalizedDriver) &&
+      order.status !== "entregado",
+  );
+
+  await fillMissingCoordinates(mine, snapshot);
+  const depot = await getDepotCoord();
+
+  const todayRoute = await buildRouteDay(todayDate, mine, depot);
+=======
   const hasDriverColumn = snapshot.orders.some((o) => o.driverId !== "");
   const hasDateColumn = snapshot.orders.some((o) => o.date !== "");
 
@@ -121,11 +152,16 @@ export async function buildManifest(
       legDurationSeconds: null,
     };
   });
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
 
   return {
     driverId: normalizedDriver,
     driverName,
     generatedAt: new Date().toISOString(),
+<<<<<<< HEAD
+    today: todayRoute,
+    // Sin fecha de reparto no hay forma de saber qué es "mañana".
+=======
     sheetTab: snapshot.sheetTab ?? "",
     today: {
       date: todayDate,
@@ -135,6 +171,7 @@ export async function buildManifest(
       totalDistanceMeters: null,
       totalDurationSeconds: null,
     },
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
     tomorrow: null,
   };
 }

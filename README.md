@@ -86,8 +86,9 @@ La hoja necesita al menos estas columnas, con la cabecera en la fila 1:
 | Columna | Obligatoria | Para qué |
 |---|:---:|---|
 | `ID Pedido` | ✅ | Identificador único e inmutable |
-| `Fecha` | ✅ | Fecha de reparto |
 | `Direccion` | ✅ | Se geocodifica para calcular la ruta |
+| `Estado` | | Lo que decide qué se enseña. La app **escribe** aquí |
+| `Fecha` | | Informativa. No decide nada |
 | `Poblacion` | | Municipio y CP, si van aparte de la calle. Se concatenan antes de geocodificar |
 | `Transportista` | | Código del repartidor. **Si no existe, hay uno solo y ve todos los pedidos** |
 | `Prioridad` | | Menor número = antes. Admite también `Urgent`/`Normal`/`Baixa` |
@@ -97,6 +98,17 @@ Los nombres admiten variantes (mayúsculas, acentos, sinónimos, y las formas
 catalanas: `Data`, `Adreça`, `Població`, `Nº Comanda`, `Client`, `Telèfon`,
 `Prioritat`, `Estat de l'entrega`…). Si en tu hoja se llaman de otra forma,
 añádela a `lib/sheet-schema.ts`.
+
+**Qué ve el transportista.** Todo lo que no esté marcado como entregado, sin
+filtrar por fecha. En esta hoja no hay ninguna columna que diga qué día toca
+entregar cada pedido —la fecha que traen es la de alta— y quién decide el
+orden y el día es el propio transportista. Las incidencias siguen apareciendo,
+al final y fuera de la ruta, porque quedan pendientes de resolver.
+
+Por eso la app **escribe el estado con la misma palabra que ya usa tu hoja**:
+lee las opciones del desplegable de esa columna y responde en su idioma
+(`Entregat`, `Incidència`…). Escribir un término de fuera dejaría la celda en
+un valor que el desplegable no reconoce.
 
 **Sobre `Transportista`:** con un único repartidor la columna sobra — quien
 entre verá todos los pedidos del día. En cuanto la añadas con el código de
@@ -109,13 +121,18 @@ que el día 1 no hay que tocar nada. Ver `lib/sheet-tab.ts`. Define la
 variable solo para forzar una pestaña concreta.
 
 Si la pestaña del mes nuevo **aún no está creada**, la app no se cae: sigue
-con la más reciente anterior y lo avisa en los logs. Ese día no aparecerán
-pedidos —no hay ninguno con fecha de hoy en la pestaña del mes pasado— pero
-en cuanto se cree la nueva la coge sola, sin redesplegar.
+con la más reciente anterior y lo avisa en los logs, así que el transportista
+ve los pedidos que quedaran sin entregar allí. En cuanto se cree la nueva la
+coge sola, sin redesplegar.
 
 Las columnas donde la app **escribe** (`Estado`, `Hora Entrega`,
 `Incidencia`) y las de caché de coordenadas (`_lat`, `_lng`) **se crean
 solas** la primera vez si no existen. Las de coordenadas se pueden ocultar.
+
+Se buscan por el nombre de la cabecera, nunca por posición: puedes moverlas
+y reordenarlas donde te convenga. Si tu hoja ya tiene una columna para la
+hora de entrega —`Data entrega`, por ejemplo— la app escribe en esa y no
+crea ninguna nueva.
 
 ### 3. Variables de entorno
 
@@ -137,8 +154,8 @@ npm run check
 
 Verifica la cadena entera —credenciales, acceso al documento, pestaña,
 columnas— y se para en el primer punto que falla explicando qué hacer.
-También lista los códigos de transportista que ha encontrado en el Sheet,
-para que puedas contrastarlos con los de `DRIVERS`.
+También resume los estados que ha encontrado en la hoja, para que veas de un
+vistazo cuántos pedidos se le van a enseñar al transportista.
 
 ### 5. Arrancar
 

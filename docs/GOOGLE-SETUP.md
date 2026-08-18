@@ -89,12 +89,19 @@ Se te descarga un archivo tipo `reparto-123456-a1b2c3d4.json`.
 **Ahora, en la carpeta del proyecto, ejecuta:**
 
 ```bash
-npm run env:json -- ~/Downloads/reparto-123456-a1b2c3d4.json
+npm run env:json -- ~/Downloads/reparto-123456-a1b2c3d4.json --write
 ```
 
-Te imprime las líneas de `GOOGLE_SERVICE_ACCOUNT_EMAIL`,
-`GOOGLE_PRIVATE_KEY` y `SESSION_SECRET` ya con el formato correcto, listas
-para pegar en `.env.local`. Esto evita el fallo más habitual de todos: pegar
+Escribe `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY` y
+`SESSION_SECRET` directamente en tu `.env.local`, con el formato correcto y
+sin tocar lo que ya hubiera dentro. Si el archivo ya tenía `SESSION_SECRET`
+lo respeta, porque regenerarlo cerraría la sesión de todos los
+transportistas.
+
+Sin `--write` te imprime las líneas para pegarlas a mano, por si prefieres
+verlas antes.
+
+En cualquiera de los dos casos evitas el fallo más habitual de todos: pegar
 la clave con saltos de línea reales en vez de con `\n` literales.
 
 ## Paso 6 · Crear la clave de API de Maps

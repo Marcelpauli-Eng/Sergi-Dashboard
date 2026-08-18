@@ -1,16 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Reparto",
@@ -19,6 +8,8 @@ export const metadata: Metadata = {
     // Hace que en iOS se abra a pantalla completa al añadirla a inicio.
     capable: true,
     title: "Reparto",
+    // `default` deja la hora y la batería en negro sobre la barra
+    // translúcida en claro, y el sistema las pasa a blanco en oscuro.
     statusBarStyle: "default",
   },
   icons: {
@@ -27,7 +18,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#fbfbfc",
+  // Un color por esquema: si no, la barra del navegador se queda blanca
+  // con la app en oscuro.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f2f2f7" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+  ],
   width: "device-width",
   initialScale: 1,
   // Se permite el zoom: hay direcciones con letra pequeña y gente que la
@@ -43,23 +39,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="es"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-      style={{ colorScheme: "light" }}
-    >
-      <body className="relative min-h-svh overflow-x-hidden">
-        {/*
-          Halos suaves de fondo (decorativos, no interactivos). Degradados
-          radiales en vez de círculos con `blur`: el filtro de desenfoque
-          obliga al móvil a repintar una capa enorme en cada scroll.
-        */}
-        <div
-          aria-hidden
-          className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(60rem_40rem_at_30%_-10%,rgba(59,130,246,0.07),transparent_60%),radial-gradient(50rem_35rem_at_100%_110%,rgba(139,92,246,0.07),transparent_60%)]"
-        />
-        {children}
-      </body>
+    <html lang="es" className="h-full antialiased">
+      <body className="min-h-svh overflow-x-hidden">{children}</body>
     </html>
   );
 }

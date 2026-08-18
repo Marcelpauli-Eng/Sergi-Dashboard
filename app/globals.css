@@ -1,42 +1,85 @@
 @import "tailwindcss";
 
 /*
- * Mismo sistema de diseño que DashboardPersonal: tema claro y MINIMALISTA,
- * casi todo blanco, líneas de un pelo y tipografía ligera. El color se
- * reserva para lo que informa (estados de entrega, incidencias); el resto es
- * escala de grises.
+ * SISTEMA DE DISEÑO: iOS.
+ *
+ * La app se usa en un iPhone, así que se viste como una app del sistema:
+ * tipografía San Francisco, colores del sistema (los mismos hex que usa
+ * Apple), listas agrupadas sobre fondo gris, barras translúcidas y respuesta
+ * inmediata al dedo. Nada de sombras difusas ni de "tarjetas flotantes":
+ * en iOS la separación la da el fondo, no una sombra.
+ *
+ * Colores de referencia: developer.apple.com/design/human-interface-guidelines/color
  */
 :root {
-  --background: #fbfbfc;
-  --foreground: #18181b;
+  color-scheme: light dark;
 
+  /* systemGroupedBackground / secondarySystemGroupedBackground */
+  --background: #f2f2f7;
   --card: #ffffff;
-  --card-foreground: #18181b;
 
-  --muted: #f5f5f7;
-  --muted-foreground: #8a8a93;
+  /* label / secondaryLabel / tertiaryLabel */
+  --foreground: #000000;
+  --card-foreground: #000000;
+  --muted-foreground: #3c3c4399;
+  --tertiary-foreground: #3c3c434d;
 
-  /* Líneas casi invisibles, al estilo "hairline" */
-  --border: #ececef;
-  --input: #ececef;
-  --ring: #18181b;
+  /* secondarySystemFill: el gris de los botones sin relleno de color */
+  --muted: #78788029;
+  --secondary: #78788029;
+  --secondary-foreground: #000000;
 
-  --primary: #18181b; /* acción principal: casi negro sobre blanco */
-  --primary-foreground: #fafafa;
+  /* separator: una línea de medio píxel, no un borde */
+  --border: #3c3c434a;
+  --input: #3c3c434a;
 
-  --secondary: #f2f2f4;
-  --secondary-foreground: #18181b;
+  /* systemBlue: el único color de acción. Todo lo pulsable es azul. */
+  --primary: #007aff;
+  --primary-foreground: #ffffff;
+  --accent: #007aff;
+  --accent-foreground: #ffffff;
+  --ring: #007aff;
 
-  --accent: #18181b;
-  --accent-foreground: #fafafa;
+  /* systemRed / systemGreen / systemOrange */
+  --destructive: #ff3b30;
+  --success: #34c759;
+  --warning: #ff9500;
 
-  --destructive: #dc2626;
+  /* Fondo tenue para avisos, derivado del propio color del sistema. */
+  --warning-surface: #ff950026;
+  --warning-foreground: #8a5200;
 
-  /* Únicos colores de la app, y solo para estados de entrega. */
-  --success: #16a34a;
-  --warning: #b45309;
+  --radius: 0.875rem;
+}
 
-  --radius: 0.75rem;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #000000;
+    --card: #1c1c1e;
+
+    --foreground: #ffffff;
+    --card-foreground: #ffffff;
+    --muted-foreground: #ebebf599;
+    --tertiary-foreground: #ebebf54d;
+
+    --muted: #7878803d;
+    --secondary: #7878803d;
+    --secondary-foreground: #ffffff;
+
+    --border: #54545899;
+    --input: #54545899;
+
+    --primary: #0a84ff;
+    --accent: #0a84ff;
+    --ring: #0a84ff;
+
+    --destructive: #ff453a;
+    --success: #30d158;
+    --warning: #ff9f0a;
+
+    --warning-surface: #ff9f0a26;
+    --warning-foreground: #ffb340;
+  }
 }
 
 @theme inline {
@@ -46,6 +89,7 @@
   --color-card-foreground: var(--card-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-tertiary-foreground: var(--tertiary-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -58,14 +102,51 @@
   --color-destructive: var(--destructive);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-warning-surface: var(--warning-surface);
+  --color-warning-foreground: var(--warning-foreground);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: 1.125rem;
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /*
+   * Estilos de texto de iOS. Se pisan los tamaños de Tailwind en vez de
+   * inventar clases nuevas: así `text-sm` ya significa "Subheadline" en
+   * toda la app sin tocar un solo componente.
+   *
+   * El "tracking" (espaciado entre letras) es distinto en cada tamaño, tal
+   * y como lo define Apple: negativo y creciente en los títulos grandes,
+   * casi cero en el texto corrido. Un único valor para todos los tamaños
+   * está mal en alguna parte por definición.
+   */
+  --text-xs: 0.75rem; /* Caption 1 */
+  --text-xs--line-height: 1rem;
+  --text-xs--letter-spacing: 0;
+
+  --text-sm: 0.9375rem; /* Subheadline */
+  --text-sm--line-height: 1.25rem;
+  --text-sm--letter-spacing: -0.01em;
+
+  --text-base: 1.0625rem; /* Body */
+  --text-base--line-height: 1.375rem;
+  --text-base--letter-spacing: -0.024em;
+
+  --text-lg: 1.25rem; /* Title 3 */
+  --text-lg--line-height: 1.5625rem;
+  --text-lg--letter-spacing: -0.026em;
+
+  --text-xl: 1.375rem; /* Title 2 */
+  --text-xl--line-height: 1.75rem;
+  --text-xl--letter-spacing: -0.026em;
+
+  --text-2xl: 1.75rem; /* Title 1 */
+  --text-2xl--line-height: 2.125rem;
+  --text-2xl--letter-spacing: -0.028em;
+
+  --text-3xl: 2.125rem; /* Large Title */
+  --text-3xl--line-height: 2.5625rem;
+  --text-3xl--letter-spacing: -0.03em;
 }
 
 @layer base {
@@ -76,53 +157,82 @@
   body {
     background: var(--background);
     color: var(--foreground);
-    font-family: var(--font-sans), system-ui, sans-serif;
-    /* Trazo fino en todo el texto (la clave del look minimalista) */
-    font-weight: 350;
+    /*
+     * San Francisco. En iPhone y Mac la sirve el sistema, con su kerning y
+     * su versión óptica ya afinados; ninguna fuente descargada mejora eso,
+     * y además ahorra dos peticiones de red al arrancar sin cobertura.
+     */
+    font-family:
+      -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui,
+      sans-serif;
+    /* iOS no usa trazo fino: el peso normal es 400 y el contraste lo dan
+       los títulos en semibold, no una tipografía delgada. */
+    font-weight: 400;
     -webkit-font-smoothing: antialiased;
     /* Sin rebote elástico: hace que la lista parezca que se ha roto. */
     overscroll-behavior-y: none;
   }
 
-  /*
-   * Titulares ligeros y apretados: nada de negritas gruesas. Los pesos
-   * fuertes se reservan para datos concretos (nombre del cliente, cifras).
-   */
   h1,
   h2,
   h3,
   h4 {
-    font-weight: 400;
-    letter-spacing: -0.015em;
+    font-weight: 600;
   }
 
-  strong,
-  b {
-    font-weight: 500;
+  /* El texto de los campos hereda el cuerpo (17 px). De paso, iOS deja de
+     hacer zoom al enfocarlos, que solo ocurre por debajo de 16 px. */
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
   }
 
   ::selection {
-    background: color-mix(in oklch, var(--primary) 18%, transparent);
+    background: color-mix(in oklch, var(--primary) 25%, transparent);
   }
 }
 
-/*
- * Peso "medio" recalibrado: en toda la app `font-medium`/`font-semibold`
- * pintan más finos de lo normal, para no tener que tocar cada componente.
- */
 @layer utilities {
-  .font-medium {
-    font-weight: 450;
+  /*
+   * RESPUESTA AL DEDO.
+   *
+   * La clave del tacto de iOS: el elemento se hunde en cuanto lo tocas
+   * (60 ms, casi instantáneo) y vuelve despacio al soltar (280 ms). Esa
+   * asimetría es lo que hace que responda "vivo" en vez de animado.
+   */
+  .pressable {
+    transition:
+      transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
+      opacity 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
   }
-  .font-semibold {
-    font-weight: 500;
+
+  .pressable:active {
+    transform: scale(0.96);
+    opacity: 0.72;
+    transition-duration: 0.06s;
   }
-  .font-bold {
-    font-weight: 600;
+
+  /*
+   * Material translúcido de las barras del sistema: el contenido pasa por
+   * debajo y se ve desenfocado. La saturación extra es lo que evita que el
+   * desenfoque deje el color de debajo lavado.
+   */
+  .material {
+    background: color-mix(in srgb, var(--background) 72%, transparent);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+  }
+
+  /* Separador de iOS: medio píxel, no un borde de uno. */
+  .hairline {
+    border-top: 0.5px solid var(--border);
   }
 }
 
-/* Sin resaltado azul al tocar: los botones ya tienen su propio estado. */
+/* Sin resaltado azul al tocar: los elementos ya tienen su propio estado. */
 * {
   -webkit-tap-highlight-color: transparent;
 }
@@ -132,18 +242,7 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
-/* Entrada de las tarjetas, en CSS puro (sin framer-motion). */
-@keyframes rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
+/* Aparición del contenido: un desvanecido corto, sin desplazamiento. */
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -154,11 +253,11 @@ html {
 }
 
 .animate-rise-in {
-  animation: rise-in 0.5s cubic-bezier(0.21, 0.47, 0.32, 0.98) both;
+  animation: fade-in 0.35s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
 .animate-fade-in {
-  animation: fade-in 0.15s ease-out both;
+  animation: fade-in 0.2s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -166,19 +265,18 @@ html {
   .animate-fade-in {
     animation: fade-in 0.01s both;
   }
+
+  .pressable:active {
+    transform: none;
+  }
 }
 
-/*
- * FORMULARIOS EN MÓVIL — que no salte la pantalla.
- * Safari de iPhone hace zoom automático al enfocar un campo con letra menor
- * de 16 px, y al hacerlo descoloca toda la página. Con 16 px justos ya no
- * hace zoom.
- */
-@media (max-width: 639px) {
-  input,
-  select,
-  textarea {
-    font-size: 16px;
+/* Sin transparencias: el material se vuelve sólido, no borroso. */
+@media (prefers-reduced-transparency: reduce) {
+  .material {
+    background: var(--background);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 
