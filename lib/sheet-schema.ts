@@ -36,8 +36,25 @@ export const COLUMNS = {
    */
   driverId: ["Transportista", "Repartidor", "Conductor", "Chofer", "Driver", "Xofer"],
 
-  /** Fecha de reparto. Obligatoria. */
-  date: ["Fecha", "Fecha Reparto", "Fecha Entrega", "Dia", "Date", "Data"],
+  /**
+   * Fecha de reparto: el día en que hay que entregar. Obligatoria.
+   *
+   * OJO con el orden de esta lista. En la hoja de la oficina conviven dos
+   * columnas de fecha: "Data", que es cuándo ENTRÓ el pedido, y "Data
+   * entrega", que es cuándo hay que llevarlo. La que manda la ruta es la
+   * segunda, así que va antes: si se coge "Data" se compara la fecha de
+   * alta con la de hoy y no aparece ningún pedido.
+   */
+  date: [
+    "Fecha",
+    "Fecha Reparto",
+    "Fecha Entrega",
+    "Data entrega",
+    "Data Lliurament",
+    "Dia",
+    "Date",
+    "Data",
+  ],
 
   /**
    * Prioridad. Menor número = antes. Opcional (si falta, todas iguales).

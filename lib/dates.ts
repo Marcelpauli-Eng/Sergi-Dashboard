@@ -60,8 +60,12 @@ export function parseSheetDate(value: unknown): DateString | null {
   const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
 
-  // Formato español: 4/8/2026, 04-08-2026, 4.8.26
-  const eu = text.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/);
+  // Formato español: 4/8/2026, 04-08-2026, 4.8.26 — con hora opcional
+  // detrás ("8/08/2026 13:50:00"), que es como queda la celda cuando la
+  // app escribe la entrega y Sheets la guarda como texto en vez de fecha.
+  const eu = text.match(
+    /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})(?:[ ,]+\d{1,2}:\d{2}(?::\d{2})?)?$/,
+  );
   if (eu) {
     const day = Number(eu[1]);
     const month = Number(eu[2]);
