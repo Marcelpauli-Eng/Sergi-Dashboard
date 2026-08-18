@@ -75,7 +75,19 @@ export const COLUMNS = {
   ],
 
   /** Momento de la entrega (timestamp real de cuando el repartidor lo entrega). La app ESCRIBE aquí. */
+  /**
+   * Dónde se escribe el momento real de la entrega.
+   *
+   * "Data entrega" va primero a propósito: en la hoja de la oficina es el
+   * mismo hueco donde el calendario deja la fecha prevista, y al entregar se
+   * sobrescribe con la fecha y la hora del botón. Es lo que se quiere, y
+   * además evita que la app cree una columna aparte que ya se borró una vez.
+   *
+   * Ojo: apunta a la misma columna que `date`. Ver el dedup por nombre en
+   * `ensureManagedColumns`, que impide crearla dos veces.
+   */
   deliveredAt: [
+    "Data entrega",
     "Hora Entrega",
     "Hora de Entrega",
     "Fecha Entrega Real",
