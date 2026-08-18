@@ -348,6 +348,12 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     void recordDelivery(orderId, "incidencia", note || null);
   };
   const handleDateAssignment = (orderId: string, newDate: string | null) => {
+    // Un día que ya ha pasado no admite pedidos nuevos: planificar hacia
+    // atrás no significa nada. Quitar sí se permite (newDate === null), que
+    // es como se saca un pedido que se quedó sin entregar para llevarlo a
+    // otro día. El guardia va aquí, en el handler, y no solo en la pantalla,
+    // para que valga sea cual sea la vía por la que se asigne.
+    if (newDate !== null && todayDate && newDate < todayDate) return;
     void recordDateAssignment(orderId, newDate);
   };
 
@@ -713,6 +719,7 @@ function TabCalendari({
   if (selectedDate) {
     const assigned = calendarStopsByDate[selectedDate] || [];
     const isToday = selectedDate === todayDate;
+    const isPast = Boolean(todayDate) && selectedDate < todayDate;
     
     return (
       <div className="space-y-6 animate-fade-in">
@@ -723,6 +730,7 @@ function TabCalendari({
           <h2 className="text-lg font-semibold tracking-tight">
             Repartiment del {selectedDate.split("-").reverse().join("/")}
             {isToday && " (Avui)"}
+            {isPast && " (passat)"}
           </h2>
         </div>
 
@@ -760,15 +768,29 @@ function TabCalendari({
           )}
         </div>
 
-        <div className="space-y-3 pt-4 border-t border-border">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-status-pendent">Afegir Comanda Ràpid</h3>
-          <p className="text-xs text-muted-foreground">Toca per assignar o <strong className="text-foreground">mantén premut</strong> per previsualitzar la comanda.</p>
-          {unassignedStops.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No et queden comandes pendents d'assignar.</p>
-          ) : (
-            <FastAssignList stops={unassignedStops} onAssign={(id) => onAssignDate(id, selectedDate)} />
-          )}
-        </div>
+        {isPast ? (
+          <div className="space-y-2 pt-4 border-t border-border">
+            <p className="text-sm text-muted-foreground">
+              Aquest dia ja ha passat: no s&apos;hi poden afegir comandes.
+            </p>
+            {assigned.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Si alguna es va quedar sense entregar, fes <strong className="text-foreground">Treure</strong> i
+                assigna-la a un altre dia.
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3 pt-4 border-t border-border">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-status-pendent">Afegir Comanda Ràpid</h3>
+            <p className="text-xs text-muted-foreground">Toca per assignar o <strong className="text-foreground">mantén premut</strong> per previsualitzar la comanda.</p>
+            {unassignedStops.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No et queden comandes pendents d&apos;assignar.</p>
+            ) : (
+              <FastAssignList stops={unassignedStops} onAssign={(id) => onAssignDate(id, selectedDate)} />
+            )}
+          </div>
+        )}
       </div>
     );
   }
