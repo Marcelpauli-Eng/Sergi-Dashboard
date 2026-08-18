@@ -66,6 +66,17 @@ export default function StopCard({
   const isOpen =
     stop.statusCategory === "pendent" || stop.statusCategory === "en_curs";
   const done = !isOpen;
+
+  // Quién conserva los botones: todo lo que no esté ya entregado.
+  //
+  // Una incidencia no es definitiva. "No estaba en casa" hoy puede acabar
+  // entregándose mañana, y sin botón la única forma de cerrarla era editar la
+  // hoja a mano. Mantiene el aspecto apagado —no es una parada activa de la
+  // ruta— pero sigue pudiendo marcarse.
+  //
+  // Un pedido ya entregado sí los pierde: volver a marcarlo solo serviría
+  // para pisar la hora de entrega que quedó guardada en la hoja.
+  const canClose = stop.statusCategory !== "entregat";
   const leg = [
     formatDistance(stop.legDistanceMeters),
     formatDuration(stop.legDurationSeconds),
@@ -246,7 +257,7 @@ export default function StopCard({
           </div>
         </div>
 
-        {isOpen && (
+        {canClose && (
           <div className="border-t border-border p-4">
             {!showIncident ? (
               <div className="flex items-center gap-2">
