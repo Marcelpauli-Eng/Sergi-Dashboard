@@ -286,11 +286,24 @@ export async function ensureManagedColumns(
   const newHeaders: string[] = [];
   const startIndex = nextIndex;
 
+  // Dos campos del modelo pueden compartir cabecera —`date` y `deliveredAt`
+  // apuntan los dos a "Data entrega"—, así que se crea una sola columna y
+  // ambos la comparten. Sin esto saldrían dos columnas con el mismo nombre.
+  const createdAt = new Map<string, number>();
   for (const key of missing) {
-    newHeaders.push(canonicalHeader(key));
+    const header = canonicalHeader(key);
+    const yaCreada = createdAt.get(header);
+    if (yaCreada !== undefined) {
+      updated[key] = yaCreada;
+      continue;
+    }
+    newHeaders.push(header);
+    createdAt.set(header, nextIndex);
     updated[key] = nextIndex;
     nextIndex++;
   }
+
+  if (newHeaders.length === 0) return updated;
 
   const startCell = `${columnLetter(startIndex)}1`;
   const endCell = `${columnLetter(nextIndex - 1)}1`;
