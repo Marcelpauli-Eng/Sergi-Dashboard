@@ -84,14 +84,27 @@ export function formatLongDate(date: DateString, locale = "es-ES"): string {
   }).format(new Date(Date.UTC(y, m - 1, d)));
 }
 
-/** Timestamp para escribir en el Sheet: "04/08/2026 14:32". */
+/**
+ * Timestamp para escribir en el Sheet: "04/08/2026 14:32".
+ *
+ * Se compone pieza a pieza en vez de usar `format()` directamente porque
+ * es-ES mete una coma entre la fecha y la hora ("04/08/2026, 14:32"), y con
+ * esa coma Google Sheets no lo reconoce como fecha-hora: lo guarda como
+ * texto plano. La celda deja entonces de poder ordenarse o filtrarse por
+ * fecha, que es justo para lo que sirve esa columna.
+ */
 export function formatSheetTimestamp(iso: string, timezone: string): string {
-  return new Intl.DateTimeFormat("es-ES", {
+  const parts = new Intl.DateTimeFormat("es-ES", {
     timeZone: timezone,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(iso));
+  }).formatToParts(new Date(iso));
+
+  const part = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((p) => p.type === type)?.value ?? "";
+
+  return `${part("day")}/${part("month")}/${part("year")} ${part("hour")}:${part("minute")}`;
 }
