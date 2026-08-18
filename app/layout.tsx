@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -8,9 +9,13 @@ export const metadata: Metadata = {
     // Hace que en iOS se abra a pantalla completa al añadirla a inicio.
     capable: true,
     title: "Reparto",
-    // `default` deja la hora y la batería en negro sobre la barra
-    // translúcida en claro, y el sistema las pasa a blanco en oscuro.
-    statusBarStyle: "default",
+    // `default`/`black` pintan una barra opaca y fija que iOS controla él
+    // solo: no sabe nada de nuestro `data-theme`, así que se queda del
+    // mismo color pase lo que pase en la app (el bug reportado). Con
+    // `black-translucent` la barra pasa a ser transparente y se ve el
+    // fondo real de la cabecera (`.material`, con `env(safe-area-inset-top)`
+    // ya reservado para el reloj/batería), que sí seguirá el tema.
+    statusBarStyle: "black-translucent",
   },
   icons: {
     apple: "/icons/apple-touch-icon.png",
@@ -53,12 +58,9 @@ export default function RootLayout({
           pintado. Sin esto, con el móvil en oscuro y "Clar" forzado, se
           vería un parpadeo oscuro→claro al cargar.
         */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html:
-              '(function(){try{var t=localStorage.getItem("themePreference");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}})()',
-          }}
-        />
+        <Script id="theme-init" strategy="beforeInteractive">
+          {'(function(){try{var t=localStorage.getItem("themePreference");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}})()'}
+        </Script>
         {children}
       </body>
     </html>

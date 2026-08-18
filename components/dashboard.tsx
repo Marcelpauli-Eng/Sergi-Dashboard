@@ -540,7 +540,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         <button
           onClick={() => setActiveTab("avui")}
           className={cn(
-            "pressable flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium",
+            "pressable flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1 text-[10px] font-medium",
             activeTab === "avui" ? "text-primary" : "text-tertiary-foreground",
           )}
         >
@@ -550,7 +550,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         <button
           onClick={() => setActiveTab("calendari")}
           className={cn(
-            "pressable flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium",
+            "pressable flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1 text-[10px] font-medium",
             activeTab === "calendari" ? "text-primary" : "text-tertiary-foreground",
           )}
         >
@@ -560,7 +560,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         <button
           onClick={() => setActiveTab("historial")}
           className={cn(
-            "pressable flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium",
+            "pressable flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1 text-[10px] font-medium",
             activeTab === "historial" ? "text-primary" : "text-tertiary-foreground",
           )}
         >
