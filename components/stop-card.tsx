@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { Check, GripVertical, Navigation, Phone, TriangleAlert, ChevronDown, X } from "lucide-react";
 import type { Stop } from "@/lib/types";
@@ -47,8 +47,15 @@ export default function StopCard({
   const [showNav, setShowNav] = useState(false);
   const [note, setNote] = useState("");
 
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  // `false` durante el render de servidor y `true` ya en el cliente, sin
+  // pasar por un estado: createPortal necesita el DOM, que en el servidor no
+  // existe. Hacerlo con un `setState` en un efecto provoca un render extra
+  // en cada tarjeta de la lista.
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   const isPendent = stop.statusCategory === "pendent";
   const done = !isPendent;
