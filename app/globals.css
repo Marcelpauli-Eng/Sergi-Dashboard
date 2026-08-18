@@ -58,8 +58,17 @@
   --radius: 0.875rem;
 }
 
+/*
+ * Modo claro/oscuro: sigue el sistema por defecto, pero Ajustes puede
+ * forzarlo con `data-theme` en el `<html>` (ver `lib/sync.ts` y el script
+ * de `app/layout.tsx`, que lo aplica antes del primer pintado para que no
+ * haya parpadeo). El bloque oscuro se repite dos veces a propósito —una
+ * vez detrás de la media query, otra detrás de `[data-theme="dark"]"—
+ * porque ninguna de las dos por sí sola cubre "el sistema está en claro
+ * pero el usuario ha forzado oscuro".
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #000000;
     --card: #1c1c1e;
 
@@ -88,6 +97,46 @@
 
     --status-en-curs: #bf5af2;
   }
+}
+
+/* Oscuro forzado desde Ajustes, sea cual sea el tema del sistema. */
+:root[data-theme="dark"] {
+  --background: #000000;
+  --card: #1c1c1e;
+
+  --foreground: #ffffff;
+  --card-foreground: #ffffff;
+  --muted-foreground: #ebebf599;
+  --tertiary-foreground: #ebebf54d;
+
+  --muted: #7878803d;
+  --secondary: #7878803d;
+  --secondary-foreground: #ffffff;
+
+  --border: #54545899;
+  --input: #54545899;
+
+  --primary: #0a84ff;
+  --accent: #0a84ff;
+  --ring: #0a84ff;
+
+  --destructive: #ff453a;
+  --success: #30d158;
+  --warning: #ff9f0a;
+
+  --warning-surface: #ff9f0a26;
+  --warning-foreground: #ffb340;
+
+  --status-en-curs: #bf5af2;
+}
+
+/* `color-scheme` también debe seguir el tema forzado: si no, el navegador
+   sigue pintando sus propios controles (scrollbars, etc.) del sistema. */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 @theme inline {

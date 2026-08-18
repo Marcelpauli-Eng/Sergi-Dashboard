@@ -39,8 +39,28 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className="h-full antialiased">
-      <body className="min-h-svh overflow-x-hidden">{children}</body>
+    <html
+      lang="es"
+      className="h-full antialiased"
+      // El script de abajo añade `data-theme` antes de que React hidrate,
+      // así que el HTML del servidor y el del cliente difieren a propósito
+      // en ese único atributo. Sin esto React lo marca como error.
+      suppressHydrationWarning
+    >
+      <body className="min-h-svh overflow-x-hidden">
+        {/*
+          Aplica el tema guardado (Ajustes → Clar/Fosc) antes del primer
+          pintado. Sin esto, con el móvil en oscuro y "Clar" forzado, se
+          vería un parpadeo oscuro→claro al cargar.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              '(function(){try{var t=localStorage.getItem("themePreference");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}})()',
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

@@ -19,6 +19,8 @@ interface Props {
   onMoveDown?: () => void;
   isFirst?: boolean;
   isLast?: boolean;
+  /** Si se pasa, muestra un botón para desasignar la parada (p. ej. del calendario). */
+  onRemove?: () => void;
 }
 
 const CATEGORY_BADGE: Record<
@@ -51,6 +53,7 @@ export default function StopCard({
   onMoveDown,
   isFirst,
   isLast,
+  onRemove,
 }: Props) {
   const [showIncident, setShowIncident] = useState(false);
   const [showNav, setShowNav] = useState(false);
@@ -154,6 +157,15 @@ export default function StopCard({
               <Badge variant={badgeInfo.variant} className={badgeInfo.className}>
                 {badgeInfo.label}
               </Badge>
+            )}
+            {onRemove && (
+              <button
+                onClick={onRemove}
+                className="pressable shrink-0 rounded-full bg-muted p-1 text-muted-foreground"
+                aria-label="Treure del dia"
+              >
+                <X className="size-3.5" strokeWidth={2.5} />
+              </button>
             )}
           </div>
 
