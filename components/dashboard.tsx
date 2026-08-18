@@ -1,24 +1,13 @@
 "use client";
 
-<<<<<<< HEAD
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-=======
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
->>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
   CalendarDays,
-  CheckCircle2,
-  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clock,
-  GripVertical,
   History,
   Menu,
   Route,
@@ -40,9 +29,9 @@ import {
   subscribeLocalPrefs,
 } from "@/lib/sync";
 import { formatDistance, formatDuration } from "@/lib/format";
-import { formatLongDate, addDays, getMonthGrid, getYearMonth } from "@/lib/dates";
+import { formatLongDate, getMonthGrid, getYearMonth } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import type { RouteDay, Stop } from "@/lib/types";
+import type { Stop } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import StopCard from "./stop-card";
 import SyncBar from "./sync-bar";
@@ -61,36 +50,6 @@ function subscribeToConnectivity(onChange: () => void): () => void {
 // ── Status category types ──────────────────────────────────────────────
 
 type StatusCategory = "pendent" | "en_curs" | "entregat" | "incidencia";
-
-const CATEGORY_CONFIG: Record<
-  StatusCategory,
-  { label: string; color: string; bgColor: string; defaultOpen: boolean }
-> = {
-  pendent: {
-    label: "Pendents",
-    color: "text-status-pendent",
-    bgColor: "bg-gray-100",
-    defaultOpen: true,
-  },
-  en_curs: {
-    label: "En curs",
-    color: "text-status-en-curs",
-    bgColor: "bg-purple-50",
-    defaultOpen: true,
-  },
-  entregat: {
-    label: "Entregats",
-    color: "text-status-entregat",
-    bgColor: "bg-green-50",
-    defaultOpen: true,
-  },
-  incidencia: {
-    label: "Incidència",
-    color: "text-status-incidencia",
-    bgColor: "bg-orange-50",
-    defaultOpen: true,
-  },
-};
 
 // ── Route generation types ─────────────────────────────────────────────
 
@@ -231,26 +190,6 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     };
   }, [sync]);
 
-  /*
-   * Título grande de iOS: se ve entero arriba del todo y, al desplazar, se
-   * pliega en la barra fija. El observador vigila el propio <h1>: cuando
-   * pasa por detrás de la barra (de ahí el margen negativo, que es su
-   * altura aproximada), el nombre reaparece arriba en pequeño.
-   */
-  const largeTitle = useRef<HTMLHeadingElement>(null);
-  const [collapsed, setCollapsed] = useState(false);
-
-  useEffect(() => {
-    const el = largeTitle.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => setCollapsed(!entry.isIntersecting),
-      { rootMargin: "-88px 0px 0px 0px" },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
   const manifest = stored?.data;
   const allStops = manifest?.today?.stops ?? []; // manifest.today.stops is now all stops in the sheet!
   const todayDate = manifest?.today?.date ?? ""; // The "today" date on the server
@@ -272,7 +211,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
     for (const stop of allStops) {
       const cat = (stop.statusCategory ?? "pendent") as StatusCategory;
-      
+
       // Historial
       if (cat === "entregat") {
         historyStops.entregat.push(stop);
@@ -312,11 +251,11 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     const routeable = todayStops.filter(s => s.statusCategory === "pendent");
     if (routeable.length === 0) return;
     setGeneratingRoute(true);
-    
+
     // Obtener la ubicación actual
     let startLocation: { lat: number; lng: number } | undefined;
     try {
-      startLocation = await new Promise((resolve, reject) => {
+      startLocation = await new Promise((resolve) => {
         if (!navigator.geolocation) {
           resolve(undefined);
           return;
@@ -356,7 +295,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       }
       const result = (await res.json()) as RouteResult;
       setRouteResult(result);
-      
+
       // Si el cálculo ha sido exitoso, podemos restablecer isManualOrder
       // ya que la nueva ruta ahora se convierte en la optimizada/calculada base.
       setIsManualOrder(false);
@@ -365,7 +304,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       const newIds = result.stops.map((s) => s.id);
       const nonRouteableIds = todayStops.filter(s => s.statusCategory !== "pendent").map(s => s.id);
       const combinedOrder = [...nonRouteableIds, ...newIds];
-      
+
       setCustomOrder(combinedOrder);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error generando la ruta");
@@ -391,7 +330,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   };
 
   return (
-    <div className="mx-auto flex min-h-svh max-w-2xl flex-col bg-background pb-20">
+    <div className="mx-auto flex min-h-svh max-w-2xl flex-col pb-[calc(4.25rem+env(safe-area-inset-bottom))]">
       {manifest?.demo && (
         // Texto negro sobre el naranja del sistema: en blanco no hay
         // contraste suficiente y este aviso tiene que leerse sí o sí.
@@ -400,79 +339,41 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         </p>
       )}
 
-<<<<<<< HEAD
-      <header
-        className={cn(
-          "material sticky top-0 z-10 pt-[env(safe-area-inset-top)] transition-[border-color] duration-200",
-          // El separador de la barra solo aparece cuando hay contenido
-          // pasando por debajo: es el "borde de scroll" de iOS.
-          collapsed ? "border-b border-border" : "border-b border-transparent",
-        )}
-      >
-        <div className="flex h-11 items-center gap-3 px-4">
-          {/* Contrapeso del contador: mantiene el título centrado de verdad,
-              como la barra de navegación de iOS. */}
-          {total > 0 && <span className="w-7 shrink-0" aria-hidden />}
-          <p
-            className={cn(
-              "min-w-0 flex-1 truncate text-center text-base font-semibold transition-opacity duration-200",
-              collapsed ? "opacity-100" : "opacity-0",
-            )}
-            aria-hidden={!collapsed}
-          >
-            {driverName}
-          </p>
-          {total > 0 && (
-            <p
-              className={cn(
-                "shrink-0 text-sm tabular-nums text-muted-foreground transition-opacity duration-200",
-                collapsed ? "opacity-100" : "opacity-0",
-              )}
-              aria-hidden
-            >
-              {closed.length}/{total}
-            </p>
-          )}
-        </div>
-
-=======
-      <header className="sticky top-0 z-10 border-b border-border bg-background/85 backdrop-blur-md">
-        <div className="flex items-baseline justify-between gap-4 px-4 pb-2.5 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <header className="material sticky top-0 z-20 border-b border-border pt-[env(safe-area-inset-top)]">
+        <div className="flex items-center justify-between gap-4 px-4 py-2.5">
           <div className="min-w-0">
-            <h1 className="truncate text-lg tracking-tight">{driverName}</h1>
-            {todayDate && (
-              <p className="text-xs text-muted-foreground first-letter:uppercase">
-                {formatLongDate(todayDate)}
-              </p>
-            )}
-            {(selectedSheetTab || manifest?.sheetTab) && (
-              <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                📋 {selectedSheetTab || manifest?.sheetTab}
-              </p>
-            )}
+            <h1 className="truncate text-lg font-semibold">{driverName}</h1>
+            <div className="flex items-center gap-1.5">
+              {todayDate && (
+                <p className="text-xs text-muted-foreground first-letter:uppercase">
+                  {formatLongDate(todayDate)}
+                </p>
+              )}
+              {(selectedSheetTab || manifest?.sheetTab) && (
+                <>
+                  {todayDate && <span className="text-tertiary-foreground" aria-hidden>·</span>}
+                  <p className="truncate text-xs text-muted-foreground">
+                    {selectedSheetTab || manifest?.sheetTab}
+                  </p>
+                </>
+              )}
+            </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setMenuOpen((v) => !v);
-                if (!menuOpen) void fetchTabs();
-              }}
-              className="flex size-9 items-center justify-center rounded-lg transition-colors hover:bg-muted"
-              aria-label="Menú"
-              aria-expanded={menuOpen}
-            >
-              {menuOpen ? (
-                <X className="size-5 text-foreground" />
-              ) : (
-                <Menu className="size-5 text-foreground" />
-              )}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen((v) => !v);
+              if (!menuOpen) void fetchTabs();
+            }}
+            className="pressable flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-primary"
+            aria-label="Menú"
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+          </button>
         </div>
 
->>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
         <SyncBar
           online={online}
           syncing={syncing}
@@ -483,117 +384,10 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         />
       </header>
 
-<<<<<<< HEAD
-      <main className="flex-1 px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3">
-        <h1 ref={largeTitle} className="text-3xl font-bold">
-          {driverName}
-        </h1>
-        {todayRoute && (
-          // `capitalize` pondría mayúscula en cada palabra ("4 De Agosto");
-          // solo queremos la inicial de la frase.
-          <p className="mt-0.5 text-sm text-muted-foreground first-letter:uppercase">
-            {formatLongDate(todayRoute.date)}
-            {total > 0 && ` · ${closed.length} de ${total} entregadas`}
-          </p>
-        )}
-
-        {total > 0 && (
-          <div
-            className="mt-3 h-1 overflow-hidden rounded-full bg-muted"
-            role="progressbar"
-            aria-valuenow={closed.length}
-            aria-valuemin={0}
-            aria-valuemax={total}
-            aria-label="Progreso de la jornada"
-          >
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
-              style={{ width: `${(closed.length / total) * 100}%` }}
-            />
-          </div>
-        )}
-
-        <div className="mt-5">
-          {loading ? (
-            <p className="py-16 text-center text-base text-muted-foreground">
-              Cargando…
-            </p>
-          ) : !manifest ? (
-            <EmptyState online={online} syncing={syncing} />
-          ) : (
-            <>
-              {todayRoute && <RouteSummary route={todayRoute} />}
-
-              {pending.length === 0 ? (
-                <div className="animate-rise-in rounded-xl bg-card px-6 py-12 text-center">
-                  <p className="text-base font-medium">
-                    {total === 0
-                      ? "Hoy no tienes pedidos asignados"
-                      : "Jornada completada"}
-                  </p>
-                  {total > 0 && (
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {total} {total === 1 ? "parada cerrada" : "paradas cerradas"}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <ul className="space-y-3">
-                  {pending.map((stop) => (
-                    <StopCard
-                      key={stop.id}
-                      stop={stop}
-                      onDelivered={handleDelivered}
-                      onIncident={handleIncident}
-                    />
-                  ))}
-                </ul>
-              )}
-
-              {closed.length > 0 && (
-                <Section
-                  title="Cerrados hoy"
-                  count={closed.length}
-                  open={showDone}
-                  onToggle={() => setShowDone((v) => !v)}
-                >
-                  <ul className="space-y-3">
-                    {closed.map((stop) => (
-                      <StopCard
-                        key={stop.id}
-                        stop={stop}
-                        onDelivered={handleDelivered}
-                        onIncident={handleIncident}
-                      />
-                    ))}
-                  </ul>
-                </Section>
-              )}
-
-              {manifest.tomorrow && manifest.tomorrow.stops.length > 0 && (
-                <Section
-                  title="Mañana"
-                  count={manifest.tomorrow.stops.length}
-                  open={showTomorrow}
-                  onToggle={() => setShowTomorrow((v) => !v)}
-                >
-                  {/* Lista agrupada de iOS: un solo bloque, con las filas
-                      separadas por una línea de medio píxel. */}
-                  <ul className="overflow-hidden rounded-xl bg-card">
-                    {manifest.tomorrow.stops.map((stop) => (
-                      <TomorrowRow key={stop.id} stop={stop} />
-                    ))}
-                  </ul>
-                </Section>
-              )}
-            </>
-          )}
-        </div>
-=======
       {/* ── Panel del menú hamburguesa ────────────────────────────────── */}
       {menuOpen && (
-        <div className="animate-fade-in border-b border-border bg-card/95 px-4 py-4 shadow-lg backdrop-blur-md">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <div className="material sticky top-[calc(env(safe-area-inset-top)+3.9rem)] z-10 animate-fade-in border-b border-border px-4 py-4">
+          <p className="mb-3 text-xs font-semibold text-muted-foreground">
             Selecciona la hoja
           </p>
           {loadingTabs ? (
@@ -605,7 +399,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
               No se han podido cargar las pestañas
             </p>
           ) : (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            <div className="flex flex-wrap gap-2">
               {tabs.map((tab) => {
                 const isActive =
                   tab === selectedSheetTab ||
@@ -616,10 +410,10 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                     type="button"
                     onClick={() => void handleTabSelect(tab)}
                     className={cn(
-                      "rounded-lg border px-3 py-2.5 text-xs font-medium transition-all",
+                      "pressable rounded-full px-3.5 py-2 text-sm font-medium",
                       isActive
-                        ? "border-foreground bg-foreground text-primary-foreground shadow-sm"
-                        : "border-border bg-background text-foreground hover:border-foreground/30 hover:bg-muted",
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-foreground",
                     )}
                   >
                     {tab}
@@ -633,7 +427,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
       <main className="flex-1 px-4 py-5">
         {loading ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">Cargando…</p>
+          <p className="py-16 text-center text-base text-muted-foreground">Cargando…</p>
         ) : !manifest ? (
           <EmptyState online={online} syncing={syncing} />
         ) : (
@@ -648,7 +442,6 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 onGenerateRoute={generateRoute}
                 onDelivered={handleDelivered}
                 onIncident={handleIncident}
-                customOrderIds={customOrderIds}
                 setRouteResult={setRouteResult}
                 setIsManualOrder={setIsManualOrder}
               />
@@ -670,39 +463,38 @@ export default function Dashboard({ driverName }: { driverName: string }) {
             )}
           </>
         )}
->>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
       </main>
 
       {/* ── Bottom Navigation ─────────────────────────────────────────── */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 flex border-t border-border bg-card/95 backdrop-blur-md pb-[max(env(safe-area-inset-bottom),0.5rem)] text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+      <nav className="material fixed bottom-0 left-0 right-0 z-20 mx-auto flex max-w-2xl border-t border-border pb-[env(safe-area-inset-bottom)]">
         <button
           onClick={() => setActiveTab("avui")}
           className={cn(
-            "flex flex-1 flex-col items-center justify-center gap-1 py-3 transition-colors",
-            activeTab === "avui" ? "text-foreground" : "hover:text-foreground/80",
+            "pressable flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium",
+            activeTab === "avui" ? "text-primary" : "text-tertiary-foreground",
           )}
         >
-          <Clock className="size-5" strokeWidth={activeTab === "avui" ? 2.5 : 2} />
+          <Clock className="size-6" strokeWidth={activeTab === "avui" ? 2.3 : 1.8} />
           Avui
         </button>
         <button
           onClick={() => setActiveTab("calendari")}
           className={cn(
-            "flex flex-1 flex-col items-center justify-center gap-1 py-3 transition-colors",
-            activeTab === "calendari" ? "text-foreground" : "hover:text-foreground/80",
+            "pressable flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium",
+            activeTab === "calendari" ? "text-primary" : "text-tertiary-foreground",
           )}
         >
-          <CalendarDays className="size-5" strokeWidth={activeTab === "calendari" ? 2.5 : 2} />
+          <CalendarDays className="size-6" strokeWidth={activeTab === "calendari" ? 2.3 : 1.8} />
           Calendari
         </button>
         <button
           onClick={() => setActiveTab("historial")}
           className={cn(
-            "flex flex-1 flex-col items-center justify-center gap-1 py-3 transition-colors",
-            activeTab === "historial" ? "text-foreground" : "hover:text-foreground/80",
+            "pressable flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium",
+            activeTab === "historial" ? "text-primary" : "text-tertiary-foreground",
           )}
         >
-          <History className="size-5" strokeWidth={activeTab === "historial" ? 2.5 : 2} />
+          <History className="size-6" strokeWidth={activeTab === "historial" ? 2.3 : 1.8} />
           Historial
         </button>
       </nav>
@@ -721,7 +513,6 @@ function TabAvui({
   onGenerateRoute,
   onDelivered,
   onIncident,
-  customOrderIds,
   setRouteResult,
   setIsManualOrder,
 }: {
@@ -733,7 +524,6 @@ function TabAvui({
   onGenerateRoute: () => void;
   onDelivered: (id: string) => void;
   onIncident: (id: string, note: string) => void;
-  customOrderIds: readonly string[];
   setRouteResult: (res: RouteResult | null) => void;
   setIsManualOrder: (b: boolean) => void;
 }) {
@@ -766,26 +556,16 @@ function TabAvui({
 
   if (todayStops.length === 0) {
     return (
-      <div className="animate-rise-in rounded-xl border border-border bg-card px-6 py-12 text-center shadow-sm">
-        <p className="text-base">No tens comandes programades per a avui</p>
-        <p className="mt-2 text-sm text-muted-foreground">Ves al Calendari per assignar comandes al dia d&apos;avui.</p>
+      <div className="animate-rise-in rounded-xl bg-card px-6 py-12 text-center">
+        <p className="text-base font-medium">No tens comandes programades per a avui</p>
+        <p className="mt-1 text-sm text-muted-foreground">Ves al Calendari per assignar comandes al dia d&apos;avui.</p>
       </div>
     );
   }
 
   return (
-<<<<<<< HEAD
-    <div className="mb-3 animate-rise-in rounded-xl bg-card p-4">
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">Ruta de hoy</p>
-          <p className="mt-0.5 text-xl font-semibold">
-            {[distance, duration].filter(Boolean).join(" · ") || "Sin calcular"}
-=======
     <>
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold tracking-tight">Repartiment d&apos;avui</h2>
-      </div>
+      <h2 className="mb-4 text-xl font-bold">Repartiment d&apos;avui</h2>
 
       {pendents.length > 0 && (
         <div className="mb-6 animate-rise-in">
@@ -798,11 +578,11 @@ function TabAvui({
               onClick={() => void onGenerateRoute()}
               disabled={generatingRoute || !online}
             >
-              <Route className="size-4" />
+              <Route />
               {generatingRoute
                 ? "Calculant ruta…"
-                : isManualOrder 
-                  ? `Calcular ruta (Ordre Manual)` 
+                : isManualOrder
+                  ? `Calcular ruta (ordre manual)`
                   : `Generar ruta (${pendents.length} parades)`}
             </Button>
           )}
@@ -811,7 +591,7 @@ function TabAvui({
 
       {enCurs.length > 0 && (
         <div className="mb-6 space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-status-en-curs">En Curs</h3>
+          <h3 className="px-1 text-sm font-semibold text-status-en-curs">En curs</h3>
           {enCurs.map((stop) => (
             <StopCard
               key={stop.id}
@@ -825,15 +605,15 @@ function TabAvui({
 
       {pendents.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-status-pendent">Pendents</h3>
+          <h3 className="px-1 text-sm font-semibold text-status-pendent">Pendents</h3>
           <ul className="space-y-3">
             {todayStops.map((stop, index) => {
               if (stop.statusCategory !== "pendent") return null;
-              
+
               // Calcular si es el primer o último pendiente
               const firstPendentIndex = todayStops.findIndex(s => s.statusCategory === "pendent");
               const lastPendentIndex = todayStops.findLastIndex(s => s.statusCategory === "pendent");
-              
+
               return (
                 <li key={stop.id}>
                   <StopCard
@@ -903,24 +683,26 @@ function TabCalendari({
     const assigned = calendarStopsByDate[selectedDate] || [];
     const isToday = selectedDate === todayDate;
     const isPast = Boolean(todayDate) && selectedDate < todayDate;
-    
+
     return (
-      <div className="space-y-6 animate-fade-in">
-        <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={() => setSelectedDate(null)}>
-            ← Tornar
+      <div className="animate-fade-in space-y-6">
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" onClick={() => setSelectedDate(null)} aria-label="Tornar">
+            <ChevronLeft />
           </Button>
-          <h2 className="text-lg font-semibold tracking-tight">
-            Repartiment del {selectedDate.split("-").reverse().join("/")}
-            {isToday && " (Avui)"}
-            {isPast && " (passat)"}
+          <h2 className="text-lg font-semibold">
+            {selectedDate.split("-").reverse().join("/")}
+            {isToday && " · Avui"}
+            {isPast && " · Passat"}
           </h2>
         </div>
 
         <div className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comandes Assignades ({assigned.length})</h3>
+          <h3 className="px-1 text-sm font-semibold text-muted-foreground">
+            Comandes assignades ({assigned.length})
+          </h3>
           {assigned.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No hi ha comandes assignades a aquest dia.</p>
+            <p className="px-1 text-sm text-muted-foreground">No hi ha comandes assignades a aquest dia.</p>
           ) : (
             <ul className="space-y-3">
               {assigned.map((stop) => (
@@ -932,16 +714,16 @@ function TabCalendari({
                   />
                   {/* Botón para desasignar (volver a la lista) */}
                   <div className="absolute right-3 top-3">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="h-7 text-[10px] px-2 shadow-sm border-red-200 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700"
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="text-destructive"
                       onClick={(e) => {
                         e.stopPropagation();
                         onAssignDate(stop.id, null);
                       }}
                     >
-                      <X className="size-3 mr-1" />
+                      <X />
                       Treure
                     </Button>
                   </div>
@@ -952,23 +734,25 @@ function TabCalendari({
         </div>
 
         {isPast ? (
-          <div className="space-y-2 pt-4 border-t border-border">
+          <div className="hairline space-y-2 pt-4">
             <p className="text-sm text-muted-foreground">
               Aquest dia ja ha passat: no s&apos;hi poden afegir comandes.
             </p>
             {assigned.length > 0 && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-tertiary-foreground">
                 Si alguna es va quedar sense entregar, fes <strong className="text-foreground">Treure</strong> i
                 assigna-la a un altre dia.
               </p>
             )}
           </div>
         ) : (
-          <div className="space-y-3 pt-4 border-t border-border">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-status-pendent">Afegir Comanda Ràpid</h3>
-            <p className="text-xs text-muted-foreground">Toca per assignar o <strong className="text-foreground">mantén premut</strong> per previsualitzar la comanda.</p>
+          <div className="hairline space-y-3 pt-4">
+            <h3 className="px-1 text-sm font-semibold text-status-pendent">Afegir comanda ràpid</h3>
+            <p className="px-1 text-xs text-tertiary-foreground">
+              Toca per assignar o <strong className="text-muted-foreground">mantén premut</strong> per previsualitzar la comanda.
+            </p>
             {unassignedStops.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No et queden comandes pendents d&apos;assignar.</p>
+              <p className="px-1 text-sm text-muted-foreground">No et queden comandes pendents d&apos;assignar.</p>
             ) : (
               <FastAssignList stops={unassignedStops} onAssign={(id) => onAssignDate(id, selectedDate)} />
             )}
@@ -979,21 +763,25 @@ function TabCalendari({
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-        <div className="mb-4 flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={prevMonth}>←</Button>
-          <h2 className="text-base font-semibold tracking-tight">
+    <div className="animate-fade-in space-y-6">
+      <div className="rounded-xl bg-card p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <Button variant="ghost" size="icon" onClick={prevMonth} aria-label="Mes anterior">
+            <ChevronLeft />
+          </Button>
+          <h2 className="text-base font-semibold">
             {MONTH_NAMES[currentMonth.month - 1]} {currentMonth.year}
           </h2>
-          <Button variant="ghost" size="sm" onClick={nextMonth}>→</Button>
+          <Button variant="ghost" size="icon" onClick={nextMonth} aria-label="Mes següent">
+            <ChevronRight />
+          </Button>
         </div>
 
-        <div className="grid grid-cols-7 gap-1 mb-2 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+        <div className="mb-1 grid grid-cols-7 text-center text-[11px] font-semibold text-tertiary-foreground">
           {WEEKDAY_NAMES.map(d => <div key={d}>{d}</div>)}
         </div>
-        
-        <div className="grid grid-cols-7 gap-1">
+
+        <div className="grid grid-cols-7 gap-y-1">
           {grid.map((date) => {
             const isToday = date === todayDate;
             const assignedCount = (calendarStopsByDate[date] || []).length;
@@ -1005,17 +793,25 @@ function TabCalendari({
               <button
                 key={date}
                 onClick={() => setSelectedDate(date)}
-                className={cn(
-                  "flex aspect-square flex-col items-center justify-center rounded-lg border transition-colors relative",
-                  isCurrentMonth ? "bg-card" : "bg-muted/30 text-muted-foreground/50",
-                  isToday ? "border-foreground" : "border-transparent hover:border-border",
-                )}
+                className="pressable relative flex aspect-square flex-col items-center justify-center gap-0.5"
               >
-                <span className={cn("text-sm", isToday && "font-bold")}>{dayNum}</span>
+                <span
+                  className={cn(
+                    "flex size-8 items-center justify-center rounded-full text-sm",
+                    !isCurrentMonth && "text-tertiary-foreground",
+                    isToday && "bg-primary font-semibold text-primary-foreground",
+                  )}
+                >
+                  {dayNum}
+                </span>
                 {assignedCount > 0 && (
-                  <span className="absolute bottom-1 right-1 flex size-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
-                    {assignedCount}
-                  </span>
+                  <span
+                    className={cn(
+                      "size-1.5 rounded-full",
+                      isToday ? "bg-primary" : "bg-muted-foreground",
+                    )}
+                    aria-hidden
+                  />
                 )}
               </button>
             );
@@ -1023,8 +819,8 @@ function TabCalendari({
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-        <h2 className="mb-3 text-sm font-semibold tracking-tight">Bossa de Comandes ({unassignedStops.length})</h2>
+      <div className="rounded-xl bg-card p-4">
+        <h2 className="mb-1 text-sm font-semibold">Bossa de comandes ({unassignedStops.length})</h2>
         <p className="text-xs text-muted-foreground">
           Clica en un dia del calendari per assignar aquestes comandes.
         </p>
@@ -1078,28 +874,30 @@ function FastAssignList({ stops, onAssign }: { stops: Stop[]; onAssign: (id: str
             onPointerUp={() => endPress(stop)}
             onPointerLeave={cancelPress}
             onPointerMove={cancelPress} // Si el dedo se mueve (scrolling), cancelamos
-            className="flex flex-col items-start gap-1 rounded-md border border-border bg-card p-3 text-left shadow-sm transition-colors active:bg-muted select-none touch-none"
+            className="pressable flex touch-none select-none flex-col items-start gap-0.5 rounded-xl bg-card p-3 text-left"
           >
-            <span className="font-semibold text-sm pointer-events-none truncate w-full">{stop.customer || stop.id}</span>
-            <span className="text-xs text-muted-foreground truncate w-full pointer-events-none">{stop.city || "Sense adreça"}</span>
+            <span className="w-full truncate text-sm font-semibold">{stop.customer || stop.id}</span>
+            <span className="w-full truncate text-xs text-muted-foreground">{stop.city || "Sense adreça"}</span>
           </button>
         ))}
       </div>
 
       {previewStop && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in" onClick={() => setPreviewStop(null)}>
-          <div className="w-full max-w-md relative" onClick={(e) => e.stopPropagation()}>
-            <Button 
-              variant="secondary" 
-              size="icon" 
-              className="absolute -top-12 right-0 rounded-full bg-white/10 hover:bg-white/20 text-white border-0"
+        <div className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => setPreviewStop(null)}>
+          <div className="relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="secondary"
+              size="icon"
+              className="absolute -top-12 right-0 rounded-full text-white"
               onClick={() => setPreviewStop(null)}
+              aria-label="Tancar"
             >
-              <X className="size-5" />
+              <X />
             </Button>
             <StopCard stop={previewStop} onDelivered={() => {}} onIncident={() => {}} />
-            <Button 
-              className="w-full mt-4" 
+            <Button
+              className="mt-4 w-full"
+              size="touch"
               onClick={() => {
                 onAssign(previewStop.id);
                 setPreviewStop(null);
@@ -1132,7 +930,7 @@ function TabHistorial({
   const filteredHistory = useMemo(() => {
     if (!searchTerm.trim()) return allHistory;
     const q = searchTerm.toLowerCase();
-    return allHistory.filter(stop => 
+    return allHistory.filter(stop =>
       stop.id.toLowerCase().includes(q) ||
       (stop.customer && stop.customer.toLowerCase().includes(q)) ||
       (stop.address && stop.address.toLowerCase().includes(q)) ||
@@ -1159,38 +957,38 @@ function TabHistorial({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4 bg-card rounded-xl p-4 shadow-sm border border-border">
+      <div className="flex items-center gap-4 rounded-xl bg-card p-4">
         <div className="flex-1">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Entregats</p>
+          <p className="text-xs font-semibold text-muted-foreground">Entregats</p>
           <p className="text-2xl font-semibold text-status-entregat">{historyStops.entregat.length}</p>
         </div>
-        <div className="w-px h-10 bg-border" />
+        <div className="h-10 w-px bg-border" />
         <div className="flex-1">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Incidències</p>
+          <p className="text-xs font-semibold text-muted-foreground">Incidències</p>
           <p className="text-2xl font-semibold text-status-incidencia">{historyStops.incidencia.length}</p>
         </div>
       </div>
 
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-        <input 
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-tertiary-foreground" />
+        <input
           type="search"
-          placeholder="Cerca per comanda, client o adreça..."
+          placeholder="Cerca per comanda, client o adreça…"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-card border border-border rounded-lg pl-9 pr-4 py-2.5 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/15"
+          className="w-full rounded-full bg-muted py-2.5 pl-10 pr-4 text-base outline-none placeholder:text-tertiary-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
         />
       </div>
 
       <div className="space-y-6">
         {groupedByDate.length === 0 ? (
-          <p className="text-center text-sm text-muted-foreground py-8">
+          <p className="py-8 text-center text-sm text-muted-foreground">
             No hi ha resultats a l&apos;historial.
           </p>
         ) : (
           groupedByDate.map(group => (
             <div key={group.date} className="space-y-3">
-              <h3 className="text-sm font-semibold tracking-tight text-foreground sticky top-16 bg-background/95 backdrop-blur py-1 z-10 border-b border-border/50">
+              <h3 className="sticky top-0 z-10 bg-background py-1 text-sm font-semibold">
                 {group.date === "Sense data" ? group.date : formatLongDate(group.date)}
               </h3>
               <ul className="space-y-3">
@@ -1213,128 +1011,43 @@ function RouteSummary({ route, onRecalculate, generating }: { route: RouteResult
   const duration = formatDuration(route.totalDurationSeconds);
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+    <div className="rounded-xl bg-card p-4">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+          <p className="text-sm text-muted-foreground">
             Ruta {route.optimized ? "optimitzada" : "ordre manual"}
           </p>
-          <p className="mt-1 text-xl tracking-tight">
+          <p className="mt-0.5 text-xl font-semibold">
             {[distance, duration].filter(Boolean).join(" · ") || "Calculada"}
->>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
           </p>
         </div>
-        <div className="flex flex-col gap-2">
+        <div className="flex shrink-0 flex-col items-end gap-2">
           {route.fullRouteUrl && (
             <Button asChild variant="secondary" size="sm">
               <a href={route.fullRouteUrl} target="_blank" rel="noopener noreferrer">
-                <Route className="size-4 mr-1" />
+                <Route />
                 Obrir Maps
               </a>
             </Button>
           )}
           {onRecalculate && (
-            <Button 
-              variant="outline" 
+            <Button
+              variant="ghost"
               size="sm"
-              onClick={onRecalculate} 
+              onClick={onRecalculate}
               disabled={generating}
-              className="text-primary border-primary/20 bg-primary/5 hover:bg-primary/10"
             >
-              🔄 {generating ? "Calculant..." : "Recalcular"}
+              {generating ? "Calculant…" : "Recalcular"}
             </Button>
           )}
         </div>
       </div>
       {!route.optimized && (
-<<<<<<< HEAD
         <p className="mt-3 rounded-lg bg-warning-surface px-3 py-2 text-sm text-warning-foreground">
-          No se ha podido calcular la ruta óptima. El orden mostrado es el de
-          prioridad del listado.
-=======
-        <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           Ruta calculada respectant el teu ordre manual.
->>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
         </p>
       )}
     </div>
-  );
-}
-
-<<<<<<< HEAD
-function TomorrowRow({ stop }: { stop: Stop }) {
-  return (
-    <li className="px-4 py-3 [&+li]:hairline">
-      <p className="text-base font-medium">{stop.customer || stop.address}</p>
-      <p className="mt-0.5 text-sm text-muted-foreground">{stop.address}</p>
-    </li>
-  );
-}
-=======
-// ── Category Section ───────────────────────────────────────────────────
->>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
-
-function CategorySection({
-  label,
-  color,
-  bgColor,
-  count,
-  open,
-  onToggle,
-  children,
-}: {
-  category: StatusCategory;
-  label: string;
-  color: string;
-  bgColor: string;
-  count: number;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  if (count === 0) return null;
-  return (
-<<<<<<< HEAD
-    <section className="mt-7">
-=======
-    <section className="mb-4">
->>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-<<<<<<< HEAD
-        className="pressable mb-2 flex w-full items-center gap-1.5 px-1 py-1 text-left"
-      >
-        <span className="text-sm font-semibold text-muted-foreground">
-          {title}
-        </span>
-        <span className="text-sm tabular-nums text-tertiary-foreground">
-          {count}
-        </span>
-=======
-        className={cn(
-          "mb-3 flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors",
-          bgColor,
-        )}
-      >
-        <span className={cn("text-xs font-semibold uppercase tracking-wide", color)}>
-          {label}
-        </span>
-        <Badge variant="secondary" className={cn("text-xs", color)}>
-          {count}
-        </Badge>
->>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
-        <ChevronDown
-          className={cn(
-            "ml-auto size-5 text-tertiary-foreground transition-transform duration-300",
-            open && "rotate-180",
-          )}
-          aria-hidden
-        />
-      </button>
-      {open && <div className="animate-fade-in">{children}</div>}
-    </section>
   );
 }
 
@@ -1343,31 +1056,20 @@ function CategorySection({
 function EmptyState({ online, syncing }: { online: boolean; syncing: boolean }) {
   if (syncing) {
     return (
-<<<<<<< HEAD
       <p className="py-16 text-center text-base text-muted-foreground">
-        Descargando tu ruta…
-=======
-      <p className="py-16 text-center text-sm text-muted-foreground">
-        Descarregant...
->>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
+        Descarregant…
       </p>
     );
   }
 
   return (
-<<<<<<< HEAD
     <div className="animate-rise-in rounded-xl bg-card px-6 py-12 text-center">
       <p className="text-base font-medium">
-        {online ? "Todavía no hay datos" : "Sin datos descargados"}
-=======
-    <div className="animate-rise-in rounded-xl border border-border bg-card px-6 py-12 text-center shadow-sm">
-      <p className="text-base">
         {online ? "Encara no hi ha dades" : "Sense dades descarregades"}
->>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
       </p>
       <p className="mt-1 text-sm text-muted-foreground">
         {online
-          ? "Selecciona una fulla del menú ☰ y prem Actualitzar."
+          ? "Selecciona una fulla del menú ☰ i prem Actualitzar."
           : "Connecta't a internet una vegada per descarregar les dades."}
       </p>
     </div>
