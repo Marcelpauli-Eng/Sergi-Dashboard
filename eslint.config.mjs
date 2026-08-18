@@ -12,10 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Service worker generado por Serwist en cada build: es código
-    // empaquetado y minificado, no fuente nuestra.
-    "public/sw.js",
-    "public/sw.js.map",
+    // Service workers generados por Serwist en cada build: código
+    // empaquetado y minificado, no fuente nuestra. El patrón cubre también
+    // las copias que aparecen con sufijo (" 2") al duplicarse el archivo.
+    "public/sw*.js",
+    "public/sw*.js.map",
+    "public/swe-worker*.js",
   ]),
   {
     rules: {

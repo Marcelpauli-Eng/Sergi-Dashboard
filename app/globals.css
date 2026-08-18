@@ -279,3 +279,41 @@ html {
     -webkit-backdrop-filter: none;
   }
 }
+
+/* ── Drag & Drop ─────────────────────────────────────────────────────── */
+
+.dragging {
+  opacity: 0.5;
+  transform: scale(0.98);
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.drag-over {
+  border-top: 2px solid var(--primary);
+}
+
+.drag-handle {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* ── Status category accent colors ───────────────────────────────────── */
+:root {
+  --status-pendent: #6b7280;
+  --status-en-curs: #7c3aed;
+  --status-entregat: #16a34a;
+  --status-incidencia: #ea580c;
+}
+
+@theme inline {
+  --color-status-pendent: var(--status-pendent);
+  --color-status-en-curs: var(--status-en-curs);
+  --color-status-entregat: var(--status-entregat);
+  --color-status-incidencia: var(--status-incidencia);
+}
+

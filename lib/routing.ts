@@ -162,6 +162,7 @@ function applyPriorityTiebreak(
 export async function optimizeRoute(
   depot: Coord,
   orders: Order[],
+  forceOrder: boolean = false,
 ): Promise<OptimizedRoute> {
   const routable = orders.filter((o) => o.lat !== null && o.lng !== null);
 
@@ -177,7 +178,7 @@ export async function optimizeRoute(
       })),
       totalDistanceMeters: null,
       totalDurationSeconds: null,
-      optimized: true,
+      optimized: true, // Se considera optimizada aunque sea 1 sola parada
     };
   }
 
@@ -191,7 +192,7 @@ export async function optimizeRoute(
     intermediates: routable.map((o) => point({ lat: o.lat!, lng: o.lng! })),
     travelMode: "DRIVE",
     routingPreference: "TRAFFIC_AWARE",
-    optimizeWaypointOrder: true,
+    optimizeWaypointOrder: !forceOrder,
     languageCode: "es-ES",
     units: "METRIC",
   };
@@ -240,20 +241,49 @@ export async function optimizeRoute(
   }
 
   const route = data.routes?.[0];
-  const order = route?.optimizedIntermediateWaypointIndex;
+  
+  // Si forceOrder es true, Google no devuelve optimizedIntermediateWaypointIndex
+  // por lo que generamos un array secuencial [0, 1, 2...]
+  const order = forceOrder 
+    ? Array.from({ length: routable.length }, (_, i) => i)
+    : route?.optimizedIntermediateWaypointIndex;
+    
   if (!route || !order || order.length !== routable.length) {
     return fallbackOrder(orders);
   }
 
-  // `optimizedIntermediateWaypointIndex[i]` es el índice original de la
-  // parada que ocupa la posición i en la ruta optimizada.
+  // `order[i]` es el índice original de la parada que ocupa la posición i en la ruta.
   let ordered = order.map((originalIndex) => routable[originalIndex]);
-  ordered = applyPriorityTiebreak(depot, ordered, 500);
+  let legsData = route.legs ?? [];
+  
+  // Si hemos forzado el orden manualmente, no tiene sentido romperlo aplicando
+  // el desempate por prioridad automático.
+  if (!forceOrder) {
+    // Asegurarnos de que empezamos por la parada más cercana (Google a veces da la vuelta
+    // al revés porque la ruta es circular).
+    if (ordered.length > 1) {
+      const dFirst = haversine(depot, { lat: ordered[0].lat!, lng: ordered[0].lng! });
+      const dLast = haversine(depot, { lat: ordered[ordered.length - 1].lat!, lng: ordered[ordered.length - 1].lng! });
+      
+      if (dLast < dFirst) {
+        ordered.reverse();
+        if (legsData.length > ordered.length) {
+          const reversedLegs = [];
+          for (let i = ordered.length; i >= 1; i--) {
+            reversedLegs.push(legsData[i]);
+          }
+          legsData = reversedLegs;
+        }
+      }
+    }
+
+    ordered = applyPriorityTiebreak(depot, ordered, 500);
+  }
 
   // Los tramos vienen alineados con el orden que devolvió Google. Tras el
   // desempate por prioridad ese emparejamiento deja de ser exacto, así que
   // se conservan como estimación del tramo, no como dato al metro.
-  const legs = (route.legs ?? []).slice(0, ordered.length).map((leg) => ({
+  const legs = legsData.slice(0, ordered.length).map((leg) => ({
     distanceMeters: leg.distanceMeters ?? null,
     durationSeconds: leg.duration ? parseInt(leg.duration, 10) : null,
   }));

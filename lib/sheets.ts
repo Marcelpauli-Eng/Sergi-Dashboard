@@ -27,8 +27,12 @@ function columnLetter(index: number): string {
 }
 
 /** Rango A1 con el nombre de pestaña escapado (puede llevar espacios). */
-function range(tab: string, a1: string): string {
-  return `${tab.replace(/'/g, "''")}!${a1}`;
+function range(a1: string, sheetTab?: string | null): string {
+  const tab = sheetTab ?? env.google.sheetTab;
+  if (!tab) return a1;
+  // Las comillas simples en el nombre de pestaña se escapan duplicándolas.
+  // Envolvemos siempre en comillas simples para que funcionen tabs con espacios.
+  return `'${tab.replace(/'/g, "''")}'!${a1}`;
 }
 
 async function sheetsFetch(path: string, init?: RequestInit): Promise<unknown> {
@@ -54,85 +58,60 @@ async function sheetsFetch(path: string, init?: RequestInit): Promise<unknown> {
   return response.json();
 }
 
-/** Nombres de todas las pestañas del documento, en su orden real. */
-async function listTabs(): Promise<string[]> {
-  const data = (await sheetsFetch("?fields=sheets.properties.title")) as {
+/**
+ * Devuelve los nombres de todas las pestañas (hojas) del Google Sheet.
+ */
+export async function listSheetTabs(): Promise<string[]> {
+  const data = (await sheetsFetch(
+    `?fields=sheets.properties.title`,
+  )) as {
     sheets?: { properties?: { title?: string } }[];
   };
+
   return (data.sheets ?? [])
-    .map((sheet) => sheet.properties?.title)
-    .filter((title): title is string => Boolean(title));
+    .map((s) => s.properties?.title ?? "")
+    .filter((title) => title.length > 0);
 }
 
-/**
- * La pestaña resuelta, cacheada por mes. La clave incluye el mes para que el
- * día 1 se vuelva a preguntar a Google en vez de seguir leyendo la de
- * diciembre hasta el siguiente despliegue.
- */
-let tabCache: { month: string; tab: string } | null = null;
-
-/**
- * Qué pestaña hay que leer hoy.
- *
- * Con `GOOGLE_SHEET_TAB` definida se usa esa y no se pregunta nada. Si no:
- * la del mes en curso; y si todavía no existe, la más reciente anterior.
- * Ver lib/sheet-tab.ts.
- */
-export async function resolveSheetTab(): Promise<string> {
-  const configured = env.google.sheetTab;
-  if (configured) return configured;
-
-  const month = today(env.timezone).slice(0, 7); // YYYY-MM
-  if (tabCache?.month === month) return tabCache.tab;
-
-  const tabs = await listTabs();
-
-  const found = findMonthTab(tabs, month);
-  if (found) {
-    tabCache = { month, tab: found };
-    return found;
-  }
-
-  const fallback = findLatestTabUpTo(tabs, month);
-  if (!fallback) throw new Error(noTabFoundMessage(tabs, month));
-
-  // A propósito SIN cachear: la pestaña del mes puede crearse en cualquier
-  // momento, y cachear el apaño dejaría al servidor leyendo la del mes
-  // pasado hasta el siguiente despliegue. Cuesta una llamada de más por
-  // petición, solo mientras dure la situación anómala.
-  console.warn(
-    `No hay pestaña para ${month}; se usa la más reciente: "${fallback}". ` +
-      "Crea la del mes nuevo para que aparezcan los pedidos de hoy.",
-  );
-  return fallback;
-}
-
-/** Minúsculas y sin acentos, para comparar lo que escribe la oficina a mano. */
-function plain(raw: unknown): string {
-  return String(raw ?? "")
+function parseStatus(raw: unknown): DeliveryStatus {
+  const text = String(raw ?? "")
     .trim()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // diacríticos
     .toLowerCase();
-}
-
-function parseStatus(raw: unknown): DeliveryStatus {
-  const text = plain(raw);
+  // Si la celda está vacía, el pedido está pendiente.
   if (text === "") return "pendiente";
-  if (
-    // Las formas catalanas ("entregat", "lliurat") son las que usa la hoja.
-    ["entregado", "entregada", "entregat", "lliurat", "lliurada", "fet"].includes(text) ||
-    ["si", "ok", "x", "true", "1"].includes(text)
-  ) {
+  if (["entregado", "entregada", "entregat", "si", "sí", "ok", "x", "true", "1"].includes(text)) {
     return "entregado";
   }
+  if (["pendent", "pendiente", "pendent de recollir"].includes(text)) {
+    return "pendiente";
+  }
   if (
-    ["incidencia", "ausente", "absent", "rechazado", "rebutjat", "ko"].includes(text) ||
-    ["no entregado", "no entregat"].includes(text)
+    [
+      "incidencia",
+      "incidència",
+      "ausente",
+      "rechazado",
+      "rebutjat",
+      "no entregado",
+      "no entregat",
+      "ko",
+    ].includes(text)
   ) {
     return "incidencia";
   }
+  // Cualquier otro valor (ej: "Entregat -", "Recollir") se trata como pendiente.
   return "pendiente";
+}
+
+function parseStatusCategory(raw: unknown): "pendent" | "en_curs" | "entregat" | "incidencia" {
+  const t = String(raw ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (t === "") return "pendent";
+  if (["entregado", "entregada", "entregat", "si", "ok", "x", "true", "1"].includes(t)) return "entregat";
+  if (["incidencia", "ausente", "rechazado", "rebutjat", "no entregado", "no entregat", "ko"].includes(t)) return "incidencia";
+  if (["en curs", "en curso", "en camino", "en ruta"].includes(t)) return "en_curs";
+  return "pendent";
 }
 
 function parseNumber(raw: unknown): number | null {
@@ -155,13 +134,13 @@ function parsePriority(raw: unknown): number {
   const numeric = parseNumber(raw);
   if (numeric !== null) return numeric;
 
-  const text = plain(raw);
-  if (text === "") return NO_PRIORITY;
-  if (["urgent", "urgente", "alta", "alt", "prioritario", "alta prioridad"].includes(text)) {
+  const textStr = text(raw);
+  if (textStr === "") return NO_PRIORITY;
+  if (["urgent", "urgente", "alta", "alt", "prioritario", "alta prioridad"].includes(textStr)) {
     return 10;
   }
-  if (["normal", "media", "mitja", "estandar", "standard"].includes(text)) return 20;
-  if (["baja", "baixa", "baix", "bajo"].includes(text)) return 30;
+  if (["normal", "media", "mitja", "estandar", "standard"].includes(textStr)) return 20;
+  if (["baja", "baixa", "baix", "bajo"].includes(textStr)) return 30;
 
   // Un texto que no reconocemos no debe colarse por delante de nada.
   return NO_PRIORITY;
@@ -178,6 +157,7 @@ export interface SheetSnapshot {
   headerMap: Partial<Record<ColumnKey, number>>;
   /** Filas que se descartaron y por qué, para poder avisar en logs. */
   skipped: { rowNumber: number; reason: string }[];
+<<<<<<< HEAD
   /**
    * Pestaña de la que salió este snapshot. Viaja con él para que la escritura
    * de vuelta vaya exactamente a la misma, aunque entretanto cambie el mes.
@@ -197,6 +177,10 @@ export interface SheetSnapshot {
    * su idioma sea cual sea.
    */
   statusWords: Partial<Record<DeliveryStatus, string>>;
+=======
+  /** Nombre de la pestaña que se leyó. */
+  sheetTab: string | null;
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
 }
 
 /**
@@ -204,19 +188,21 @@ export interface SheetSnapshot {
  *
  * Se piden los valores sin formatear y las fechas como número de serie:
  * así el parseo no depende del locale con el que esté configurada la hoja.
+ *
+ * @param sheetTab - Nombre de la pestaña a leer. Si no se pasa, usa la de env.
  */
-export async function readSheet(): Promise<SheetSnapshot> {
-  const tab = await resolveSheetTab();
+export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot> {
+  const tab = sheetTab ?? env.google.sheetTab;
 
   const data = (await sheetsFetch(
-    `/values/${encodeURIComponent(range(tab, "A1:ZZ"))}` +
+    `/values/${encodeURIComponent(range("A1:ZZ", tab))}` +
       `?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
   )) as { values?: unknown[][] };
 
   const rows = data.values ?? [];
   if (rows.length === 0) {
     throw new Error(
-      `La pestaña "${tab}" está vacía: la fila 1 debe tener las cabeceras.`,
+      `La pestaña "${tab}" está vacía. Comprueba el nombre de la pestaña.`,
     );
   }
 
@@ -236,30 +222,37 @@ export async function readSheet(): Promise<SheetSnapshot> {
   const seenIds = new Set<string>();
   const statusWords: Partial<Record<DeliveryStatus, string>> = {};
 
+  // Comprobar si hay columna driverId y date
+  const hasDriverId = headerMap["driverId"] !== undefined;
+  const hasDate = headerMap["date"] !== undefined;
+
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i] ?? [];
     const rowNumber = i + 1; // Sheets numera desde 1 y la fila 1 es la cabecera.
 
     const id = text(cell(row, "id"));
-    // La calle sola no basta para geocodificar: "Carrer Major, 53" existe en
-    // media Cataluña. Si el municipio va en su propia columna, se une aquí.
-    const address = [text(cell(row, "address")), text(cell(row, "town"))]
-      .filter(Boolean)
-      .join(", ");
-    const driverId = text(cell(row, "driverId")).toLowerCase();
-    const date = parseSheetDate(cell(row, "date"));
+    const address = text(cell(row, "address"));
+    const driverId = hasDriverId ? text(cell(row, "driverId")).toLowerCase() : "";
+    const rawCreation = cell(row, "creationDate");
+    const parsedCreation = parseSheetDate(rawCreation);
+    const creationDate = parsedCreation ?? (text(rawCreation) || null);
+    const date = hasDate ? parseSheetDate(cell(row, "date")) : null;
 
     // Filas completamente vacías: se ignoran sin ruido.
-    if (!id && !address && !driverId) continue;
+    if (!id && !address) continue;
 
     if (!id) {
-      skipped.push({ rowNumber, reason: "sin ID de pedido" });
+      skipped.push({ rowNumber, reason: "sin ID de pedido (Nº Comanda)" });
       continue;
     }
     if (seenIds.has(id)) {
       skipped.push({ rowNumber, reason: `ID duplicado "${id}"` });
       continue;
     }
+<<<<<<< HEAD
+=======
+    // Las órdenes sin fecha de reparto son totalmente válidas (se quedan en la bolsa de pendientes).
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
     if (!address) {
       skipped.push({ rowNumber, reason: "sin dirección" });
       continue;
@@ -267,28 +260,43 @@ export async function readSheet(): Promise<SheetSnapshot> {
 
     seenIds.add(id);
 
+<<<<<<< HEAD
     // La primera vez que se ve cada estado se guarda tal cual lo escribe la
     // hoja, para poder devolvérselo con su misma ortografía.
     const rawStatus = text(cell(row, "status"));
     const parsedStatus = parseStatus(rawStatus);
     if (rawStatus && !statusWords[parsedStatus]) statusWords[parsedStatus] = rawStatus;
+=======
+    // Construir dirección completa con la ciudad si existe
+    const city = text(cell(row, "city")) || null;
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
 
     orders.push({
       id,
       driverId,
-      date,
-      priority: parsePriority(cell(row, "priority")),
+      creationDate,
+      date: date ?? "",
+      priority: parseNumber(cell(row, "priority")) ?? Number.MAX_SAFE_INTEGER,
       customer: text(cell(row, "customer")),
       address,
+      city,
       phone: text(cell(row, "phone")) || null,
+      measures: text(cell(row, "measures")) || null,
       notes: text(cell(row, "notes")) || null,
+<<<<<<< HEAD
       status: parsedStatus,
+=======
+      status: parseStatus(cell(row, "status")),
+      rawStatus: text(cell(row, "status")),
+      statusCategory: parseStatusCategory(cell(row, "status")),
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
       lat: parseNumber(cell(row, "lat")),
       lng: parseNumber(cell(row, "lng")),
       rowNumber,
     });
   }
 
+<<<<<<< HEAD
   return {
     orders,
     headerMap,
@@ -297,6 +305,9 @@ export async function readSheet(): Promise<SheetSnapshot> {
     hasDriverColumn: headerMap.driverId !== undefined,
     statusWords,
   };
+=======
+  return { orders, headerMap, skipped, sheetTab: tab };
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
 }
 
 /**
@@ -307,9 +318,10 @@ export async function readSheet(): Promise<SheetSnapshot> {
  * Devuelve el headerMap actualizado.
  */
 export async function ensureManagedColumns(
-  tab: string,
   headerMap: Partial<Record<ColumnKey, number>>,
+  sheetTab?: string | null,
 ): Promise<Partial<Record<ColumnKey, number>>> {
+  const tab = sheetTab ?? env.google.sheetTab;
   const missing = MANAGED_COLUMNS.filter((key) => headerMap[key] === undefined);
   if (missing.length === 0) return headerMap;
 
@@ -323,17 +335,30 @@ export async function ensureManagedColumns(
   const newHeaders: string[] = [];
   const startIndex = nextIndex;
 
+  // Dos campos del modelo pueden compartir cabecera —`date` y `deliveredAt`
+  // apuntan los dos a "Data entrega"—, así que se crea una sola columna y
+  // ambos la comparten. Sin esto saldrían dos columnas con el mismo nombre.
+  const createdAt = new Map<string, number>();
   for (const key of missing) {
-    newHeaders.push(canonicalHeader(key));
+    const header = canonicalHeader(key);
+    const yaCreada = createdAt.get(header);
+    if (yaCreada !== undefined) {
+      updated[key] = yaCreada;
+      continue;
+    }
+    newHeaders.push(header);
+    createdAt.set(header, nextIndex);
     updated[key] = nextIndex;
     nextIndex++;
   }
+
+  if (newHeaders.length === 0) return updated;
 
   const startCell = `${columnLetter(startIndex)}1`;
   const endCell = `${columnLetter(nextIndex - 1)}1`;
 
   await sheetsFetch(
-    `/values/${encodeURIComponent(range(tab, `${startCell}:${endCell}`))}` +
+    `/values/${encodeURIComponent(range(`${startCell}:${endCell}`, tab))}` +
       `?valueInputOption=RAW`,
     { method: "PUT", body: JSON.stringify({ values: [newHeaders] }) },
   );
@@ -349,16 +374,17 @@ interface CellUpdate {
 }
 
 async function writeCells(
-  tab: string,
   updates: CellUpdate[],
   headerMap: Partial<Record<ColumnKey, number>>,
+  sheetTab?: string | null,
 ): Promise<void> {
+  const tab = sheetTab ?? env.google.sheetTab;
   const data = updates
     .map((update) => {
       const columnIndex = headerMap[update.column];
       if (columnIndex === undefined) return null;
       const a1 = `${columnLetter(columnIndex)}${update.rowNumber}`;
-      return { range: range(tab, a1), values: [[update.value]] };
+      return { range: range(a1, tab), values: [[update.value]] };
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
@@ -462,11 +488,12 @@ export interface WriteResult {
  */
 export async function writeDeliveries(
   records: DeliveryRecord[],
+  sheetTab?: string | null,
 ): Promise<WriteResult> {
   if (records.length === 0) return { applied: [], notFound: [] };
 
-  const snapshot = await readSheet();
-  const headerMap = await ensureManagedColumns(snapshot.tab, snapshot.headerMap);
+  const snapshot = await readSheet(sheetTab);
+  const headerMap = await ensureManagedColumns(snapshot.headerMap, sheetTab);
   const byId = new Map(snapshot.orders.map((order) => [order.id, order]));
   const dropdown = await dropdownStatusWords(snapshot.tab, headerMap);
 
@@ -481,6 +508,7 @@ export async function writeDeliveries(
       continue;
     }
 
+<<<<<<< HEAD
     updates.push({
       rowNumber: order.rowNumber,
       column: "status",
@@ -492,17 +520,40 @@ export async function writeDeliveries(
       value: formatSheetTimestamp(record.recordedAt, env.timezone),
     });
     if (record.note) {
+=======
+    const type = record.type || "status";
+
+    if (type === "status") {
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
       updates.push({
         rowNumber: order.rowNumber,
-        column: "incidentNote",
-        value: record.note,
+        column: "status",
+        value: record.status === "entregado" ? "Entregat" : "Incidència",
+      });
+      updates.push({
+        rowNumber: order.rowNumber,
+        column: "deliveredAt",
+        value: formatSheetTimestamp(record.recordedAt, env.timezone),
+      });
+      if (record.note) {
+        updates.push({
+          rowNumber: order.rowNumber,
+          column: "incidentNote",
+          value: record.note,
+        });
+      }
+    } else if (type === "date") {
+      updates.push({
+        rowNumber: order.rowNumber,
+        column: "date",
+        value: record.date ? record.date : "",
       });
     }
 
     applied.push(record.orderId);
   }
 
-  await writeCells(snapshot.tab, updates, headerMap);
+  await writeCells(updates, headerMap, sheetTab);
   return { applied, notFound };
 }
 
@@ -516,7 +567,7 @@ export async function cacheCoordinates(
 ): Promise<void> {
   if (coords.length === 0) return;
 
-  const headerMap = await ensureManagedColumns(snapshot.tab, snapshot.headerMap);
+  const headerMap = await ensureManagedColumns(snapshot.headerMap, snapshot.sheetTab);
   const byId = new Map(snapshot.orders.map((order) => [order.id, order]));
 
   const updates: CellUpdate[] = [];
@@ -527,5 +578,5 @@ export async function cacheCoordinates(
     updates.push({ rowNumber: order.rowNumber, column: "lng", value: coord.lng });
   }
 
-  await writeCells(snapshot.tab, updates, headerMap);
+  await writeCells(updates, headerMap, snapshot.sheetTab);
 }

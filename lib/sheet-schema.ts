@@ -16,6 +16,9 @@
 export const COLUMNS = {
   /** Identificador único del pedido. Obligatoria. */
   id: [
+    "Nº Comanda",
+    "N Comanda",
+    "Numero Comanda",
     "ID Pedido",
     "ID",
     "Pedido",
@@ -23,19 +26,12 @@ export const COLUMNS = {
     "Nº Albaran",
     "Referencia",
     "Ref",
-    "Nº Comanda",
-    "Comanda",
   ],
 
-  /**
-   * A qué transportista está asignado. OPCIONAL.
-   *
-   * Si la hoja no tiene esta columna, la app entiende que hay un único
-   * transportista y le enseña todos los pedidos del día sin filtrar. El día
-   * que se añada la columna, el filtro se activa solo.
-   */
-  driverId: ["Transportista", "Repartidor", "Conductor", "Chofer", "Driver", "Xofer"],
+  /** A qué transportista está asignado. Opcional (el Sheet real no la tiene). */
+  driverId: ["Transportista", "Repartidor", "Conductor", "Chofer", "Driver", "Tr"],
 
+<<<<<<< HEAD
   /**
    * Fecha del pedido. OPCIONAL: es informativa, no decide nada.
    *
@@ -47,38 +43,29 @@ export const COLUMNS = {
    * entregado, que es justo lo que hay que enseñar.
    */
   date: ["Fecha", "Fecha Reparto", "Fecha Entrega", "Dia", "Date", "Data"],
+=======
+  /** Fecha de creación / registro original (columna A). */
+  creationDate: ["Data", "Fecha de creación", "Fecha creacion", "Creado", "Fecha de registro"],
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
 
-  /**
-   * Prioridad. Menor número = antes. Opcional (si falta, todas iguales).
-   * Admite también texto: ver `parsePriority` en lib/sheets.ts.
-   */
-  priority: ["Prioridad", "Orden", "Priority", "Prioritat"],
+  /** Fecha de reparto (asignada en el calendario). Opcional. */
+  date: ["Data entrega", "Data de entrega", "Data d'entrega", "Fecha Reparto", "Fecha Entrega", "Dia", "Date", "Fecha"],
 
-  customer: ["Cliente", "Nombre", "Destinatario", "Customer", "Client"],
+  /** Prioridad. Menor número = antes. Opcional (si falta, todas iguales). */
+  priority: ["Prioritat", "Prioridad", "Orden", "Priority"],
 
-  /** Calle y número. Obligatoria. */
-  address: ["Direccion", "Dirección", "Domicilio", "Address", "Adreça", "Carrer"],
+  customer: ["Client", "Cliente", "Nombre", "Destinatario", "Customer"],
 
-  /**
-   * Municipio y código postal, cuando van en una columna aparte de la calle.
-   *
-   * Opcional: si existe, se concatena con `address` antes de geocodificar.
-   * Sin ella, "Carrer Major, 53" a secas es ambiguo — hay uno en casi cada
-   * pueblo de Cataluña — y Google devuelve unas coordenadas cualesquiera.
-   */
-  town: [
-    "Poblacion",
-    "Población",
-    "Població",
-    "Municipio",
-    "Municipi",
-    "Localidad",
-    "Localitat",
-    "Ciudad",
-    "Ciutat",
-  ],
+  /** Dirección completa para geocodificar y navegar. Obligatoria. */
+  address: ["Adreça", "Adreca", "Direccion", "Dirección", "Domicilio", "Address"],
 
-  phone: ["Telefono", "Teléfono", "Movil", "Contacto", "Phone", "Telèfon", "Mòbil"],
+  /** Población / ciudad. Complementa la dirección. */
+  city: ["Població", "Poblacio", "Población", "Poblacion", "Ciudad", "City"],
+
+  phone: ["Telefon", "Telefono", "Teléfono", "Movil", "Contacto", "Phone"],
+
+  /** Medidas del paquete. */
+  measures: ["Mides", "Medidas", "Measures", "Dimensiones"],
 
   notes: [
     "Observaciones",
@@ -92,14 +79,33 @@ export const COLUMNS = {
   ],
 
   /** Estado de la entrega. La app ESCRIBE aquí. */
-  status: ["Estado", "Status", "Entregado", "Estat de l'entrega", "Estat"],
+  status: [
+    "Estat de l'entrega",
+    "Estat entrega",
+    "Estat",
+    "Estado",
+    "Status",
+    "Entregado",
+  ],
 
-  /** Momento de la entrega. La app ESCRIBE aquí. */
+  /** Momento de la entrega (timestamp real de cuando el repartidor lo entrega). La app ESCRIBE aquí. */
+  /**
+   * Dónde se escribe el momento real de la entrega.
+   *
+   * "Data entrega" va primero a propósito: en la hoja de la oficina es el
+   * mismo hueco donde el calendario deja la fecha prevista, y al entregar se
+   * sobrescribe con la fecha y la hora del botón. Es lo que se quiere, y
+   * además evita que la app cree una columna aparte que ya se borró una vez.
+   *
+   * Ojo: apunta a la misma columna que `date`. Ver el dedup por nombre en
+   * `ensureManagedColumns`, que impide crearla dos veces.
+   */
   deliveredAt: [
+    "Data entrega",
     "Hora Entrega",
+    "Hora de Entrega",
     "Fecha Entrega Real",
     "Entregado El",
-    "Data entrega",
     "Data Lliurament",
   ],
 
@@ -120,10 +126,15 @@ export type ColumnKey = keyof typeof COLUMNS;
 
 /**
  * Columnas sin las cuales no podemos funcionar.
+<<<<<<< HEAD
  *
  * Ni `driverId` ni `date` están aquí a propósito: con un solo transportista
  * la hoja no necesita decir a quién va cada pedido, y la fecha es
  * informativa. Ver los comentarios de cada uno.
+=======
+ * Solo id y address son realmente obligatorias — el Sheet real no tiene
+ * ni driverId ni date (usa pestañas por mes).
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
  */
 export const REQUIRED_COLUMNS: ColumnKey[] = ["id", "address"];
 
@@ -134,6 +145,7 @@ export const MANAGED_COLUMNS: ColumnKey[] = [
   "incidentNote",
   "lat",
   "lng",
+  "date",
 ];
 
 /**

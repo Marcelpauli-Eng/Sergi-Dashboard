@@ -10,22 +10,37 @@ export type DeliveryStatus = "pendiente" | "entregado" | "incidencia";
 
 /** Una fila del Sheet, ya normalizada. */
 export interface Order {
-  /** Identificador único e inmutable del pedido (nº de albarán o similar). */
+  /** Identificador único e inmutable del pedido (nº de comanda). */
   id: string;
-  /** Código del transportista al que está asignado. */
+  /** Código del transportista al que está asignado. Vacío si el Sheet no tiene esa columna. */
   driverId: string;
+<<<<<<< HEAD
   /**
    * Fecha del pedido en formato YYYY-MM-DD, o `null` si la hoja no la trae.
    * Es informativa: no decide qué se enseña. Ver lib/manifest.ts.
    */
   date: string | null;
+=======
+  /** Fecha de creación o de registro en el Sheet por parte de la empresa. */
+  creationDate: string | null;
+  /** Fecha de reparto en formato YYYY-MM-DD. Vacío si el Sheet usa pestañas por mes. */
+  date: string;
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
   /** Prioridad tal cual viene del Sheet. Menor número = más prioritario. */
   priority: number;
   customer: string;
   address: string;
+  /** Población / ciudad. Complementa la dirección. */
+  city: string | null;
   phone: string | null;
+  /** Medidas del paquete. */
+  measures: string | null;
   notes: string | null;
   status: DeliveryStatus;
+  /** Valor original de la celda "Estat de l'entrega", sin transformar. Vacío si la celda no tiene valor. */
+  rawStatus: string;
+  /** Categoría de estado derivada del valor original de la celda. */
+  statusCategory: "pendent" | "en_curs" | "entregat" | "incidencia";
   /** Coordenadas cacheadas en el Sheet para no re-geocodificar cada día. */
   lat: number | null;
   lng: number | null;
@@ -80,6 +95,8 @@ export interface Manifest {
    * forma bien visible para que nadie los confunda con pedidos reales.
    */
   demo?: boolean;
+  /** Nombre de la pestaña del Sheet que se está usando. */
+  sheetTab: string;
   today: RouteDay;
   tomorrow: RouteDay | null;
 }
@@ -92,11 +109,14 @@ export interface DeliveryRecord {
   /** UUID generado en el cliente. Garantiza idempotencia si se reintenta. */
   clientId: string;
   orderId: string;
-  status: Exclude<DeliveryStatus, "pendiente">;
+  /** Tipo de actualización. Si no se especifica, por retrocompatibilidad se asume "status". */
+  type?: "status" | "date";
+  status?: Exclude<DeliveryStatus, "pendiente">;
+  date?: string | null;
   /** ISO timestamp del momento real en que se pulsó el botón, no del envío. */
   recordedAt: string;
   /** Texto libre, solo para incidencias. */
-  note: string | null;
+  note?: string | null;
 }
 
 /** Datos públicos de un transportista. El PIN nunca sale del servidor. */

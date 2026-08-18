@@ -3,13 +3,16 @@ import { env } from "./env";
 import { readSheet, cacheCoordinates, type SheetSnapshot } from "./sheets";
 import {
   geocodeAddress,
-  optimizeRoute,
   navUrlFor,
-  fullRouteUrlFor,
   type Coord,
 } from "./routing";
+<<<<<<< HEAD
 import { today, type DateString } from "./dates";
 import type { Manifest, Order, RouteDay, Stop } from "./types";
+=======
+import { today, addDays } from "./dates";
+import type { Manifest, Order, Stop } from "./types";
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
 
 /**
  * Coordenadas de la central. Se geocodifican una sola vez por instancia:
@@ -17,7 +20,7 @@ import type { Manifest, Order, RouteDay, Stop } from "./types";
  */
 let depotCoord: Coord | null = null;
 
-async function getDepotCoord(): Promise<Coord> {
+export async function getDepotCoord(): Promise<Coord> {
   if (!depotCoord) {
     const coord = await geocodeAddress(env.depotAddress);
     if (!coord) {
@@ -35,8 +38,11 @@ async function getDepotCoord(): Promise<Coord> {
  * Sheet para no repetir el trabajo mañana.
  *
  * Muta los pedidos recibidos: a partir de aquí ya tienen lat/lng.
+ *
+ * Para las direcciones que tienen ciudad, se concatena para mejorar la
+ * precisión del geocoding.
  */
-async function fillMissingCoordinates(
+export async function fillMissingCoordinates(
   orders: Order[],
   snapshot: SheetSnapshot,
 ): Promise<void> {
@@ -48,10 +54,14 @@ async function fillMissingCoordinates(
   // En serie a propósito: son pocas direcciones nuevas al día y así no se
   // dispara el rate limit de la Geocoding API en un pico.
   for (const order of pending) {
-    const coord = await geocodeAddress(order.address);
+    // Construir dirección completa con la ciudad si existe
+    const fullAddress = order.city
+      ? `${order.address}, ${order.city}`
+      : order.address;
+    const coord = await geocodeAddress(fullAddress);
     if (!coord) {
       console.warn(
-        `Dirección no reconocida por Google (pedido ${order.id}): "${order.address}"`,
+        `Dirección no reconocida por Google (pedido ${order.id}): "${fullAddress}"`,
       );
       continue;
     }
@@ -71,81 +81,12 @@ async function fillMissingCoordinates(
   }
 }
 
-/**
- * Construye la ruta de un día concreto.
- *
- * Solo entran en la optimización los pedidos pendientes: si el transportista
- * sincroniza a media mañana, lo ya entregado no debe seguir apareciendo como
- * parada de la ruta.
- */
-async function buildRouteDay(
-  date: DateString,
-  orders: Order[],
-  depot: Coord,
-): Promise<RouteDay> {
-  const pending = orders.filter((o) => o.status === "pendiente");
-  const done = orders.filter((o) => o.status !== "pendiente");
-
-  const route =
-    pending.length > 0
-      ? await optimizeRoute(depot, pending)
-      : {
-          ordered: [] as Order[],
-          legs: [] as { distanceMeters: number | null; durationSeconds: number | null }[],
-          totalDistanceMeters: null,
-          totalDurationSeconds: null,
-          optimized: true,
-        };
-
-  const toStop = (order: Order, index: number, sequence: number): Stop => {
-    // `rowNumber` no viaja al cliente: se recalcula al escribir.
-    const { rowNumber: _rowNumber, ...rest } = order;
-    return {
-      ...rest,
-      sequence,
-      navUrl: navUrlFor(order),
-      legDistanceMeters: route.legs[index]?.distanceMeters ?? null,
-      legDurationSeconds: route.legs[index]?.durationSeconds ?? null,
-    };
-  };
-
-  const stops: Stop[] = route.ordered.map((order, index) =>
-    toStop(order, index, index + 1),
-  );
-
-  // Los ya cerrados van al final, sin número de parada.
-  const closed: Stop[] = done
-    .sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id))
-    .map((order) => {
-      const { rowNumber: _rowNumber, ...rest } = order;
-      return {
-        ...rest,
-        sequence: 0,
-        navUrl: navUrlFor(order),
-        legDistanceMeters: null,
-        legDurationSeconds: null,
-      };
-    });
-
-  return {
-    date,
-    stops: [...stops, ...closed],
-    optimized: route.optimized,
-    fullRouteUrl: fullRouteUrlFor(env.depotAddress, route.ordered),
-    totalDistanceMeters: route.totalDistanceMeters,
-    totalDurationSeconds: route.totalDurationSeconds,
-  };
-}
-
-/**
- * Genera el paquete completo que se descarga el transportista: todo lo que
- * necesita para trabajar el día entero sin cobertura.
- */
 export async function buildManifest(
   driverId: string,
   driverName: string,
+  sheetTab?: string,
 ): Promise<Manifest> {
-  const snapshot = await readSheet();
+  const snapshot = await readSheet(sheetTab);
 
   if (snapshot.skipped.length > 0) {
     console.warn(
@@ -158,6 +99,7 @@ export async function buildManifest(
   const todayDate = today(env.timezone);
   const normalizedDriver = driverId.toLowerCase();
 
+<<<<<<< HEAD
   // Qué entra en la ruta: todo lo que no está entregado.
   //
   // No se filtra por fecha a propósito. En la hoja no hay ninguna columna
@@ -182,13 +124,54 @@ export async function buildManifest(
   const depot = await getDepotCoord();
 
   const todayRoute = await buildRouteDay(todayDate, mine, depot);
+=======
+  const hasDriverColumn = snapshot.orders.some((o) => o.driverId !== "");
+  const hasDateColumn = snapshot.orders.some((o) => o.date !== "");
+
+  let mine: Order[];
+
+  if (hasDriverColumn) {
+    mine = snapshot.orders.filter(
+      (order) => order.driverId === normalizedDriver,
+    );
+  } else {
+    mine = snapshot.orders;
+  }
+
+  const sorted = [...mine].sort(
+    (a, b) => a.priority - b.priority || a.id.localeCompare(b.id),
+  );
+
+  const stops: Stop[] = sorted.map((order, index) => {
+    const { rowNumber: _rowNumber, ...rest } = order;
+    return {
+      ...rest,
+      sequence: index + 1,
+      navUrl: navUrlFor(order),
+      legDistanceMeters: null,
+      legDurationSeconds: null,
+    };
+  });
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
 
   return {
     driverId: normalizedDriver,
     driverName,
     generatedAt: new Date().toISOString(),
+<<<<<<< HEAD
     today: todayRoute,
     // Sin fecha de reparto no hay forma de saber qué es "mañana".
+=======
+    sheetTab: snapshot.sheetTab ?? "",
+    today: {
+      date: todayDate,
+      stops: stops, // Enviamos TODOS los stops aquí para que el dashboard los reparta
+      optimized: false,
+      fullRouteUrl: null,
+      totalDistanceMeters: null,
+      totalDurationSeconds: null,
+    },
+>>>>>>> fb86f0cd51128e7f6cb444779cd21e1844280e1a
     tomorrow: null,
   };
 }

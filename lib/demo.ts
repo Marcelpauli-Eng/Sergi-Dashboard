@@ -138,13 +138,20 @@ function toStop(sample: Sample, date: string, sequence: number): Stop {
   return {
     id: sample.id,
     driverId: DEMO_DRIVER.id,
+    creationDate: null,
     date,
     priority: sample.priority,
     customer: sample.customer,
     address: sample.address,
+    city: null,
     phone: sample.phone ?? null,
+    measures: null,
     notes: sample.notes ?? null,
     status: recorded?.status ?? "pendiente",
+    rawStatus: recorded ? (recorded.status === "entregado" ? "Entregat" : "Incidència") : "",
+    statusCategory: recorded 
+      ? (recorded.status === "entregado" ? "entregat" : "incidencia")
+      : "pendent",
     lat: sample.lat,
     lng: sample.lng,
     sequence,
@@ -182,6 +189,7 @@ export function demoManifest(timezone: string): Manifest {
     driverName: DEMO_DRIVER.name,
     generatedAt: new Date().toISOString(),
     demo: true,
+    sheetTab: "Demo",
     today: buildDay(TODAY_SAMPLES, todayDate),
     tomorrow: buildDay(TOMORROW_SAMPLES, addDays(todayDate, 1)),
   };
