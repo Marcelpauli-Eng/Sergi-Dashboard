@@ -57,8 +57,15 @@ export default function StopCard({
     () => false,
   );
 
-  const isPendent = stop.statusCategory === "pendent";
-  const done = !isPendent;
+  // Un pedido "en curs" sigue abierto: es un reparto en marcha, el estado más
+  // accionable de todos. Solo "entregat" e "incidencia" están cerrados.
+  //
+  // Compararlo únicamente con "pendent" lo daba por cerrado: la tarjeta salía
+  // atenuada y sin el bloque de acciones, así que no había manera de marcarlo
+  // como entregado desde la app aunque la lista sí lo mostrara.
+  const isOpen =
+    stop.statusCategory === "pendent" || stop.statusCategory === "en_curs";
+  const done = !isOpen;
   const leg = [
     formatDistance(stop.legDistanceMeters),
     formatDuration(stop.legDurationSeconds),
@@ -79,7 +86,7 @@ export default function StopCard({
     >
         <div className="flex gap-3 p-5">
           {/* Controles de orden manual (solo pendientes) */}
-          {reorderable && isPendent && (
+          {reorderable && isOpen && (
             <div className="flex shrink-0 flex-col items-center justify-center gap-2 text-muted-foreground">
               <button 
                 className="p-1 disabled:opacity-30" 
@@ -162,7 +169,7 @@ export default function StopCard({
               </p>
             )}
 
-            {leg && isPendent && (
+            {leg && isOpen && (
               <p className="mt-1.5 text-xs text-muted-foreground">
                 {leg} des de la parada anterior
               </p>
@@ -239,7 +246,7 @@ export default function StopCard({
           </div>
         </div>
 
-        {isPendent && (
+        {isOpen && (
           <div className="border-t border-border p-4">
             {!showIncident ? (
               <div className="flex items-center gap-2">
