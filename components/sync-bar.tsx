@@ -47,8 +47,11 @@ export default function SyncBar({
             };
 
   return (
-    <div className="flex items-center gap-2.5 border-t border-border px-4 py-2">
-      <span className={cn("size-2 shrink-0 rounded-full", state.dot)} aria-hidden />
+    <div className="flex items-center gap-2 px-4 pb-1.5">
+      <span
+        className={cn("size-1.5 shrink-0 rounded-full", state.dot)}
+        aria-hidden
+      />
       <p
         className={cn(
           "min-w-0 flex-1 truncate text-xs",
@@ -60,10 +63,11 @@ export default function SyncBar({
       <Button
         variant="ghost"
         size="sm"
+        className="-mr-3.5 h-7"
         onClick={onSync}
         disabled={syncing || !online}
       >
-        <RefreshCw className={cn(syncing && "animate-spin")} />
+        <RefreshCw className={cn("size-3.5", syncing && "animate-spin")} />
         Actualizar
       </Button>
     </div>

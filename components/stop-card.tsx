@@ -15,10 +15,12 @@ interface Props {
 }
 
 /**
- * Una parada de la ruta.
+ * Una parada de la ruta, como una celda de lista agrupada de iOS: fondo
+ * blanco sobre el gris de la pantalla, esquinas redondeadas y sin sombra.
+ * La separación la da el fondo, no una sombra difusa.
  *
- * Sigue la regla del sistema de diseño: todo en escala de grises salvo el
- * estado de la entrega, que es la única información que merece color.
+ * El color se reserva para lo que informa: azul para lo pulsable, verde y
+ * naranja para el estado de la entrega. El resto es texto y gris.
  */
 export default function StopCard({ stop, onDelivered, onIncident }: Props) {
   const [showIncident, setShowIncident] = useState(false);
@@ -33,141 +35,129 @@ export default function StopCard({ stop, onDelivered, onIncident }: Props) {
     .join(" · ");
 
   return (
-    // Los estilos de Card van directos al <li>: envolverlo en un <div>
+    // Los estilos de la tarjeta van directos al <li>: envolverlo en un <div>
     // rompería la semántica de la lista.
-    <li
-      className={cn(
-        "animate-rise-in rounded-xl border border-border bg-card text-card-foreground shadow-sm",
-        done && "opacity-55",
-      )}
-    >
-        <div className="flex gap-4 p-5">
-          {/* Número de parada */}
-          <div
-            className={
-              done
-                ? "flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground"
-                : "flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground"
-            }
-            aria-hidden
-          >
-            {stop.status === "entregado" ? (
-              <Check className="size-4" />
-            ) : stop.status === "incidencia" ? (
-              <TriangleAlert className="size-4" />
-            ) : (
-              stop.sequence
-            )}
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-3">
-              <p className="min-w-0 flex-1 truncate font-semibold leading-tight tracking-tight">
-                {stop.customer || stop.address}
-              </p>
-              {stop.status === "entregado" && <Badge variant="success">Entregado</Badge>}
-              {stop.status === "incidencia" && (
-                <Badge variant="warning">Incidencia</Badge>
-              )}
-            </div>
-
-            <p className="mt-1 text-sm leading-snug text-muted-foreground">
-              {stop.address}
-            </p>
-
-            {leg && !done && (
-              <p className="mt-1.5 text-xs text-muted-foreground">
-                {leg} desde la parada anterior
-              </p>
-            )}
-
-            {stop.notes && (
-              <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-snug text-amber-800">
-                {stop.notes}
-              </p>
-            )}
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button asChild variant="secondary" size="sm">
-                <a href={stop.navUrl} target="_blank" rel="noopener noreferrer">
-                  <Navigation />
-                  Navegar
-                </a>
-              </Button>
-              {stop.phone && (
-                <Button asChild variant="secondary" size="sm">
-                  <a href={telHref(stop.phone)}>
-                    <Phone />
-                    Llamar
-                  </a>
-                </Button>
-              )}
-            </div>
-          </div>
+    <li className="overflow-hidden rounded-xl bg-card text-card-foreground">
+      <div className={cn("flex gap-3.5 p-4", done && "opacity-55")}>
+        {/* Número de parada */}
+        <div
+          className={cn(
+            "flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white",
+            stop.status === "entregado"
+              ? "bg-success"
+              : stop.status === "incidencia"
+                ? "bg-warning"
+                : "bg-primary",
+          )}
+          aria-hidden
+        >
+          {stop.status === "entregado" ? (
+            <Check className="size-4" strokeWidth={2.5} />
+          ) : stop.status === "incidencia" ? (
+            <TriangleAlert className="size-3.5" strokeWidth={2.5} />
+          ) : (
+            stop.sequence
+          )}
         </div>
 
-        {!done && (
-          <div className="border-t border-border p-4">
-            {!showIncident ? (
-              <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="min-w-0 flex-1 truncate text-base font-semibold">
+              {stop.customer || stop.address}
+            </p>
+            {stop.status === "entregado" && (
+              <Badge variant="success">Entregado</Badge>
+            )}
+            {stop.status === "incidencia" && (
+              <Badge variant="warning">Incidencia</Badge>
+            )}
+          </div>
+
+          <p className="mt-0.5 text-sm text-muted-foreground">{stop.address}</p>
+
+          {leg && !done && (
+            <p className="mt-1 text-xs text-tertiary-foreground">
+              {leg} desde la parada anterior
+            </p>
+          )}
+
+          {stop.notes && (
+            <p className="mt-2.5 rounded-lg bg-warning-surface px-3 py-2 text-sm text-warning-foreground">
+              {stop.notes}
+            </p>
+          )}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button asChild variant="secondary" size="sm">
+              <a href={stop.navUrl} target="_blank" rel="noopener noreferrer">
+                <Navigation />
+                Navegar
+              </a>
+            </Button>
+            {stop.phone && (
+              <Button asChild variant="secondary" size="sm">
+                <a href={telHref(stop.phone)}>
+                  <Phone />
+                  Llamar
+                </a>
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {!done && (
+        <div className="hairline p-3.5">
+          {!showIncident ? (
+            <div className="flex items-center gap-1">
+              <Button size="touch" className="flex-1" onClick={() => onDelivered(stop.id)}>
+                <Check strokeWidth={2.5} />
+                Entregado
+              </Button>
+              <Button variant="ghost" size="touch" onClick={() => setShowIncident(true)}>
+                Incidencia
+              </Button>
+            </div>
+          ) : (
+            <div className="animate-fade-in space-y-3">
+              <label htmlFor={`note-${stop.id}`} className="block text-sm font-medium">
+                ¿Qué ha pasado?
+              </label>
+              <textarea
+                id={`note-${stop.id}`}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={2}
+                maxLength={500}
+                autoFocus
+                placeholder="Ausente, dirección incorrecta, rechazado…"
+                className="w-full resize-none rounded-lg bg-muted px-3 py-2.5 text-base placeholder:text-tertiary-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              />
+              <div className="flex gap-1">
                 <Button
                   size="touch"
                   className="flex-1"
-                  onClick={() => onDelivered(stop.id)}
+                  onClick={() => {
+                    onIncident(stop.id, note.trim());
+                    setShowIncident(false);
+                    setNote("");
+                  }}
                 >
-                  <Check />
-                  Entregado
+                  Guardar
                 </Button>
                 <Button
                   variant="ghost"
                   size="touch"
-                  onClick={() => setShowIncident(true)}
+                  onClick={() => {
+                    setShowIncident(false);
+                    setNote("");
+                  }}
                 >
-                  Incidencia
+                  Cancelar
                 </Button>
               </div>
-            ) : (
-              <div className="space-y-3">
-                <label
-                  htmlFor={`note-${stop.id}`}
-                  className="block text-sm font-medium"
-                >
-                  ¿Qué ha pasado?
-                </label>
-                <textarea
-                  id={`note-${stop.id}`}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  rows={2}
-                  maxLength={500}
-                  placeholder="Ausente, dirección incorrecta, rechazado…"
-                  className="w-full rounded-md border border-input bg-card px-3 py-2.5 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/15"
-                />
-                <div className="flex gap-2">
-                  <Button
-                    size="touch"
-                    className="flex-1"
-                    onClick={() => {
-                      onIncident(stop.id, note.trim());
-                      setShowIncident(false);
-                      setNote("");
-                    }}
-                  >
-                    Guardar incidencia
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="touch"
-                    onClick={() => {
-                      setShowIncident(false);
-                      setNote("");
-                    }}
-                  >
-                    Cancelar
-                  </Button>
-                </div>
-              </div>
-            )}
+            </div>
+          )}
         </div>
       )}
     </li>
