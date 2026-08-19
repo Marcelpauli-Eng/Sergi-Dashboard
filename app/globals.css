@@ -102,6 +102,7 @@
     --warm-via: #1f1a15;
     --warm-to: #14110f;
   }
+}
 
 /* Oscuro forzado desde Ajustes, sea cual sea el tema del sistema. */
 :root[data-theme="dark"] {
