@@ -49,9 +49,11 @@
      el naranja de acción ni con el verde de entregado. */
   --status-en-curs: #2f6feb;
 
-  /* Degradado cálido de las cabeceras. */
-  --warm-from: #fdeadd;
-  --warm-via: #fdf4ec;
+  /* Degradado cálido de las cabeceras.
+     El tramo superior usa el mismo crema que el fondo de la ilustración del
+     login, para que el borde de la imagen no se recorte contra el fondo. */
+  --warm-from: #f5e7d4;
+  --warm-via: #faf0e4;
   --warm-to: #ffffff;
 
   /* Radio generoso: todo son tarjetas muy redondeadas. */
