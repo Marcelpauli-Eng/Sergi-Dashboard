@@ -12,82 +12,50 @@
  * Colores de referencia: developer.apple.com/design/human-interface-guidelines/color
  */
 :root {
-  color-scheme: light dark;
+  /* La referencia es un diseño claro; no hay variante oscura. */
+  color-scheme: light;
 
-  /* systemGroupedBackground / secondarySystemGroupedBackground */
-  --background: #f2f2f7;
+  --background: #ffffff;
   --card: #ffffff;
 
-  /* label / secondaryLabel / tertiaryLabel */
-  --foreground: #000000;
-  --card-foreground: #000000;
-  --muted-foreground: #3c3c4399;
-  --tertiary-foreground: #3c3c434d;
+  --foreground: #17171c;
+  --card-foreground: #17171c;
+  --muted-foreground: #8b8b95;
+  --tertiary-foreground: #b4b4bd;
 
-  /* secondarySystemFill: el gris de los botones sin relleno de color */
-  --muted: #78788029;
-  --secondary: #78788029;
-  --secondary-foreground: #000000;
+  /* Relleno gris de campos y botones sin color. */
+  --muted: #f3f3f6;
+  --secondary: #f3f3f6;
+  --secondary-foreground: #17171c;
 
-  /* separator: una línea de medio píxel, no un borde */
-  --border: #3c3c434a;
-  --input: #3c3c434a;
+  --border: #ededf1;
+  --input: #f3f3f6;
 
-  /* systemBlue: el único color de acción. Todo lo pulsable es azul. */
-  --primary: #007aff;
+  /* Naranja de marca: el único color de acción, todo lo pulsable es naranja. */
+  --primary: #f2701d;
   --primary-foreground: #ffffff;
-  --accent: #007aff;
+  --accent: #17171c;
   --accent-foreground: #ffffff;
-  --ring: #007aff;
+  --ring: #f2701d;
 
-  /* systemRed / systemGreen / systemOrange */
-  --destructive: #ff3b30;
-  --success: #34c759;
-  --warning: #ff9500;
+  --destructive: #e5484d;
+  --success: #2ea043;
+  --warning: #e8890c;
 
-  /* Fondo tenue para avisos, derivado del propio color del sistema. */
-  --warning-surface: #ff950026;
-  --warning-foreground: #8a5200;
+  --warning-surface: #f2701d1f;
+  --warning-foreground: #9a4a06;
 
-  /* systemPurple: único color nuevo, para el estado "en curso" (reparto ya
-     empezado). Los otros tres estados reutilizan el azul/verde/naranja de
-     arriba: no hace falta un color por estado si ya hay uno con el
-     significado correcto. */
-  --status-en-curs: #af52de;
+  /* "En curso": un reparto ya empezado. Azul para que no se confunda ni con
+     el naranja de acción ni con el verde de entregado. */
+  --status-en-curs: #2f6feb;
 
-  --radius: 0.875rem;
-}
+  /* Degradado cálido de las cabeceras. */
+  --warm-from: #fdeadd;
+  --warm-via: #fdf4ec;
+  --warm-to: #ffffff;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #000000;
-    --card: #1c1c1e;
-
-    --foreground: #ffffff;
-    --card-foreground: #ffffff;
-    --muted-foreground: #ebebf599;
-    --tertiary-foreground: #ebebf54d;
-
-    --muted: #7878803d;
-    --secondary: #7878803d;
-    --secondary-foreground: #ffffff;
-
-    --border: #54545899;
-    --input: #54545899;
-
-    --primary: #0a84ff;
-    --accent: #0a84ff;
-    --ring: #0a84ff;
-
-    --destructive: #ff453a;
-    --success: #30d158;
-    --warning: #ff9f0a;
-
-    --warning-surface: #ff9f0a26;
-    --warning-foreground: #ffb340;
-
-    --status-en-curs: #bf5af2;
-  }
+  /* Radio generoso: todo son tarjetas muy redondeadas. */
+  --radius: 1.25rem;
 }
 
 @theme inline {
@@ -229,7 +197,7 @@
    * desenfoque deje el color de debajo lavado.
    */
   .material {
-    background: color-mix(in srgb, var(--background) 72%, transparent);
+    background: color-mix(in srgb, var(--background) 92%, transparent);
     backdrop-filter: saturate(180%) blur(20px);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
   }
@@ -266,6 +234,26 @@ html {
 
 .animate-fade-in {
   animation: fade-in 0.2s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* ── Superficies del tema cálido ───────────────────────────────────────── */
+
+.warm-gradient {
+  background: linear-gradient(
+    180deg,
+    var(--warm-from) 0%,
+    var(--warm-via) 45%,
+    var(--warm-to) 100%
+  );
+}
+
+/* Tarjeta muy redondeada con sombra suave, en vez de un borde marcado. */
+.soft-card {
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow:
+    0 1px 2px rgb(16 16 20 / 4%),
+    0 8px 24px -12px rgb(16 16 20 / 12%);
 }
 
 /* ── Pantalla de carga ─────────────────────────────────────────────────── */

@@ -339,7 +339,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         </p>
       )}
 
-      <header className="material sticky top-0 z-20 border-b border-border pt-[env(safe-area-inset-top)]">
+      <header className="warm-gradient sticky top-0 z-20 pt-[env(safe-area-inset-top)]">
         <div className="flex items-center justify-between gap-4 px-4 py-2.5">
           <div className="min-w-0">
             <h1 className="truncate text-lg font-semibold">{driverName}</h1>
@@ -386,7 +386,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
       {/* ── Panel del menú hamburguesa ────────────────────────────────── */}
       {menuOpen && (
-        <div className="material sticky top-[calc(env(safe-area-inset-top)+3.9rem)] z-10 animate-fade-in border-b border-border px-4 py-4">
+        <div className="material sticky top-[calc(env(safe-area-inset-top)+3.9rem)] z-10 animate-fade-in px-4 py-4">
           <p className="mb-3 text-xs font-semibold text-muted-foreground">
             Selecciona la hoja
           </p>
@@ -556,7 +556,7 @@ function TabAvui({
 
   if (todayStops.length === 0) {
     return (
-      <div className="animate-rise-in rounded-xl bg-card px-6 py-12 text-center">
+      <div className="animate-rise-in soft-card px-6 py-12 text-center">
         <p className="text-base font-medium">No tens comandes programades per a avui</p>
         <p className="mt-1 text-sm text-muted-foreground">Ves al Calendari per assignar comandes al dia d&apos;avui.</p>
       </div>
@@ -764,7 +764,7 @@ function TabCalendari({
 
   return (
     <div className="animate-fade-in space-y-6">
-      <div className="rounded-xl bg-card p-4">
+      <div className="soft-card p-4">
         <div className="mb-3 flex items-center justify-between">
           <Button variant="ghost" size="icon" onClick={prevMonth} aria-label="Mes anterior">
             <ChevronLeft />
@@ -819,7 +819,7 @@ function TabCalendari({
         </div>
       </div>
 
-      <div className="rounded-xl bg-card p-4">
+      <div className="soft-card p-4">
         <h2 className="mb-1 text-sm font-semibold">Bossa de comandes ({unassignedStops.length})</h2>
         <p className="text-xs text-muted-foreground">
           Clica en un dia del calendari per assignar aquestes comandes.
@@ -874,7 +874,7 @@ function FastAssignList({ stops, onAssign }: { stops: Stop[]; onAssign: (id: str
             onPointerUp={() => endPress(stop)}
             onPointerLeave={cancelPress}
             onPointerMove={cancelPress} // Si el dedo se mueve (scrolling), cancelamos
-            className="pressable flex touch-none select-none flex-col items-start gap-0.5 rounded-xl bg-card p-3 text-left"
+            className="pressable flex touch-none select-none flex-col items-start gap-0.5 soft-card p-3 text-left"
           >
             <span className="w-full truncate text-sm font-semibold">{stop.customer || stop.id}</span>
             <span className="w-full truncate text-xs text-muted-foreground">{stop.city || "Sense adreça"}</span>
@@ -957,7 +957,7 @@ function TabHistorial({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4 rounded-xl bg-card p-4">
+      <div className="flex items-center gap-4 soft-card p-4">
         <div className="flex-1">
           <p className="text-xs font-semibold text-muted-foreground">Entregats</p>
           <p className="text-2xl font-semibold text-status-entregat">{historyStops.entregat.length}</p>
@@ -1011,7 +1011,7 @@ function RouteSummary({ route, onRecalculate, generating }: { route: RouteResult
   const duration = formatDuration(route.totalDurationSeconds);
 
   return (
-    <div className="rounded-xl bg-card p-4">
+    <div className="soft-card p-4">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm text-muted-foreground">
@@ -1063,7 +1063,7 @@ function EmptyState({ online, syncing }: { online: boolean; syncing: boolean }) 
   }
 
   return (
-    <div className="animate-rise-in rounded-xl bg-card px-6 py-12 text-center">
+    <div className="animate-rise-in soft-card px-6 py-12 text-center">
       <p className="text-base font-medium">
         {online ? "Encara no hi ha dades" : "Sense dades descarregades"}
       </p>

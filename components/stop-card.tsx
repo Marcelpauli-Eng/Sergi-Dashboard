@@ -98,7 +98,7 @@ export default function StopCard({
   return (
     // Los estilos de la tarjeta van directos al <li>: envolverlo en un <div>
     // rompería la semántica de la lista.
-    <li className="animate-rise-in overflow-hidden rounded-xl bg-card text-card-foreground">
+    <li className="animate-rise-in overflow-hidden soft-card text-card-foreground">
       <div className={cn("flex gap-3 p-4", done && "opacity-55")}>
         {/* Controles de orden manual (solo pendientes) */}
         {reorderable && isOpen && (
