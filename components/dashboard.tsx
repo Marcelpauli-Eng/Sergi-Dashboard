@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { db } from "@/lib/db";
 import RouteTrace from "@/components/route-trace";
+import HomeSummary from "@/components/home-summary";
 import {
   recordDelivery,
   recordDateAssignment,
@@ -440,10 +441,13 @@ export default function Dashboard({ driverName }: { driverName: string }) {
             {activeTab === "avui" && (
               <TabAvui
                 todayStops={todayStops}
+                sensAssignar={unassignedStops.length}
+                entregats={historyStops.entregat.length}
+                incidencies={historyStops.incidencia.length}
+                onIr={setActiveTab}
                 routeResult={routeResult}
                 generatingRoute={generatingRoute}
                 online={online}
-                isManualOrder={isManualOrder}
                 onGenerateRoute={generateRoute}
                 onDelivered={handleDelivered}
                 onIncident={handleIncident}
@@ -511,10 +515,13 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
 function TabAvui({
   todayStops,
+  sensAssignar,
+  entregats,
+  incidencies,
+  onIr,
   routeResult,
   generatingRoute,
   online,
-  isManualOrder,
   onGenerateRoute,
   onDelivered,
   onIncident,
@@ -522,10 +529,13 @@ function TabAvui({
   setIsManualOrder,
 }: {
   todayStops: Stop[];
+  sensAssignar: number;
+  entregats: number;
+  incidencies: number;
+  onIr: (destino: "calendari" | "historial") => void;
   routeResult: RouteResult | null;
   generatingRoute: boolean;
   online: boolean;
-  isManualOrder: boolean;
   onGenerateRoute: () => void;
   onDelivered: (id: string) => void;
   onIncident: (id: string, note: string) => void;
@@ -570,27 +580,31 @@ function TabAvui({
 
   return (
     <>
-      <h2 className="mb-4 text-xl font-bold">Repartiment d&apos;avui</h2>
+      <div className="mb-6 animate-rise-in">
+        <HomeSummary
+          pendents={pendents.length}
+          enCurs={enCurs.length}
+          entregats={entregats}
+          incidencies={incidencies}
+          sensAssignar={sensAssignar}
+          totalDistanceMeters={routeResult?.totalDistanceMeters ?? null}
+          totalDurationSeconds={routeResult?.totalDurationSeconds ?? null}
+          rutaCalculada={routeResult !== null}
+          generandoRuta={generatingRoute}
+          online={online}
+          onGenerarRuta={() => void onGenerateRoute()}
+          onIr={onIr}
+        />
+      </div>
 
-      {pendents.length > 0 && (
+      {/* La traza y el resumen de la ruta, una vez calculada. */}
+      {routeResult && (
         <div className="mb-6 animate-rise-in">
-          {routeResult ? (
-            <RouteSummary route={routeResult} onRecalculate={onGenerateRoute} generating={generatingRoute} />
-          ) : (
-            <Button
-              className="w-full"
-              size="touch"
-              onClick={() => void onGenerateRoute()}
-              disabled={generatingRoute || !online}
-            >
-              <Route />
-              {generatingRoute
-                ? "Calculant ruta…"
-                : isManualOrder
-                  ? `Calcular ruta (ordre manual)`
-                  : `Generar ruta (${pendents.length} parades)`}
-            </Button>
-          )}
+          <RouteSummary
+            route={routeResult}
+            onRecalculate={onGenerateRoute}
+            generating={generatingRoute}
+          />
         </div>
       )}
 
@@ -711,7 +725,7 @@ function TabCalendari({
           ) : (
             <ul className="space-y-3">
               {assigned.map((stop) => (
-                <div key={stop.id} className="relative">
+                <li key={stop.id} className="relative">
                   <StopCard
                     stop={stop}
                     onDelivered={() => {}} // No-op: los estados solo se marcan en "Avui"
@@ -732,7 +746,7 @@ function TabCalendari({
                       Treure
                     </Button>
                   </div>
-                </div>
+                </li>
               ))}
             </ul>
           )}
@@ -998,7 +1012,9 @@ function TabHistorial({
               </h3>
               <ul className="space-y-3">
                 {group.stops.map((stop) => (
-                  <StopCard key={stop.id} stop={stop} onDelivered={onDelivered} onIncident={onIncident} />
+                  <li key={stop.id}>
+                    <StopCard stop={stop} onDelivered={onDelivered} onIncident={onIncident} />
+                  </li>
                 ))}
               </ul>
             </div>
