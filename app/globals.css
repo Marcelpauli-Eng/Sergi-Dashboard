@@ -268,10 +268,66 @@ html {
   animation: fade-in 0.2s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
+/* ── Pantalla de carga ─────────────────────────────────────────────────── */
+
+/*
+ * El camión recorre la diagonal mientras la pantalla está visible. Es
+ * decorativo: no indica progreso real, así que con `prefers-reduced-motion`
+ * se queda quieto sin que se pierda información.
+ */
+@keyframes truck-run {
+  0% {
+    transform: translate3d(-58%, 34%, 0) rotate(-24deg);
+    opacity: 0;
+  }
+  12%,
+  88% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(58%, -34%, 0) rotate(-24deg);
+    opacity: 0;
+  }
+}
+
+@keyframes truck-bump {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes splash-out {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+.truck-run {
+  animation: truck-run 2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.truck-bump {
+  animation: truck-bump 0.5s ease-in-out infinite;
+}
+
+.splash-out {
+  animation: splash-out 0.45s ease forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-rise-in,
   .animate-fade-in {
     animation: fade-in 0.01s both;
+  }
+
+  .truck-run,
+  .truck-bump {
+    animation: none;
   }
 
   .pressable:active {

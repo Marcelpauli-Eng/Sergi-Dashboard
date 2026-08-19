@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import Splash from "@/components/splash";
 
 export const metadata: Metadata = {
   title: "Reparto",
@@ -40,7 +41,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className="h-full antialiased">
-      <body className="min-h-svh overflow-x-hidden">{children}</body>
+      <body className="min-h-svh overflow-x-hidden">
+        <Splash />
+        {children}
+      </body>
     </html>
   );
 }
