@@ -5,13 +5,18 @@ import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
   CalendarDays,
+  Check,
   ChevronLeft,
   ChevronRight,
   Clock,
   History,
   Menu,
+  Moon,
   Route,
   Search,
+  Settings,
+  Smartphone,
+  Sun,
   X,
 } from "lucide-react";
 import { db } from "@/lib/db";
@@ -29,6 +34,10 @@ import {
   setCustomOrder,
   applyCustomOrder,
   subscribeLocalPrefs,
+  getThemePreference,
+  getThemePreferenceServer,
+  setThemePreference,
+  type ThemePreference,
 } from "@/lib/sync";
 import { formatDistance, formatDuration } from "@/lib/format";
 import { formatLongDate, getMonthGrid, getYearMonth } from "@/lib/dates";
@@ -112,6 +121,14 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     () => null,
   );
   const [loadingTabs, setLoadingTabs] = useState(false);
+
+  // ── Ajustes: tema claro/oscuro ─────────────────────────────────────────
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const theme = useSyncExternalStore(
+    subscribeLocalPrefs,
+    getThemePreference,
+    getThemePreferenceServer,
+  );
 
   // ── Orden personalizado (drag & drop) ─────────────────────────────────
   const customOrderIds = useSyncExternalStore(
@@ -366,18 +383,28 @@ export default function Dashboard({ driverName }: { driverName: string }) {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setMenuOpen((v) => !v);
-              if (!menuOpen) void fetchTabs();
-            }}
-            className="pressable flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-primary"
-            aria-label="Menú"
-            aria-expanded={menuOpen}
-          >
-            {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="pressable flex size-9 items-center justify-center rounded-full bg-muted text-primary"
+              aria-label="Ajustos"
+            >
+              <Settings className="size-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen((v) => !v);
+                if (!menuOpen) void fetchTabs();
+              }}
+              className="pressable flex size-9 items-center justify-center rounded-full bg-muted text-primary"
+              aria-label="Menú"
+              aria-expanded={menuOpen}
+            >
+              {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+            </button>
+          </div>
         </div>
 
         <SyncBar
@@ -431,6 +458,49 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         </div>
       )}
 
+      {/* ── Ajustes: aparença ─────────────────────────────────────────── */}
+      {settingsOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div
+            className="absolute inset-0 animate-fade-in bg-black/40"
+            onClick={() => setSettingsOpen(false)}
+          />
+          <div className="relative w-full animate-rise-in rounded-t-[20px] bg-background p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Ajustos</h3>
+              <button
+                onClick={() => setSettingsOpen(false)}
+                className="pressable rounded-full bg-muted p-1.5 text-muted-foreground"
+                aria-label="Tancar"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <p className="mb-2 px-1 text-xs font-semibold text-muted-foreground">Aparença</p>
+            <div className="overflow-hidden rounded-xl bg-card">
+              {(
+                [
+                  { value: "light", label: "Clar", icon: Sun },
+                  { value: "dark", label: "Fosc", icon: Moon },
+                  { value: "system", label: "Sistema", icon: Smartphone },
+                ] as { value: ThemePreference; label: string; icon: typeof Sun }[]
+              ).map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  onClick={() => setThemePreference(value)}
+                  className="hairline flex w-full items-center gap-3 px-4 py-3 text-left text-base first:border-t-0"
+                >
+                  <Icon className="size-5 shrink-0 text-muted-foreground" />
+                  <span className="flex-1">{label}</span>
+                  {theme === value && <Check className="size-5 shrink-0 text-primary" strokeWidth={2.5} />}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 px-4 py-5">
         {loading ? (
           <p className="py-16 text-center text-base text-muted-foreground">Cargando…</p>
@@ -479,7 +549,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         <button
           onClick={() => setActiveTab("avui")}
           className={cn(
-            "pressable flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium",
+            "pressable flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1 text-[10px] font-medium",
             activeTab === "avui" ? "text-primary" : "text-tertiary-foreground",
           )}
         >
@@ -489,7 +559,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         <button
           onClick={() => setActiveTab("calendari")}
           className={cn(
-            "pressable flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium",
+            "pressable flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1 text-[10px] font-medium",
             activeTab === "calendari" ? "text-primary" : "text-tertiary-foreground",
           )}
         >
@@ -499,7 +569,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         <button
           onClick={() => setActiveTab("historial")}
           className={cn(
-            "pressable flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium",
+            "pressable flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1 text-[10px] font-medium",
             activeTab === "historial" ? "text-primary" : "text-tertiary-foreground",
           )}
         >
@@ -611,14 +681,16 @@ function TabAvui({
       {enCurs.length > 0 && (
         <div className="mb-6 space-y-3">
           <h3 className="px-1 text-sm font-semibold text-status-en-curs">En curs</h3>
-          {enCurs.map((stop) => (
-            <StopCard
-              key={stop.id}
-              stop={stop}
-              onDelivered={onDelivered}
-              onIncident={onIncident}
-            />
-          ))}
+          <ul className="space-y-3">
+            {enCurs.map((stop) => (
+              <StopCard
+                key={stop.id}
+                stop={stop}
+                onDelivered={onDelivered}
+                onIncident={onIncident}
+              />
+            ))}
+          </ul>
         </div>
       )}
 
@@ -634,25 +706,24 @@ function TabAvui({
               const lastPendentIndex = todayStops.findLastIndex(s => s.statusCategory === "pendent");
 
               return (
-                <li key={stop.id}>
-                  <StopCard
-                    stop={{
-                      ...stop,
-                      sequence: index + 1,
-                      legDistanceMeters:
-                        routeResult?.stops.find((s) => s.id === stop.id)?.legDistanceMeters ?? null,
-                      legDurationSeconds:
-                        routeResult?.stops.find((s) => s.id === stop.id)?.legDurationSeconds ?? null,
-                    }}
-                    onDelivered={onDelivered}
-                    onIncident={onIncident}
-                    reorderable
-                    onMoveUp={() => handleMoveUp(index)}
-                    onMoveDown={() => handleMoveDown(index)}
-                    isFirst={index === firstPendentIndex}
-                    isLast={index === lastPendentIndex}
-                  />
-                </li>
+                <StopCard
+                  key={stop.id}
+                  stop={{
+                    ...stop,
+                    sequence: index + 1,
+                    legDistanceMeters:
+                      routeResult?.stops.find((s) => s.id === stop.id)?.legDistanceMeters ?? null,
+                    legDurationSeconds:
+                      routeResult?.stops.find((s) => s.id === stop.id)?.legDurationSeconds ?? null,
+                  }}
+                  onDelivered={onDelivered}
+                  onIncident={onIncident}
+                  reorderable
+                  onMoveUp={() => handleMoveUp(index)}
+                  onMoveDown={() => handleMoveDown(index)}
+                  isFirst={index === firstPendentIndex}
+                  isLast={index === lastPendentIndex}
+                />
               );
             })}
           </ul>
@@ -725,27 +796,13 @@ function TabCalendari({
           ) : (
             <ul className="space-y-3">
               {assigned.map((stop) => (
-                <li key={stop.id} className="relative">
+                <li key={stop.id}>
                   <StopCard
                     stop={stop}
                     onDelivered={() => {}} // No-op: los estados solo se marcan en "Avui"
                     onIncident={() => {}} // No-op
+                    onRemove={() => onAssignDate(stop.id, null)}
                   />
-                  {/* Botón para desasignar (volver a la lista) */}
-                  <div className="absolute right-3 top-3">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAssignDate(stop.id, null);
-                      }}
-                    >
-                      <X />
-                      Treure
-                    </Button>
-                  </div>
                 </li>
               ))}
             </ul>
@@ -913,7 +970,9 @@ function FastAssignList({ stops, onAssign }: { stops: Stop[]; onAssign: (id: str
             >
               <X />
             </Button>
-            <StopCard stop={previewStop} onDelivered={() => {}} onIncident={() => {}} />
+            <ul>
+              <StopCard stop={previewStop} onDelivered={() => {}} onIncident={() => {}} />
+            </ul>
             <Button
               className="mt-4 w-full"
               size="touch"

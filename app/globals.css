@@ -60,6 +60,92 @@
   --radius: 1.25rem;
 }
 
+/*
+ * Modo claro/oscuro: sigue el sistema por defecto, pero Ajustes puede
+ * forzarlo con `data-theme` en el `<html>` (ver `lib/sync.ts` y el script
+ * de `app/layout.tsx`, que lo aplica antes del primer pintado para que no
+ * haya parpadeo). El bloque oscuro se repite dos veces a propósito —una
+ * vez detrás de la media query, otra detrás de `[data-theme="dark"]"—
+ * porque ninguna de las dos por sí sola cubre "el sistema está en claro
+ * pero el usuario ha forzado oscuro".
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #14110f;
+    --card: #1f1b18;
+
+    --foreground: #f7f3ef;
+    --card-foreground: #f7f3ef;
+    --muted-foreground: #a8a099;
+    --tertiary-foreground: #6f6862;
+
+    --muted: #2a2521;
+    --secondary: #2a2521;
+    --secondary-foreground: #f7f3ef;
+
+    --border: #322c27;
+    --input: #322c27;
+
+    --primary: #ff8438;
+    --accent: #f7f3ef;
+    --ring: #ff8438;
+
+    --destructive: #ff6369;
+    --success: #4cc76a;
+    --warning: #ffab48;
+
+    --warning-surface: #ff84381f;
+    --warning-foreground: #ffc489;
+
+    --status-en-curs: #6ea8ff;
+    --warm-from: #2a1f16;
+    --warm-via: #1f1a15;
+    --warm-to: #14110f;
+  }
+
+/* Oscuro forzado desde Ajustes, sea cual sea el tema del sistema. */
+:root[data-theme="dark"] {
+  --background: #14110f;
+  --card: #1f1b18;
+
+  --foreground: #f7f3ef;
+  --card-foreground: #f7f3ef;
+  --muted-foreground: #a8a099;
+  --tertiary-foreground: #6f6862;
+
+  --muted: #2a2521;
+  --secondary: #2a2521;
+  --secondary-foreground: #f7f3ef;
+
+  --border: #322c27;
+  --input: #322c27;
+
+  --primary: #ff8438;
+  --accent: #f7f3ef;
+  --ring: #ff8438;
+
+  --destructive: #ff6369;
+  --success: #4cc76a;
+  --warning: #ffab48;
+
+  --warning-surface: #ff84381f;
+  --warning-foreground: #ffc489;
+
+  --status-en-curs: #6ea8ff;
+  --warm-from: #2a1f16;
+  --warm-via: #1f1a15;
+  --warm-to: #14110f;
+}
+
+/* `color-scheme` también debe seguir el tema forzado: si no, el navegador
+   sigue pintando sus propios controles (scrollbars, etc.) del sistema. */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

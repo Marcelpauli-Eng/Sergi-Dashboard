@@ -242,6 +242,41 @@ export function setSelectedTab(tab: string): void {
   emitLocalPrefs();
 }
 
+export type ThemePreference = "light" | "dark" | "system";
+
+const THEME_KEY = "themePreference";
+
+/**
+ * Tema elegido a mano. "system" (el valor por defecto) significa "sin
+ * preferencia guardada": sigue el modo claro/oscuro del propio móvil.
+ *
+ * El `<script>` de `app/layout.tsx` ya aplica este mismo valor al `<html>`
+ * antes del primer pintado, para que no haya un parpadeo con el tema
+ * equivocado. Aquí solo se lee para que el selector de Ajustes sepa qué
+ * opción marcar.
+ */
+export function getThemePreference(): ThemePreference {
+  if (typeof window === "undefined") return "system";
+  const raw = localStorage.getItem(THEME_KEY);
+  return raw === "light" || raw === "dark" ? raw : "system";
+}
+
+export function getThemePreferenceServer(): ThemePreference {
+  return "system";
+}
+
+export function setThemePreference(theme: ThemePreference): void {
+  if (typeof window === "undefined") return;
+  if (theme === "system") {
+    localStorage.removeItem(THEME_KEY);
+    document.documentElement.removeAttribute("data-theme");
+  } else {
+    localStorage.setItem(THEME_KEY, theme);
+    document.documentElement.setAttribute("data-theme", theme);
+  }
+  emitLocalPrefs();
+}
+
 const CUSTOM_ORDER_KEY = "customStopOrder";
 
 /**
