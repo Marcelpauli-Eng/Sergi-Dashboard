@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { db } from "@/lib/db";
+import RouteTrace from "@/components/route-trace";
 import {
   recordDelivery,
   recordDateAssignment,
@@ -59,6 +60,10 @@ interface RouteResult {
   fullRouteUrl: string | null;
   totalDistanceMeters: number | null;
   totalDurationSeconds: number | null;
+  /** Geometría del recorrido, para dibujar la traza. Ver components/route-trace.tsx. */
+  encodedPolyline: string | null;
+  /** Desde dónde se calculó: el GPS del transportista, o la nave. */
+  start: { lat: number; lng: number } | null;
 }
 
 // ── Helper Dates ───────────────────────────────────────────────────────
@@ -1011,8 +1016,13 @@ function RouteSummary({ route, onRecalculate, generating }: { route: RouteResult
   const duration = formatDuration(route.totalDurationSeconds);
 
   return (
-    <div className="soft-card p-4">
-      <div className="flex items-center justify-between gap-4">
+    <div className="soft-card overflow-hidden">
+      <RouteTrace
+        encodedPolyline={route.encodedPolyline}
+        start={route.start}
+        stops={route.stops}
+      />
+      <div className="flex items-center justify-between gap-4 p-4">
         <div className="min-w-0">
           <p className="text-sm text-muted-foreground">
             Ruta {route.optimized ? "optimitzada" : "ordre manual"}
@@ -1043,7 +1053,7 @@ function RouteSummary({ route, onRecalculate, generating }: { route: RouteResult
         </div>
       </div>
       {!route.optimized && (
-        <p className="mt-3 rounded-lg bg-warning-surface px-3 py-2 text-sm text-warning-foreground">
+        <p className="mx-4 mb-4 -mt-1 rounded-lg bg-warning-surface px-3 py-2 text-sm text-warning-foreground">
           Ruta calculada respectant el teu ordre manual.
         </p>
       )}

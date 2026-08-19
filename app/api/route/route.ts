@@ -67,6 +67,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       stops,
       optimized: result.optimized,
+      // Para dibujar la traza en el móvil: la geometría del recorrido y el
+      // punto desde el que se calculó (el GPS del transportista o la nave).
+      encodedPolyline: result.encodedPolyline,
+      start: depot,
       fullRouteUrl: fullRouteUrlFor(
         body.startLocation ? `${body.startLocation.lat},${body.startLocation.lng}` : env.depotAddress, 
         result.ordered

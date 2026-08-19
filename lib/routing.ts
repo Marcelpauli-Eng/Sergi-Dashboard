@@ -81,6 +81,12 @@ export interface OptimizedRoute {
   totalDistanceMeters: number | null;
   totalDurationSeconds: number | null;
   optimized: boolean;
+  /**
+   * Geometría del recorrido codificada (formato polyline de Google), para
+   * dibujar la traza. `null` cuando se cae al orden por prioridad, que no
+   * pasa por Google y por tanto no tiene recorrido que dibujar.
+   */
+  encodedPolyline: string | null;
 }
 
 /** Orden de respaldo: solo por prioridad. Se usa si Google no responde. */
@@ -94,6 +100,7 @@ function fallbackOrder(orders: Order[]): OptimizedRoute {
     totalDistanceMeters: null,
     totalDurationSeconds: null,
     optimized: false,
+    encodedPolyline: null,
   };
 }
 
@@ -179,6 +186,7 @@ export async function optimizeRoute(
       totalDistanceMeters: null,
       totalDurationSeconds: null,
       optimized: true, // Se considera optimizada aunque sea 1 sola parada
+          encodedPolyline: null,
     };
   }
 
@@ -203,6 +211,7 @@ export async function optimizeRoute(
       distanceMeters?: number;
       duration?: string;
       legs?: { distanceMeters?: number; duration?: string }[];
+      polyline?: { encodedPolyline?: string };
     }[];
   };
 
@@ -220,6 +229,9 @@ export async function optimizeRoute(
             "routes.duration",
             "routes.legs.distanceMeters",
             "routes.legs.duration",
+            // Geometría del recorrido, para poder dibujar la traza que sigue
+            // las calles en vez de líneas rectas entre paradas.
+            "routes.polyline.encodedPolyline",
           ].join(","),
         },
         body: JSON.stringify(body),
@@ -304,6 +316,7 @@ export async function optimizeRoute(
     totalDistanceMeters: route.distanceMeters ?? null,
     totalDurationSeconds: route.duration ? parseInt(route.duration, 10) : null,
     optimized: true,
+    encodedPolyline: route.polyline?.encodedPolyline ?? null,
   };
 }
 
