@@ -639,15 +639,6 @@ function TabAvui({
     setIsManualOrder(true);
   }, [todayStops, setRouteResult, setIsManualOrder]);
 
-  if (todayStops.length === 0) {
-    return (
-      <div className="animate-rise-in soft-card px-6 py-12 text-center">
-        <p className="text-base font-medium">No tens comandes programades per a avui</p>
-        <p className="mt-1 text-sm text-muted-foreground">Ves al Calendari per assignar comandes al dia d&apos;avui.</p>
-      </div>
-    );
-  }
-
   return (
     <>
       <div className="mb-6 animate-rise-in">
@@ -666,6 +657,13 @@ function TabAvui({
           onIr={onIr}
         />
       </div>
+
+      {todayStops.length === 0 && (
+        <div className="animate-rise-in soft-card mb-6 px-6 py-10 text-center">
+          <p className="text-base font-medium">No tens comandes programades per a avui</p>
+          <p className="mt-1 text-sm text-muted-foreground">Ves al Calendari per assignar comandes al dia d&apos;avui.</p>
+        </div>
+      )}
 
       {/* La traza y el resumen de la ruta, una vez calculada. */}
       {routeResult && (
