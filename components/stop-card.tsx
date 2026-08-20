@@ -19,6 +19,8 @@ interface Props {
   onMoveDown?: () => void;
   isFirst?: boolean;
   isLast?: boolean;
+  /** Si se pasa, muestra un botón para desasignar la parada (p. ej. del calendario). */
+  onRemove?: () => void;
 }
 
 const CATEGORY_BADGE: Record<
@@ -51,6 +53,7 @@ export default function StopCard({
   onMoveDown,
   isFirst,
   isLast,
+  onRemove,
 }: Props) {
   const [showIncident, setShowIncident] = useState(false);
   const [showNav, setShowNav] = useState(false);
@@ -96,9 +99,12 @@ export default function StopCard({
   const badgeInfo = CATEGORY_BADGE[stop.statusCategory ?? ""];
 
   return (
-    // Los estilos de la tarjeta van directos al <li>: envolverlo en un <div>
-    // rompería la semántica de la lista.
-    <li className="animate-rise-in overflow-hidden rounded-xl bg-card text-card-foreground">
+    // Un <div>, no un <li>: la tarjeta se usa dentro de listas, dentro de
+    // bloques sueltos y dentro de un modal de vista previa. Siendo <li> los
+    // tres últimos casos generaban HTML inválido —y en la lista de pendientes
+    // un <li> dentro de otro <li>, que además rompe la hidratación—. Quien la
+    // use dentro de una lista es el que pone su propio <li>.
+    <div className="animate-rise-in overflow-hidden soft-card text-card-foreground">
       <div className={cn("flex gap-3 p-4", done && "opacity-55")}>
         {/* Controles de orden manual (solo pendientes) */}
         {reorderable && isOpen && (
@@ -154,6 +160,15 @@ export default function StopCard({
               <Badge variant={badgeInfo.variant} className={badgeInfo.className}>
                 {badgeInfo.label}
               </Badge>
+            )}
+            {onRemove && (
+              <button
+                onClick={onRemove}
+                className="pressable shrink-0 rounded-full bg-muted p-1 text-muted-foreground"
+                aria-label="Treure del dia"
+              >
+                <X className="size-3.5" strokeWidth={2.5} />
+              </button>
             )}
           </div>
 
@@ -315,6 +330,6 @@ export default function StopCard({
           )}
         </div>
       )}
-    </li>
+    </div>
   );
 }

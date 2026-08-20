@@ -12,82 +12,139 @@
  * Colores de referencia: developer.apple.com/design/human-interface-guidelines/color
  */
 :root {
-  color-scheme: light dark;
+  /* La referencia es un diseño claro; no hay variante oscura. */
+  color-scheme: light;
 
-  /* systemGroupedBackground / secondarySystemGroupedBackground */
-  --background: #f2f2f7;
+  --background: #ffffff;
   --card: #ffffff;
 
-  /* label / secondaryLabel / tertiaryLabel */
-  --foreground: #000000;
-  --card-foreground: #000000;
-  --muted-foreground: #3c3c4399;
-  --tertiary-foreground: #3c3c434d;
+  --foreground: #17171c;
+  --card-foreground: #17171c;
+  --muted-foreground: #8b8b95;
+  --tertiary-foreground: #b4b4bd;
 
-  /* secondarySystemFill: el gris de los botones sin relleno de color */
-  --muted: #78788029;
-  --secondary: #78788029;
-  --secondary-foreground: #000000;
+  /* Relleno gris de campos y botones sin color. */
+  --muted: #f3f3f6;
+  --secondary: #f3f3f6;
+  --secondary-foreground: #17171c;
 
-  /* separator: una línea de medio píxel, no un borde */
-  --border: #3c3c434a;
-  --input: #3c3c434a;
+  --border: #ededf1;
+  --input: #f3f3f6;
 
-  /* systemBlue: el único color de acción. Todo lo pulsable es azul. */
-  --primary: #007aff;
+  /* Naranja de marca: el único color de acción, todo lo pulsable es naranja. */
+  --primary: #f2701d;
   --primary-foreground: #ffffff;
-  --accent: #007aff;
+  --accent: #17171c;
   --accent-foreground: #ffffff;
-  --ring: #007aff;
+  --ring: #f2701d;
 
-  /* systemRed / systemGreen / systemOrange */
-  --destructive: #ff3b30;
-  --success: #34c759;
-  --warning: #ff9500;
+  --destructive: #e5484d;
+  --success: #2ea043;
+  --warning: #e8890c;
 
-  /* Fondo tenue para avisos, derivado del propio color del sistema. */
-  --warning-surface: #ff950026;
-  --warning-foreground: #8a5200;
+  --warning-surface: #f2701d1f;
+  --warning-foreground: #9a4a06;
 
-  /* systemPurple: único color nuevo, para el estado "en curso" (reparto ya
-     empezado). Los otros tres estados reutilizan el azul/verde/naranja de
-     arriba: no hace falta un color por estado si ya hay uno con el
-     significado correcto. */
-  --status-en-curs: #af52de;
+  /* "En curso": un reparto ya empezado. Azul para que no se confunda ni con
+     el naranja de acción ni con el verde de entregado. */
+  --status-en-curs: #2f6feb;
 
-  --radius: 0.875rem;
+  /* Degradado cálido de las cabeceras.
+     El tramo superior usa el mismo crema que el fondo de la ilustración del
+     login, para que el borde de la imagen no se recorte contra el fondo. */
+  --warm-from: #f5e7d4;
+  --warm-via: #faf0e4;
+  --warm-to: #ffffff;
+
+  /* Radio generoso: todo son tarjetas muy redondeadas. */
+  --radius: 1.25rem;
 }
 
+/*
+ * Modo claro/oscuro: sigue el sistema por defecto, pero Ajustes puede
+ * forzarlo con `data-theme` en el `<html>` (ver `lib/sync.ts` y el script
+ * de `app/layout.tsx`, que lo aplica antes del primer pintado para que no
+ * haya parpadeo). El bloque oscuro se repite dos veces a propósito —una
+ * vez detrás de la media query, otra detrás de `[data-theme="dark"]"—
+ * porque ninguna de las dos por sí sola cubre "el sistema está en claro
+ * pero el usuario ha forzado oscuro".
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #000000;
-    --card: #1c1c1e;
+  :root:not([data-theme="light"]) {
+    --background: #14110f;
+    --card: #1f1b18;
 
-    --foreground: #ffffff;
-    --card-foreground: #ffffff;
-    --muted-foreground: #ebebf599;
-    --tertiary-foreground: #ebebf54d;
+    --foreground: #f7f3ef;
+    --card-foreground: #f7f3ef;
+    --muted-foreground: #a8a099;
+    --tertiary-foreground: #6f6862;
 
-    --muted: #7878803d;
-    --secondary: #7878803d;
-    --secondary-foreground: #ffffff;
+    --muted: #2a2521;
+    --secondary: #2a2521;
+    --secondary-foreground: #f7f3ef;
 
-    --border: #54545899;
-    --input: #54545899;
+    --border: #322c27;
+    --input: #322c27;
 
-    --primary: #0a84ff;
-    --accent: #0a84ff;
-    --ring: #0a84ff;
+    --primary: #ff8438;
+    --accent: #f7f3ef;
+    --ring: #ff8438;
 
-    --destructive: #ff453a;
-    --success: #30d158;
-    --warning: #ff9f0a;
+    --destructive: #ff6369;
+    --success: #4cc76a;
+    --warning: #ffab48;
 
-    --warning-surface: #ff9f0a26;
-    --warning-foreground: #ffb340;
+    --warning-surface: #ff84381f;
+    --warning-foreground: #ffc489;
 
-    --status-en-curs: #bf5af2;
+    --status-en-curs: #6ea8ff;
+    --warm-from: #2a1f16;
+    --warm-via: #1f1a15;
+    --warm-to: #14110f;
   }
+}
+
+/* Oscuro forzado desde Ajustes, sea cual sea el tema del sistema. */
+:root[data-theme="dark"] {
+  --background: #14110f;
+  --card: #1f1b18;
+
+  --foreground: #f7f3ef;
+  --card-foreground: #f7f3ef;
+  --muted-foreground: #a8a099;
+  --tertiary-foreground: #6f6862;
+
+  --muted: #2a2521;
+  --secondary: #2a2521;
+  --secondary-foreground: #f7f3ef;
+
+  --border: #322c27;
+  --input: #322c27;
+
+  --primary: #ff8438;
+  --accent: #f7f3ef;
+  --ring: #ff8438;
+
+  --destructive: #ff6369;
+  --success: #4cc76a;
+  --warning: #ffab48;
+
+  --warning-surface: #ff84381f;
+  --warning-foreground: #ffc489;
+
+  --status-en-curs: #6ea8ff;
+  --warm-from: #2a1f16;
+  --warm-via: #1f1a15;
+  --warm-to: #14110f;
+}
+
+/* `color-scheme` también debe seguir el tema forzado: si no, el navegador
+   sigue pintando sus propios controles (scrollbars, etc.) del sistema. */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -229,7 +286,7 @@
    * desenfoque deje el color de debajo lavado.
    */
   .material {
-    background: color-mix(in srgb, var(--background) 72%, transparent);
+    background: color-mix(in srgb, var(--background) 92%, transparent);
     backdrop-filter: saturate(180%) blur(20px);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
   }
@@ -268,10 +325,86 @@ html {
   animation: fade-in 0.2s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
+/* ── Superficies del tema cálido ───────────────────────────────────────── */
+
+.warm-gradient {
+  background: linear-gradient(
+    180deg,
+    var(--warm-from) 0%,
+    var(--warm-via) 45%,
+    var(--warm-to) 100%
+  );
+}
+
+/* Tarjeta muy redondeada con sombra suave, en vez de un borde marcado. */
+.soft-card {
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow:
+    0 1px 2px rgb(16 16 20 / 4%),
+    0 8px 24px -12px rgb(16 16 20 / 12%);
+}
+
+/* ── Pantalla de carga ─────────────────────────────────────────────────── */
+
+/*
+ * El camión recorre la diagonal mientras la pantalla está visible. Es
+ * decorativo: no indica progreso real, así que con `prefers-reduced-motion`
+ * se queda quieto sin que se pierda información.
+ */
+@keyframes truck-run {
+  0% {
+    transform: translate3d(-58%, 34%, 0) rotate(-24deg);
+    opacity: 0;
+  }
+  12%,
+  88% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(58%, -34%, 0) rotate(-24deg);
+    opacity: 0;
+  }
+}
+
+@keyframes truck-bump {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes splash-out {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+.truck-run {
+  animation: truck-run 2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.truck-bump {
+  animation: truck-bump 0.5s ease-in-out infinite;
+}
+
+.splash-out {
+  animation: splash-out 0.45s ease forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-rise-in,
   .animate-fade-in {
     animation: fade-in 0.01s both;
+  }
+
+  .truck-run,
+  .truck-bump {
+    animation: none;
   }
 
   .pressable:active {

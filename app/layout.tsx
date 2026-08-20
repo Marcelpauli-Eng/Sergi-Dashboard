@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
+import Splash from "@/components/splash";
 
 export const metadata: Metadata = {
   title: "Reparto",
@@ -8,16 +10,13 @@ export const metadata: Metadata = {
     // Hace que en iOS se abra a pantalla completa al añadirla a inicio.
     capable: true,
     title: "Reparto",
-    // OJO: `black-translucent` NO es "transparente de verdad" — es un tinte
-    // negro fijo, se vea lo que se vea debajo. Por eso se veía siempre negra
-    // pasase lo que pasase en la app.
-    //
-    // `default` sí seguía el color real: desde iOS 13 pinta la barra con el
-    // `theme-color` de abajo (que ya tiene una entrada para claro y otra
-    // para oscuro) y elige solo el contraste de los iconos. Sigue el modo
-    // claro/oscuro del SISTEMA; no puede seguir el interruptor manual de
-    // Ajustos, porque esa barra la pinta iOS al abrir la app, no la página.
-    statusBarStyle: "default",
+    // `default`/`black` pintan una barra opaca y fija que iOS controla él
+    // solo: no sabe nada de nuestro `data-theme`, así que se queda del
+    // mismo color pase lo que pase en la app (el bug reportado). Con
+    // `black-translucent` la barra pasa a ser transparente y se ve el
+    // fondo real de la cabecera (`.material`, con `env(safe-area-inset-top)`
+    // ya reservado para el reloj/batería), que sí seguirá el tema.
+    statusBarStyle: "black-translucent",
   },
   icons: {
     apple: "/icons/apple-touch-icon.png",
@@ -46,8 +45,26 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className="h-full antialiased">
-      <body className="min-h-svh overflow-x-hidden">{children}</body>
+    <html
+      lang="es"
+      className="h-full antialiased"
+      // El script de abajo añade `data-theme` antes de que React hidrate,
+      // así que el HTML del servidor y el del cliente difieren a propósito
+      // en ese único atributo. Sin esto React lo marca como error.
+      suppressHydrationWarning
+    >
+      <body className="min-h-svh overflow-x-hidden">
+        {/*
+          Aplica el tema guardado (Ajustes → Clar/Fosc) antes del primer
+          pintado. Sin esto, con el móvil en oscuro y "Clar" forzado, se
+          vería un parpadeo oscuro→claro al cargar.
+        */}
+        <Script id="theme-init" strategy="beforeInteractive">
+          {'(function(){try{var t=localStorage.getItem("themePreference");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}})()'}
+        </Script>
+        <Splash />
+        {children}
+      </body>
     </html>
   );
 }
