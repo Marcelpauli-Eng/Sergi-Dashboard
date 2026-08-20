@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { CalendarDays, CheckCircle2, Inbox, Route, TriangleAlert } from "lucide-react";
 import { formatDistance, formatDuration } from "@/lib/format";
 
@@ -219,28 +220,13 @@ function Acceso({
 /** Furgoneta de fondo de la tarjeta principal. Decorativa. */
 function FurgonetaIlustracion() {
   return (
-    <svg
-      width="150"
-      height="110"
-      viewBox="0 0 150 110"
-      fill="none"
+    <Image
+      src="/furgoneta.webp"
+      alt=""
+      width={420}
+      height={396}
       aria-hidden
-      className="pointer-events-none absolute -bottom-2 -right-3 opacity-90"
-    >
-      <rect x="14" y="34" width="62" height="40" rx="6" fill="#f2701d" />
-      <path
-        d="M76 46h21c1.8 0 3.5.9 4.6 2.3l8.6 11.3c.7 1 1.1 2.1 1.1 3.3V74H76V46Z"
-        fill="#2b2b31"
-      />
-      <path d="M81 51h15l7 9H81v-9Z" fill="#cfe6f5" />
-      <rect x="14" y="74" width="97" height="5" rx="2.5" fill="#2b2b31" opacity="0.85" />
-      <circle cx="36" cy="81" r="10" fill="#2b2b31" />
-      <circle cx="36" cy="81" r="4" fill="#d7d7dc" />
-      <circle cx="93" cy="81" r="10" fill="#2b2b31" />
-      <circle cx="93" cy="81" r="4" fill="#d7d7dc" />
-      {/* Cajas encima */}
-      <rect x="26" y="16" width="20" height="16" rx="2" fill="#e8a86b" />
-      <rect x="50" y="10" width="24" height="22" rx="2" fill="#f0bd82" />
-    </svg>
+      className="pointer-events-none absolute bottom-0 right-0 w-[136px] select-none"
+    />
   );
 }
