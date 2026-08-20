@@ -20,6 +20,8 @@ import {
   X,
 } from "lucide-react";
 import { db } from "@/lib/db";
+import RouteTrace from "@/components/route-trace";
+import HomeSummary from "@/components/home-summary";
 import {
   recordDelivery,
   recordDateAssignment,
@@ -68,6 +70,10 @@ interface RouteResult {
   fullRouteUrl: string | null;
   totalDistanceMeters: number | null;
   totalDurationSeconds: number | null;
+  /** Geometría del recorrido, para dibujar la traza. Ver components/route-trace.tsx. */
+  encodedPolyline: string | null;
+  /** Desde dónde se calculó: el GPS del transportista, o la nave. */
+  start: { lat: number; lng: number } | null;
 }
 
 // ── Helper Dates ───────────────────────────────────────────────────────
@@ -356,7 +362,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         </p>
       )}
 
-      <header className="material sticky top-0 z-20 border-b border-border pt-[env(safe-area-inset-top)]">
+      <header className="warm-gradient sticky top-0 z-20 pt-[env(safe-area-inset-top)]">
         <div className="flex items-center justify-between gap-4 px-4 py-2.5">
           <div className="min-w-0">
             <h1 className="truncate text-lg font-semibold">{driverName}</h1>
@@ -413,7 +419,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
       {/* ── Panel del menú hamburguesa ────────────────────────────────── */}
       {menuOpen && (
-        <div className="material sticky top-[calc(env(safe-area-inset-top)+3.9rem)] z-10 animate-fade-in border-b border-border px-4 py-4">
+        <div className="material sticky top-[calc(env(safe-area-inset-top)+3.9rem)] z-10 animate-fade-in px-4 py-4">
           <p className="mb-3 text-xs font-semibold text-muted-foreground">
             Selecciona la hoja
           </p>
@@ -505,10 +511,13 @@ export default function Dashboard({ driverName }: { driverName: string }) {
             {activeTab === "avui" && (
               <TabAvui
                 todayStops={todayStops}
+                sensAssignar={unassignedStops.length}
+                entregats={historyStops.entregat.length}
+                incidencies={historyStops.incidencia.length}
+                onIr={setActiveTab}
                 routeResult={routeResult}
                 generatingRoute={generatingRoute}
                 online={online}
-                isManualOrder={isManualOrder}
                 onGenerateRoute={generateRoute}
                 onDelivered={handleDelivered}
                 onIncident={handleIncident}
@@ -576,10 +585,13 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
 function TabAvui({
   todayStops,
+  sensAssignar,
+  entregats,
+  incidencies,
+  onIr,
   routeResult,
   generatingRoute,
   online,
-  isManualOrder,
   onGenerateRoute,
   onDelivered,
   onIncident,
@@ -587,10 +599,13 @@ function TabAvui({
   setIsManualOrder,
 }: {
   todayStops: Stop[];
+  sensAssignar: number;
+  entregats: number;
+  incidencies: number;
+  onIr: (destino: "calendari" | "historial") => void;
   routeResult: RouteResult | null;
   generatingRoute: boolean;
   online: boolean;
-  isManualOrder: boolean;
   onGenerateRoute: () => void;
   onDelivered: (id: string) => void;
   onIncident: (id: string, note: string) => void;
@@ -626,7 +641,7 @@ function TabAvui({
 
   if (todayStops.length === 0) {
     return (
-      <div className="animate-rise-in rounded-xl bg-card px-6 py-12 text-center">
+      <div className="animate-rise-in soft-card px-6 py-12 text-center">
         <p className="text-base font-medium">No tens comandes programades per a avui</p>
         <p className="mt-1 text-sm text-muted-foreground">Ves al Calendari per assignar comandes al dia d&apos;avui.</p>
       </div>
@@ -635,27 +650,31 @@ function TabAvui({
 
   return (
     <>
-      <h2 className="mb-4 text-xl font-bold">Repartiment d&apos;avui</h2>
+      <div className="mb-6 animate-rise-in">
+        <HomeSummary
+          pendents={pendents.length}
+          enCurs={enCurs.length}
+          entregats={entregats}
+          incidencies={incidencies}
+          sensAssignar={sensAssignar}
+          totalDistanceMeters={routeResult?.totalDistanceMeters ?? null}
+          totalDurationSeconds={routeResult?.totalDurationSeconds ?? null}
+          rutaCalculada={routeResult !== null}
+          generandoRuta={generatingRoute}
+          online={online}
+          onGenerarRuta={() => void onGenerateRoute()}
+          onIr={onIr}
+        />
+      </div>
 
-      {pendents.length > 0 && (
+      {/* La traza y el resumen de la ruta, una vez calculada. */}
+      {routeResult && (
         <div className="mb-6 animate-rise-in">
-          {routeResult ? (
-            <RouteSummary route={routeResult} onRecalculate={onGenerateRoute} generating={generatingRoute} />
-          ) : (
-            <Button
-              className="w-full"
-              size="touch"
-              onClick={() => void onGenerateRoute()}
-              disabled={generatingRoute || !online}
-            >
-              <Route />
-              {generatingRoute
-                ? "Calculant ruta…"
-                : isManualOrder
-                  ? `Calcular ruta (ordre manual)`
-                  : `Generar ruta (${pendents.length} parades)`}
-            </Button>
-          )}
+          <RouteSummary
+            route={routeResult}
+            onRecalculate={onGenerateRoute}
+            generating={generatingRoute}
+          />
         </div>
       )}
 
@@ -777,13 +796,14 @@ function TabCalendari({
           ) : (
             <ul className="space-y-3">
               {assigned.map((stop) => (
-                <StopCard
-                  key={stop.id}
-                  stop={stop}
-                  onDelivered={() => {}} // No-op: los estados solo se marcan en "Avui"
-                  onIncident={() => {}} // No-op
-                  onRemove={() => onAssignDate(stop.id, null)}
-                />
+                <li key={stop.id}>
+                  <StopCard
+                    stop={stop}
+                    onDelivered={() => {}} // No-op: los estados solo se marcan en "Avui"
+                    onIncident={() => {}} // No-op
+                    onRemove={() => onAssignDate(stop.id, null)}
+                  />
+                </li>
               ))}
             </ul>
           )}
@@ -820,7 +840,7 @@ function TabCalendari({
 
   return (
     <div className="animate-fade-in space-y-6">
-      <div className="rounded-xl bg-card p-4">
+      <div className="soft-card p-4">
         <div className="mb-3 flex items-center justify-between">
           <Button variant="ghost" size="icon" onClick={prevMonth} aria-label="Mes anterior">
             <ChevronLeft />
@@ -875,7 +895,7 @@ function TabCalendari({
         </div>
       </div>
 
-      <div className="rounded-xl bg-card p-4">
+      <div className="soft-card p-4">
         <h2 className="mb-1 text-sm font-semibold">Bossa de comandes ({unassignedStops.length})</h2>
         <p className="text-xs text-muted-foreground">
           Clica en un dia del calendari per assignar aquestes comandes.
@@ -930,7 +950,7 @@ function FastAssignList({ stops, onAssign }: { stops: Stop[]; onAssign: (id: str
             onPointerUp={() => endPress(stop)}
             onPointerLeave={cancelPress}
             onPointerMove={cancelPress} // Si el dedo se mueve (scrolling), cancelamos
-            className="pressable flex touch-none select-none flex-col items-start gap-0.5 rounded-xl bg-card p-3 text-left"
+            className="pressable flex touch-none select-none flex-col items-start gap-0.5 soft-card p-3 text-left"
           >
             <span className="w-full truncate text-sm font-semibold">{stop.customer || stop.id}</span>
             <span className="w-full truncate text-xs text-muted-foreground">{stop.city || "Sense adreça"}</span>
@@ -1015,7 +1035,7 @@ function TabHistorial({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4 rounded-xl bg-card p-4">
+      <div className="flex items-center gap-4 soft-card p-4">
         <div className="flex-1">
           <p className="text-xs font-semibold text-muted-foreground">Entregats</p>
           <p className="text-2xl font-semibold text-status-entregat">{historyStops.entregat.length}</p>
@@ -1051,7 +1071,9 @@ function TabHistorial({
               </h3>
               <ul className="space-y-3">
                 {group.stops.map((stop) => (
-                  <StopCard key={stop.id} stop={stop} onDelivered={onDelivered} onIncident={onIncident} />
+                  <li key={stop.id}>
+                    <StopCard stop={stop} onDelivered={onDelivered} onIncident={onIncident} />
+                  </li>
                 ))}
               </ul>
             </div>
@@ -1069,8 +1091,13 @@ function RouteSummary({ route, onRecalculate, generating }: { route: RouteResult
   const duration = formatDuration(route.totalDurationSeconds);
 
   return (
-    <div className="rounded-xl bg-card p-4">
-      <div className="flex items-center justify-between gap-4">
+    <div className="soft-card overflow-hidden">
+      <RouteTrace
+        encodedPolyline={route.encodedPolyline}
+        start={route.start}
+        stops={route.stops}
+      />
+      <div className="flex items-center justify-between gap-4 p-4">
         <div className="min-w-0">
           <p className="text-sm text-muted-foreground">
             Ruta {route.optimized ? "optimitzada" : "ordre manual"}
@@ -1101,7 +1128,7 @@ function RouteSummary({ route, onRecalculate, generating }: { route: RouteResult
         </div>
       </div>
       {!route.optimized && (
-        <p className="mt-3 rounded-lg bg-warning-surface px-3 py-2 text-sm text-warning-foreground">
+        <p className="mx-4 mb-4 -mt-1 rounded-lg bg-warning-surface px-3 py-2 text-sm text-warning-foreground">
           Ruta calculada respectant el teu ordre manual.
         </p>
       )}
@@ -1121,7 +1148,7 @@ function EmptyState({ online, syncing }: { online: boolean; syncing: boolean }) 
   }
 
   return (
-    <div className="animate-rise-in rounded-xl bg-card px-6 py-12 text-center">
+    <div className="animate-rise-in soft-card px-6 py-12 text-center">
       <p className="text-base font-medium">
         {online ? "Encara no hi ha dades" : "Sense dades descarregades"}
       </p>
