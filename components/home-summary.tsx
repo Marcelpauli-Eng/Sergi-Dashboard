@@ -47,9 +47,10 @@ export default function HomeSummary({
 }: Props) {
   const porRepartir = pendents + enCurs;
   const total = porRepartir + entregats + incidencies;
-  // Sin ningún pedido no hay nada que resumir: la pestaña ya enseña su
-  // propio mensaje de "no tienes pedidos".
-  if (total === 0) return null;
+  // Con el día vacío el resumen se queda igualmente: las cifras a cero y,
+  // sobre todo, los accesos —"Sense assignar" y "Calendari"— que son la
+  // manera de darle trabajo al día. Devolver null aquí dejaba la pantalla
+  // de inicio reducida al aviso de "no tens comandes".
 
   const hechos = entregats + incidencies;
   const porcentaje = total > 0 ? Math.round((hechos / total) * 100) : 0;
