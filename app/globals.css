@@ -12,7 +12,8 @@
  * Colores de referencia: developer.apple.com/design/human-interface-guidelines/color
  */
 :root {
-  /* La referencia es un diseño claro; no hay variante oscura. */
+  /* Claro es el tema base; el oscuro se define más abajo redefiniendo
+     estos mismos tokens. */
   color-scheme: light;
 
   --background: #ffffff;
@@ -71,6 +72,10 @@
  */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    /* Sin esto los colores pasan a oscuro pero los controles que pinta el
+       navegador (scrollbars, campos, el ojo del PIN) se quedan en claro. */
+    color-scheme: dark;
+
     --background: #14110f;
     --card: #1f1b18;
 
