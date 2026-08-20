@@ -8,8 +8,15 @@ export const metadata: Metadata = {
     // Hace que en iOS se abra a pantalla completa al añadirla a inicio.
     capable: true,
     title: "Reparto",
-    // `default` deja la hora y la batería en negro sobre la barra
-    // translúcida en claro, y el sistema las pasa a blanco en oscuro.
+    // OJO: `black-translucent` NO es "transparente de verdad" — es un tinte
+    // negro fijo, se vea lo que se vea debajo. Por eso se veía siempre negra
+    // pasase lo que pasase en la app.
+    //
+    // `default` sí seguía el color real: desde iOS 13 pinta la barra con el
+    // `theme-color` de abajo (que ya tiene una entrada para claro y otra
+    // para oscuro) y elige solo el contraste de los iconos. Sigue el modo
+    // claro/oscuro del SISTEMA; no puede seguir el interruptor manual de
+    // Ajustos, porque esa barra la pinta iOS al abrir la app, no la página.
     statusBarStyle: "default",
   },
   icons: {
