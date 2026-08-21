@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 
 /**
@@ -13,9 +14,12 @@ import { useEffect, useState } from "react";
  * Se muestra una vez por carga completa de la página; moverse entre
  * pestañas no la repite, porque el layout no se vuelve a montar.
  *
- * Los colores salen de los tokens del tema, así que sigue encajando si la
- * paleta cambia. La única excepción es el camión, que es una ilustración con
- * sus propios colores.
+ * El asfalto y las líneas salen de los tokens del tema, así que siguen
+ * encajando si la paleta cambia. La única excepción es la furgoneta, que es
+ * una ilustración con sus propios colores.
+ *
+ * Quien se mueve es la carretera, no la furgoneta: vista desde arriba, es lo
+ * que da la sensación de avance.
  */
 
 /** Nombre bajo el camión. Cámbialo aquí y ya está. */
@@ -52,11 +56,20 @@ export default function Splash() {
       aria-hidden
     >
       <div className="relative flex h-60 w-full max-w-sm items-center justify-center overflow-hidden">
-        <Carretera />
-        <div className="truck-run absolute">
-          <div className="truck-bump">
-            <Camion />
-          </div>
+        <div className="carretera">
+          <div className="carretera-cinta" />
+        </div>
+        <div className="truck-bump relative">
+          <Image
+            src="/camion-top.webp"
+            alt=""
+            width={299}
+            height={600}
+            priority
+            aria-hidden
+            unoptimized
+            className="w-[78px] select-none"
+          />
         </div>
       </div>
 
@@ -69,61 +82,5 @@ export default function Splash() {
         Los pedidos del día, en la ruta más corta. Funciona sin cobertura.
       </p>
     </div>
-  );
-}
-
-/** Franja en diagonal que insinúa una carretera. */
-function Carretera() {
-  return (
-    <svg
-      viewBox="0 0 320 240"
-      className="absolute inset-0 h-full w-full text-muted"
-      fill="none"
-      aria-hidden
-    >
-      <path
-        d="M-30 210 L350 40"
-        stroke="currentColor"
-        strokeWidth="26"
-        strokeLinecap="round"
-      />
-      <path
-        d="M-30 210 L350 40"
-        stroke="var(--card)"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeDasharray="16 18"
-      />
-    </svg>
-  );
-}
-
-/** Camión de reparto visto de lado. */
-function Camion() {
-  return (
-    <svg width="96" height="60" viewBox="0 0 96 60" fill="none" aria-hidden>
-      {/* Caja */}
-      <rect x="2" y="12" width="52" height="30" rx="5" fill="#f2701d" />
-      {/* Cabina */}
-      <path
-        d="M54 22h18.5c1.5 0 2.9.7 3.8 1.9l7.4 9.6c.6.8.9 1.7.9 2.7V42H54V22Z"
-        fill="#2b2b31"
-      />
-      {/* Ventanilla */}
-      <path d="M58 26h13l6 8H58v-8Z" fill="#cfe6f5" />
-      {/* Parachoques */}
-      <rect x="2" y="42" width="83" height="4" rx="2" fill="#2b2b31" opacity="0.85" />
-      {/* Ruedas */}
-      <circle cx="21" cy="48" r="8" fill="#2b2b31" />
-      <circle cx="21" cy="48" r="3.2" fill="#d7d7dc" />
-      <circle cx="70" cy="48" r="8" fill="#2b2b31" />
-      <circle cx="70" cy="48" r="3.2" fill="#d7d7dc" />
-      {/* Líneas de velocidad */}
-      <g stroke="#f2701d" strokeWidth="3" strokeLinecap="round" opacity="0.5">
-        <path d="M-8 20h10" />
-        <path d="M-14 30h14" />
-        <path d="M-6 39h8" />
-      </g>
-    </svg>
   );
 }

@@ -357,21 +357,6 @@ html {
  * decorativo: no indica progreso real, así que con `prefers-reduced-motion`
  * se queda quieto sin que se pierda información.
  */
-@keyframes truck-run {
-  0% {
-    transform: translate3d(-58%, 34%, 0) rotate(-24deg);
-    opacity: 0;
-  }
-  12%,
-  88% {
-    opacity: 1;
-  }
-  100% {
-    transform: translate3d(58%, -34%, 0) rotate(-24deg);
-    opacity: 0;
-  }
-}
-
 @keyframes truck-bump {
   0%,
   100% {
@@ -382,15 +367,60 @@ html {
   }
 }
 
+/*
+ * Carretera cenital de la pantalla de carga. Lo que se mueve es el asfalto,
+ * no la furgoneta: vista desde arriba, es lo que hace que parezca que avanza.
+ * El desplazamiento es exactamente un periodo de la discontinua (66px), así
+ * que el bucle no tiene costura.
+ */
+@keyframes asfalto {
+  to {
+    transform: translate3d(0, 66px, 0);
+  }
+}
+
+.carretera {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 132px;
+  margin-left: -66px;
+  overflow: hidden;
+  background: var(--muted);
+  /* Que no termine en un corte seco: así la carretera parece no acabarse. */
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 16%,
+    #000 84%,
+    transparent 100%
+  );
+  /* Las continuas de los lados. */
+  border-left: 3px solid color-mix(in srgb, var(--foreground) 45%, transparent);
+  border-right: 3px solid color-mix(in srgb, var(--foreground) 45%, transparent);
+}
+
+.carretera-cinta {
+  position: absolute;
+  left: 50%;
+  width: 5px;
+  margin-left: -2.5px;
+  top: -66px;
+  height: calc(100% + 66px);
+  background: repeating-linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--foreground) 45%, transparent) 0 26px,
+    transparent 26px 66px
+  );
+  animation: asfalto 0.7s linear infinite;
+}
+
 @keyframes splash-out {
   to {
     opacity: 0;
     visibility: hidden;
   }
-}
-
-.truck-run {
-  animation: truck-run 2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 }
 
 .truck-bump {
@@ -407,8 +437,8 @@ html {
     animation: fade-in 0.01s both;
   }
 
-  .truck-run,
-  .truck-bump {
+  .truck-bump,
+  .carretera-cinta {
     animation: none;
   }
 

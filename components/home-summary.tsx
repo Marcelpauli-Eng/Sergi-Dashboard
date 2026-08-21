@@ -227,6 +227,7 @@ function FurgonetaIlustracion() {
       width={420}
       height={396}
       aria-hidden
+      unoptimized
       className="pointer-events-none absolute bottom-0 right-0 w-[136px] select-none"
     />
   );
