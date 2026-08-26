@@ -4,12 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
+  BarChart3,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
   Clock,
   FileText,
   History,
+  Inbox,
   Menu,
   Route,
   Search,
@@ -20,6 +22,7 @@ import { db } from "@/lib/db";
 import RouteTrace from "@/components/route-trace";
 import HomeSummary from "@/components/home-summary";
 import Factures from "@/components/factures";
+import Informes from "@/components/informes";
 import Ajustos from "@/components/ajustos";
 import Sidebar from "@/components/sidebar";
 import { leerDatosFacturacion } from "@/lib/ajustes-factura";
@@ -83,7 +86,10 @@ const MONTH_NAMES = ["Gener", "Febrer", "Març", "Abril", "Maig", "Juny", "Julio
 
 // ── Main Dashboard ─────────────────────────────────────────────────────
 
-type TabValue = "avui" | "calendari" | "historial" | "factures";
+type TabValue = "avui" | "calendari" | "historial" | "factures" | "informes";
+
+/** Las pestañas que en pantalla grande ocupan el alto entero sin scroll. */
+const A_PANTALLA_SENCERA: TabValue[] = ["calendari"];
 
 /** Encabezado de cada sección en ordenador e iPad. */
 const TITOLS: Record<TabValue, { titol: string; subtitol: string }> = {
@@ -91,6 +97,7 @@ const TITOLS: Record<TabValue, { titol: string; subtitol: string }> = {
   calendari: { titol: "Calendari", subtitol: "Assigna comandes als dies de repartiment." },
   historial: { titol: "Historial", subtitol: "Tot el que s'ha entregat i les incidències." },
   factures: { titol: "Factures", subtitol: "Factura el mes i consulta les emeses." },
+  informes: { titol: "Informes", subtitol: "Com va el mes: entregues, imports i incidències." },
 };
 
 export default function Dashboard({ driverName }: { driverName: string }) {
@@ -170,6 +177,16 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       setLoadingTabs(false);
     }
   }, [tabs.length]);
+
+  // En pantalla grande el selector de fulls vive en la barra lateral, así
+  // que la lista hace falta desde el primer pintado y no solo al abrir el
+  // menú ☰. `fetchTabs` ya se guarda de pedirla dos veces.
+  useEffect(() => {
+    // Aplazada un tick, como el primer `sync`: pedirla dentro del cuerpo del
+    // efecto encadenaría un render de más nada más montar.
+    const t = setTimeout(() => void fetchTabs(), 0);
+    return () => clearTimeout(t);
+  }, [fetchTabs]);
 
   const handleTabSelect = useCallback(
     async (tab: string) => {
@@ -365,8 +382,14 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     void recordDateAssignment(orderId, newDate);
   };
 
+  const pantallaSencera = A_PANTALLA_SENCERA.includes(activeTab);
+
   return (
-    <div className="lg:flex">
+    // En el móvil scrollea la ventana entera, como toda la vida. A partir de
+    // `lg` la ventana se queda quieta y lo que scrollea es el contenido: la
+    // barra lateral y la cabecera no se mueven, y una pantalla como el
+    // calendario puede pedir el alto que le queda y caber entera.
+    <div className="lg:flex lg:h-svh lg:overflow-hidden">
       <Sidebar
         activa={activeTab}
         onSeccio={(seccion) => {
@@ -375,10 +398,12 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         }}
         driverName={driverName}
         full={selectedSheetTab || manifest?.sheetTab || ""}
+        fulls={tabs}
+        onFull={(full) => void handleTabSelect(full)}
         onAjustos={() => setSettingsOpen(true)}
       />
 
-      <div className="mx-auto flex min-h-svh w-full max-w-2xl flex-col pb-[calc(4.25rem+env(safe-area-inset-bottom))] lg:mx-0 lg:max-w-none lg:pb-0">
+      <div className="mx-auto flex min-h-svh w-full max-w-2xl flex-col pb-[calc(4.25rem+env(safe-area-inset-bottom))] lg:mx-0 lg:h-svh lg:min-h-0 lg:max-w-none lg:overflow-hidden lg:pb-0">
       {manifest?.demo && (
         // Texto negro sobre el naranja del sistema: en blanco no hay
         // contraste suficiente y este aviso tiene que leerse sí o sí.
@@ -424,7 +449,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 setMenuOpen((v) => !v);
                 if (!menuOpen) void fetchTabs();
               }}
-              className="pressable flex size-9 items-center justify-center rounded-full bg-muted text-primary"
+              className="pressable flex size-9 items-center justify-center rounded-full bg-muted text-primary lg:hidden"
               aria-label="Menú"
               aria-expanded={menuOpen}
             >
@@ -495,7 +520,15 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         />
       )}
 
-      <main className="flex-1 px-4 py-5 lg:mx-auto lg:w-full lg:max-w-6xl lg:px-8 lg:py-8">
+      <main className="flex-1 lg:min-h-0 lg:overflow-hidden">
+      <div
+        className={cn(
+          "mx-auto w-full px-4 py-5 lg:max-w-[100rem] lg:px-8 lg:py-6",
+          pantallaSencera
+            ? "lg:flex lg:h-full lg:flex-col lg:overflow-hidden"
+            : "lg:h-full lg:overflow-y-auto",
+        )}
+      >
         {/* En el móvil el sitio lo dice la barra de abajo; en pantalla grande
             hace falta un título, que si no te pierdes en tanto blanco. */}
         <div className="mb-6 hidden lg:block">
@@ -505,6 +538,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
           <p className="text-sm text-muted-foreground">{TITOLS[activeTab].subtitol}</p>
         </div>
 
+        <div className={cn(pantallaSencera && "lg:min-h-0 lg:flex-1")}>
         {loading ? (
           <p className="py-16 text-center text-base text-muted-foreground">Cargando…</p>
         ) : !manifest ? (
@@ -552,52 +586,39 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 onImporte={handleDelivered}
               />
             )}
+            {activeTab === "informes" && (
+              <Informes
+                stops={allStops}
+                mes={selectedSheetTab || manifest?.sheetTab || ""}
+              />
+            )}
           </>
         )}
+        </div>
+      </div>
       </main>
 
       {/* ── Bottom Navigation ─────────────────────────────────────────── */}
       <nav className="material fixed bottom-0 left-0 right-0 z-20 mx-auto flex max-w-2xl border-t border-border pb-[env(safe-area-inset-bottom)] lg:hidden">
-        <button
-          onClick={() => setActiveTab("avui")}
-          className={cn(
-            "pressable flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1 text-[10px] font-medium",
-            activeTab === "avui" ? "text-primary" : "text-tertiary-foreground",
-          )}
-        >
-          <Clock className="size-6" strokeWidth={activeTab === "avui" ? 2.3 : 1.8} />
-          Avui
-        </button>
-        <button
-          onClick={() => setActiveTab("calendari")}
-          className={cn(
-            "pressable flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1 text-[10px] font-medium",
-            activeTab === "calendari" ? "text-primary" : "text-tertiary-foreground",
-          )}
-        >
-          <CalendarDays className="size-6" strokeWidth={activeTab === "calendari" ? 2.3 : 1.8} />
-          Calendari
-        </button>
-        <button
-          onClick={() => setActiveTab("historial")}
-          className={cn(
-            "pressable flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1 text-[10px] font-medium",
-            activeTab === "historial" ? "text-primary" : "text-tertiary-foreground",
-          )}
-        >
-          <History className="size-6" strokeWidth={activeTab === "historial" ? 2.3 : 1.8} />
-          Historial
-        </button>
-        <button
-          onClick={() => setActiveTab("factures")}
-          className={cn(
-            "pressable flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1 text-[10px] font-medium",
-            activeTab === "factures" ? "text-primary" : "text-tertiary-foreground",
-          )}
-        >
-          <FileText className="size-6" strokeWidth={activeTab === "factures" ? 2.3 : 1.8} />
-          Factures
-        </button>
+        {([
+          ["avui", "Avui", Clock],
+          ["calendari", "Calendari", CalendarDays],
+          ["historial", "Historial", History],
+          ["factures", "Factures", FileText],
+          ["informes", "Informes", BarChart3],
+        ] as [TabValue, string, typeof Clock][]).map(([id, label, Icona]) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id)}
+            className={cn(
+              "pressable flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1 text-[10px] font-medium",
+              activeTab === id ? "text-primary" : "text-tertiary-foreground",
+            )}
+          >
+            <Icona className="size-6" strokeWidth={activeTab === id ? 2.3 : 1.8} />
+            {label}
+          </button>
+        ))}
       </nav>
       </div>
     </div>
@@ -702,7 +723,7 @@ function TabAvui({
       {enCurs.length > 0 && (
         <div className="mb-6 space-y-3">
           <h3 className="px-1 text-sm font-semibold text-status-en-curs">En curs</h3>
-          <ul className="space-y-3 xl:grid xl:grid-cols-2 xl:gap-3 xl:space-y-0">
+          <ul className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 2xl:grid-cols-3">
             {enCurs.map((stop) => (
               <StopCard
                 key={stop.id}
@@ -718,7 +739,7 @@ function TabAvui({
       {pendents.length > 0 && (
         <div className="space-y-3">
           <h3 className="px-1 text-sm font-semibold text-status-pendent">Pendents</h3>
-          <ul className="space-y-3 xl:grid xl:grid-cols-2 xl:gap-3 xl:space-y-0">
+          <ul className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 2xl:grid-cols-3">
             {todayStops.map((stop, index) => {
               if (stop.statusCategory !== "pendent") return null;
 
@@ -756,6 +777,19 @@ function TabAvui({
 
 // ── Tab: Calendari ─────────────────────────────────────────────────────
 
+/** Comandas escritas en una casilla del mes antes de resumir el resto. */
+const CHIPS_PER_DIA = 3;
+
+/**
+ * El calendario del mes.
+ *
+ * En el móvil es lo de siempre: casillas con un punto, y al tocar un día se
+ * abre ese día a pantalla completa. En ordenador es el MISMO componente con
+ * el mes ocupando todo el alto disponible —sin scroll, que era la queja— y
+ * el día abierto en una columna al lado en vez de tapando el mes. Las
+ * comandas se arrastran de la bolsa a un día, o de un día a otro, con el
+ * arrastre nativo del navegador: ni una dependencia más.
+ */
 function TabCalendari({
   todayDate,
   unassignedStops,
@@ -769,6 +803,8 @@ function TabCalendari({
 }) {
   const [currentMonth, setCurrentMonth] = useState(() => getYearMonth(todayDate || new Date().toISOString().slice(0, 10)));
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  /** Día sobre el que se está soltando una comanda. Solo para pintarlo. */
+  const [sobreDia, setSobreDia] = useState<string | null>(null);
 
   const grid = useMemo(() => getMonthGrid(currentMonth.year, currentMonth.month), [currentMonth.year, currentMonth.month]);
 
@@ -790,83 +826,34 @@ function TabCalendari({
     });
   };
 
-  if (selectedDate) {
-    const assigned = calendarStopsByDate[selectedDate] || [];
-    const isToday = selectedDate === todayDate;
-    const isPast = Boolean(todayDate) && selectedDate < todayDate;
+  /** Un día que ya pasó no admite comandas nuevas. */
+  const esPassat = (date: string) => Boolean(todayDate) && date < todayDate;
 
-    return (
-      <div className="animate-fade-in space-y-6">
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" onClick={() => setSelectedDate(null)} aria-label="Tornar">
-            <ChevronLeft />
-          </Button>
-          <h2 className="text-lg font-semibold">
-            {selectedDate.split("-").reverse().join("/")}
-            {isToday && " · Avui"}
-            {isPast && " · Passat"}
-          </h2>
-        </div>
+  const assignades = selectedDate ? calendarStopsByDate[selectedDate] ?? [] : [];
+  const passat = selectedDate ? esPassat(selectedDate) : false;
 
-        <div className="space-y-3">
-          <h3 className="px-1 text-sm font-semibold text-muted-foreground">
-            Comandes assignades ({assigned.length})
-          </h3>
-          {assigned.length === 0 ? (
-            <p className="px-1 text-sm text-muted-foreground">No hi ha comandes assignades a aquest dia.</p>
-          ) : (
-            <ul className="space-y-3">
-              {assigned.map((stop) => (
-                <li key={stop.id}>
-                  <StopCard
-                    stop={stop}
-                    onDelivered={() => {}} // No-op: los estados solo se marcan en "Avui"
-                    onIncident={() => {}} // No-op
-                    onRemove={() => onAssignDate(stop.id, null)}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {isPast ? (
-          <div className="hairline space-y-2 pt-4">
-            <p className="text-sm text-muted-foreground">
-              Aquest dia ja ha passat: no s&apos;hi poden afegir comandes.
-            </p>
-            {assigned.length > 0 && (
-              <p className="text-xs text-tertiary-foreground">
-                Si alguna es va quedar sense entregar, fes <strong className="text-foreground">Treure</strong> i
-                assigna-la a un altre dia.
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="hairline space-y-3 pt-4">
-            <h3 className="px-1 text-sm font-semibold text-status-pendent">Afegir comanda ràpid</h3>
-            <p className="px-1 text-xs text-tertiary-foreground">
-              Toca per assignar o <strong className="text-muted-foreground">mantén premut</strong> per previsualitzar la comanda.
-            </p>
-            {unassignedStops.length === 0 ? (
-              <p className="px-1 text-sm text-muted-foreground">No et queden comandes pendents d&apos;assignar.</p>
-            ) : (
-              <FastAssignList stops={unassignedStops} onAssign={(id) => onAssignDate(id, selectedDate)} />
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
+  const soltar = (date: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    setSobreDia(null);
+    const id = e.dataTransfer.getData("text/plain");
+    if (id && !esPassat(date)) onAssignDate(id, date);
+  };
 
   return (
-    <div className="animate-fade-in space-y-6">
-      <div className="soft-card p-4">
+    <div className="animate-fade-in lg:grid lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-4">
+      {/* ── El mes ─────────────────────────────────────────────────────── */}
+      <div
+        className={cn(
+          "soft-card flex flex-col p-4 lg:min-h-0",
+          // En el móvil el día abierto sustituye al mes; en ordenador conviven.
+          selectedDate && "hidden lg:flex",
+        )}
+      >
         <div className="mb-3 flex items-center justify-between">
           <Button variant="ghost" size="icon" onClick={prevMonth} aria-label="Mes anterior">
             <ChevronLeft />
           </Button>
-          <h2 className="text-base font-semibold">
+          <h2 className="text-base font-semibold lg:text-lg">
             {MONTH_NAMES[currentMonth.month - 1]} {currentMonth.year}
           </h2>
           <Button variant="ghost" size="icon" onClick={nextMonth} aria-label="Mes següent">
@@ -874,64 +861,247 @@ function TabCalendari({
           </Button>
         </div>
 
-        <div className="mb-1 grid grid-cols-7 text-center text-[11px] font-semibold text-tertiary-foreground">
+        <div className="mb-1 grid grid-cols-7 text-center text-[11px] font-semibold text-tertiary-foreground lg:mb-1.5 lg:text-left lg:[&>div]:pl-2">
           {WEEKDAY_NAMES.map(d => <div key={d}>{d}</div>)}
         </div>
 
-        <div className="grid grid-cols-7 gap-y-1">
+        {/*
+          `auto-rows-fr` en vez de un número fijo de filas: hay meses de cinco
+          semanas y meses de seis, y así las casillas se reparten el alto que
+          quede sea cual sea el mes.
+        */}
+        <div className="grid grid-cols-7 gap-y-1 lg:min-h-0 lg:flex-1 lg:auto-rows-fr lg:gap-1.5">
           {grid.map((date) => {
             const isToday = date === todayDate;
-            const assignedCount = (calendarStopsByDate[date] || []).length;
+            const delDia = calendarStopsByDate[date] || [];
             const { month: dMonth } = getYearMonth(date);
             const isCurrentMonth = dMonth === currentMonth.month;
             const dayNum = date.split("-")[2].replace(/^0/, "");
+            const bloquejat = esPassat(date);
 
             return (
               <button
                 key={date}
                 onClick={() => setSelectedDate(date)}
-                className="pressable relative flex aspect-square flex-col items-center justify-center gap-0.5"
+                onDragOver={(e) => {
+                  if (bloquejat) return;
+                  e.preventDefault();
+                  setSobreDia(date);
+                }}
+                onDragLeave={() => setSobreDia((d) => (d === date ? null : d))}
+                onDrop={soltar(date)}
+                aria-current={date === selectedDate ? "date" : undefined}
+                aria-label={`${date.split("-").reverse().join("/")}${
+                  delDia.length > 0
+                    ? `, ${delDia.length} ${delDia.length === 1 ? "comanda" : "comandes"}`
+                    : ""
+                }`}
+                className={cn(
+                  "pressable relative flex aspect-square flex-col items-center justify-center gap-0.5",
+                  // A partir de `lg` la casilla deja de ser un cuadradito con un
+                  // punto y pasa a ser una celda con las comandas escritas.
+                  "lg:aspect-auto lg:min-h-0 lg:items-stretch lg:justify-start lg:gap-1 lg:overflow-hidden lg:rounded-xl lg:border lg:border-border lg:p-1.5 lg:text-left",
+                  !isCurrentMonth && "lg:opacity-45",
+                  date === selectedDate && "lg:border-primary lg:bg-[color-mix(in_srgb,var(--primary)_6%,transparent)]",
+                  sobreDia === date && "lg:border-primary lg:bg-[color-mix(in_srgb,var(--primary)_14%,transparent)]",
+                  bloquejat && "lg:bg-muted/40",
+                )}
               >
-                <span
-                  className={cn(
-                    "flex size-8 items-center justify-center rounded-full text-sm",
-                    !isCurrentMonth && "text-tertiary-foreground",
-                    isToday && "bg-primary font-semibold text-primary-foreground",
-                  )}
-                >
-                  {dayNum}
-                </span>
-                {assignedCount > 0 && (
+                <span className="flex items-center gap-1 lg:justify-between">
                   <span
                     className={cn(
-                      "size-1.5 rounded-full",
+                      "flex size-8 items-center justify-center rounded-full text-sm lg:size-6 lg:text-[13px]",
+                      !isCurrentMonth && "text-tertiary-foreground",
+                      isToday && "bg-primary font-semibold text-primary-foreground",
+                    )}
+                  >
+                    {dayNum}
+                  </span>
+                  {delDia.length > 0 && (
+                    <span className="hidden text-[11px] font-semibold tabular-nums text-muted-foreground lg:inline">
+                      {delDia.length}
+                    </span>
+                  )}
+                </span>
+
+                {/* Móvil: un punto. Es todo lo que cabe. */}
+                {delDia.length > 0 && (
+                  <span
+                    className={cn(
+                      "size-1.5 rounded-full lg:hidden",
                       isToday ? "bg-primary" : "bg-muted-foreground",
                     )}
                     aria-hidden
                   />
                 )}
+
+                {/* Ordenador: las comandas, con nombre. */}
+                <span className="hidden min-h-0 flex-1 flex-col gap-0.5 overflow-hidden lg:flex">
+                  {delDia.slice(0, CHIPS_PER_DIA).map((stop) => (
+                    <span
+                      key={stop.id}
+                      className={cn(
+                        "truncate rounded-md px-1.5 py-0.5 text-[11px] leading-4",
+                        stop.statusCategory === "en_curs"
+                          ? "bg-[color-mix(in_srgb,var(--status-en-curs)_16%,transparent)] text-status-en-curs"
+                          : "bg-muted text-foreground",
+                      )}
+                    >
+                      {stop.customer || stop.id}
+                    </span>
+                  ))}
+                  {delDia.length > CHIPS_PER_DIA && (
+                    <span className="px-1.5 text-[11px] leading-4 text-muted-foreground">
+                      +{delDia.length - CHIPS_PER_DIA} més
+                    </span>
+                  )}
+                </span>
               </button>
             );
           })}
         </div>
       </div>
 
-      <div className="soft-card p-4">
-        <h2 className="mb-1 text-sm font-semibold">Bossa de comandes ({unassignedStops.length})</h2>
-        <p className="text-xs text-muted-foreground">
-          Clica en un dia del calendari per assignar aquestes comandes.
-        </p>
-      </div>
+      {/* ── Columna de al lado: el día abierto, o la bolsa ─────────────── */}
+      <aside
+        className={cn(
+          "mt-6 flex flex-col gap-3 lg:mt-0 lg:min-h-0",
+          !selectedDate && "lg:pt-0",
+        )}
+      >
+        {selectedDate ? (
+          <>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedDate(null)}
+                aria-label="Tancar el dia"
+                className="lg:hidden"
+              >
+                <ChevronLeft />
+              </Button>
+              <div className="min-w-0 flex-1">
+                <h2 className="truncate text-lg font-semibold">
+                  {selectedDate.split("-").reverse().join("/")}
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  {selectedDate === todayDate ? "Avui · " : passat ? "Ja ha passat · " : ""}
+                  {assignades.length}{" "}
+                  {assignades.length === 1 ? "comanda" : "comandes"}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedDate(null)}
+                aria-label="Tancar el dia"
+                className="hidden lg:inline-flex"
+              >
+                <X />
+              </Button>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col gap-4 lg:overflow-y-auto">
+              <div className="space-y-2">
+                {assignades.length === 0 ? (
+                  <p className="soft-card px-4 py-6 text-center text-sm text-muted-foreground">
+                    Cap comanda assignada a aquest dia.
+                  </p>
+                ) : (
+                  <ul className="soft-card divide-y divide-border">
+                    {assignades.map((stop) => (
+                      <li
+                        key={stop.id}
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData("text/plain", stop.id)}
+                        className="flex items-center gap-2 px-3 py-2.5 lg:cursor-grab lg:active:cursor-grabbing"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">
+                            {stop.customer || stop.id}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {stop.city || stop.address || stop.id}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onAssignDate(stop.id, null)}
+                        >
+                          Treure
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {passat ? (
+                <div className="hairline space-y-2 pt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Aquest dia ja ha passat: no s&apos;hi poden afegir comandes.
+                  </p>
+                  {assignades.length > 0 && (
+                    <p className="text-xs text-tertiary-foreground">
+                      Si alguna es va quedar sense entregar, fes{" "}
+                      <strong className="text-foreground">Treure</strong> i assigna-la a un
+                      altre dia.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <Bossa
+                  stops={unassignedStops}
+                  onAssign={(id) => onAssignDate(id, selectedDate)}
+                />
+              )}
+            </div>
+          </>
+        ) : (
+          <Bossa stops={unassignedStops} onAssign={null} />
+        )}
+      </aside>
     </div>
   );
 }
 
-// ── Fast Assign List with Long Press ───────────────────────────────────
+// ── La bolsa de comandas sin asignar ───────────────────────────────────
 
-function FastAssignList({ stops, onAssign }: { stops: Stop[]; onAssign: (id: string) => void }) {
+/**
+ * Las comandas que todavía no tienen día.
+ *
+ * Un solo componente para las dos maneras de asignar: tocar (móvil, con
+ * previsualización si mantienes el dedo) y arrastrar a una casilla del mes
+ * (ordenador). El arrastre es el nativo del navegador; el `pointermove` que
+ * lo inicia ya cancela el toque, así que no se pisan.
+ */
+function Bossa({
+  stops,
+  onAssign,
+}: {
+  stops: Stop[];
+  /** `null` cuando no hay ningún día abierto: entonces tocar solo previsualiza. */
+  onAssign: ((id: string) => void) | null;
+}) {
   const [previewStop, setPreviewStop] = useState<Stop | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const cancelRef = useRef(false);
+  /**
+   * Con qué se ha pulsado la última vez.
+   *
+   * El "mantener pulsado" es un gesto de dedo y solo se arma con el dedo: con
+   * el ratón, mantener el botón medio segundo es justo el principio de un
+   * arrastre, así que armarlo también ahí abría la previsualización a media
+   * comanda arrastrada. Con ratón manda el `click` de toda la vida.
+   */
+  const tipusRef = useRef<string>("mouse");
+
+  const activar = (stop: Stop) => {
+    if (onAssign) onAssign(stop.id);
+    else setPreviewStop(stop);
+  };
 
   const startPress = (stop: Stop) => {
     cancelRef.current = false;
@@ -947,9 +1117,7 @@ function FastAssignList({ stops, onAssign }: { stops: Stop[]; onAssign: (id: str
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
-      if (!cancelRef.current) {
-        onAssign(stop.id);
-      }
+      if (!cancelRef.current) activar(stop);
     }
   };
 
@@ -962,22 +1130,62 @@ function FastAssignList({ stops, onAssign }: { stops: Stop[]; onAssign: (id: str
   };
 
   return (
-    <>
-      <div className="grid grid-cols-2 gap-2">
-        {stops.map((stop) => (
-          <button
-            key={stop.id}
-            onPointerDown={() => startPress(stop)}
-            onPointerUp={() => endPress(stop)}
-            onPointerLeave={cancelPress}
-            onPointerMove={cancelPress} // Si el dedo se mueve (scrolling), cancelamos
-            className="pressable flex touch-none select-none flex-col items-start gap-0.5 soft-card p-3 text-left"
-          >
-            <span className="w-full truncate text-sm font-semibold">{stop.customer || stop.id}</span>
-            <span className="w-full truncate text-xs text-muted-foreground">{stop.city || "Sense adreça"}</span>
-          </button>
-        ))}
+    <div className="flex min-h-0 flex-col gap-2">
+      <div className="hairline flex items-baseline justify-between gap-2 pt-4">
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold text-status-pendent">
+          <Inbox className="size-4" aria-hidden />
+          Bossa de comandes
+        </h3>
+        <span className="text-sm tabular-nums text-muted-foreground">{stops.length}</span>
       </div>
+      <p className="text-xs text-tertiary-foreground">
+        <span className="lg:hidden">
+          {onAssign
+            ? "Toca per assignar o mantén premut per previsualitzar."
+            : "Clica en un dia del calendari per assignar-les."}
+        </span>
+        <span className="hidden lg:inline">
+          Arrossega-les a un dia del mes{onAssign ? ", o clica per assignar-les al dia obert" : ""}.
+        </span>
+      </p>
+
+      {stops.length === 0 ? (
+        <p className="soft-card px-4 py-6 text-center text-sm text-muted-foreground">
+          No et queden comandes pendents d&apos;assignar.
+        </p>
+      ) : (
+        <div className="grid min-h-0 grid-cols-2 gap-2 overflow-y-auto lg:grid-cols-1">
+          {stops.map((stop) => (
+            <button
+              key={stop.id}
+              draggable
+              onDragStart={(e) => {
+                cancelPress();
+                e.dataTransfer.setData("text/plain", stop.id);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onPointerDown={(e) => {
+                tipusRef.current = e.pointerType;
+                if (e.pointerType === "touch") startPress(stop);
+              }}
+              onPointerUp={(e) => {
+                if (e.pointerType === "touch") endPress(stop);
+              }}
+              onPointerLeave={cancelPress}
+              onPointerMove={cancelPress} // Si el dedo se mueve (scrolling), cancelamos
+              // El dedo ya se ha resuelto en `onPointerUp`; el click que iOS
+              // dispara después no debe contar dos veces.
+              onClick={() => {
+                if (tipusRef.current !== "touch") activar(stop);
+              }}
+              className="pressable soft-card flex touch-none select-none flex-col items-start gap-0.5 p-3 text-left lg:cursor-grab lg:active:cursor-grabbing"
+            >
+              <span className="w-full truncate text-sm font-semibold">{stop.customer || stop.id}</span>
+              <span className="w-full truncate text-xs text-muted-foreground">{stop.city || "Sense adreça"}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {previewStop && (
         <div className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => setPreviewStop(null)}>
@@ -991,23 +1199,23 @@ function FastAssignList({ stops, onAssign }: { stops: Stop[]; onAssign: (id: str
             >
               <X />
             </Button>
-            <ul>
-              <StopCard stop={previewStop} onDelivered={() => {}} onIncident={() => {}} />
-            </ul>
-            <Button
-              className="mt-4 w-full"
-              size="touch"
-              onClick={() => {
-                onAssign(previewStop.id);
-                setPreviewStop(null);
-              }}
-            >
-              Assignar comanda
-            </Button>
+            <StopCard stop={previewStop} onDelivered={() => {}} onIncident={() => {}} />
+            {onAssign && (
+              <Button
+                className="mt-4 w-full"
+                size="touch"
+                onClick={() => {
+                  onAssign(previewStop.id);
+                  setPreviewStop(null);
+                }}
+              >
+                Assignar comanda
+              </Button>
+            )}
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -1090,7 +1298,7 @@ function TabHistorial({
               <h3 className="sticky top-0 z-10 bg-background py-1 text-sm font-semibold">
                 {group.date === "Sense data" ? group.date : formatLongDate(group.date)}
               </h3>
-              <ul className="space-y-3 xl:grid xl:grid-cols-2 xl:gap-3 xl:space-y-0">
+              <ul className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 2xl:grid-cols-3">
                 {group.stops.map((stop) => (
                   <li key={stop.id}>
                     <StopCard stop={stop} onDelivered={onDelivered} onIncident={onIncident} />

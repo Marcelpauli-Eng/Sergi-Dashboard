@@ -2,12 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import {
+  BarChart3,
   CalendarDays,
   Clock,
   FileText,
   History,
   LogOut,
-  MapPin,
   Settings,
   Truck,
 } from "lucide-react";
@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
  * doble de sitios donde arreglar cada cosa—, solo puntos de ruptura.
  */
 
-export type Seccion = "avui" | "calendari" | "historial" | "factures";
+export type Seccion = "avui" | "calendari" | "historial" | "factures" | "informes";
 
 const GRUPOS: { titol: string; items: { id: Seccion; label: string; icona: typeof Clock }[] }[] = [
   {
@@ -35,7 +35,10 @@ const GRUPOS: { titol: string; items: { id: Seccion; label: string; icona: typeo
   },
   {
     titol: "Administració",
-    items: [{ id: "factures", label: "Factures", icona: FileText }],
+    items: [
+      { id: "factures", label: "Factures", icona: FileText },
+      { id: "informes", label: "Informes", icona: BarChart3 },
+    ],
   },
 ];
 
@@ -44,6 +47,8 @@ export default function Sidebar({
   onSeccio,
   driverName,
   full,
+  fulls,
+  onFull,
   onAjustos,
 }: {
   activa: Seccion;
@@ -51,6 +56,9 @@ export default function Sidebar({
   driverName: string;
   /** Pestaña del Sheet en uso, para no perder de vista qué mes se está viendo. */
   full: string;
+  /** Todas las pestañas del Sheet. Vacío mientras no se hayan podido leer. */
+  fulls: string[];
+  onFull: (full: string) => void;
   onAjustos: () => void;
 }) {
   const router = useRouter();
@@ -97,14 +105,37 @@ export default function Sidebar({
           </div>
         ))}
 
+        {/*
+          El mes de trabajo se cambia aquí y no escondido en el menú ☰: en
+          pantalla grande es un dato que se consulta y se cambia a menudo.
+          Un <select> del sistema en vez de un desplegable propio — hace lo
+          mismo, lo pinta el navegador y funciona con teclado de serie.
+        */}
         <div className="mb-5">
-          <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wide text-tertiary-foreground">
+          <label
+            htmlFor="full-actiu"
+            className="mb-1.5 block px-2 text-[11px] font-semibold uppercase tracking-wide text-tertiary-foreground"
+          >
             Full
-          </p>
-          <p className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-muted-foreground">
-            <MapPin className="size-4 shrink-0" />
-            <span className="truncate">{full || "Sense full"}</span>
-          </p>
+          </label>
+          <select
+            id="full-actiu"
+            value={full}
+            onChange={(e) => onFull(e.target.value)}
+            disabled={fulls.length === 0}
+            className="w-full rounded-xl bg-muted px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-60"
+          >
+            {full === "" && <option value="">Sense full</option>}
+            {/* El full en uso puede no estar en la lista (modo demo, o una
+                pestaña renombrada): sin esta opción el <select> mostraría
+                otro nombre distinto del que se está viendo de verdad. */}
+            {full !== "" && !fulls.includes(full) && <option value={full}>{full}</option>}
+            {fulls.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
         </div>
 
         <button

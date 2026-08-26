@@ -70,10 +70,10 @@ export default function Factures({
   const paginas = aImprimir ? paginar(aImprimir.lineas) : [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 lg:grid lg:grid-cols-[20rem_minmax(0,1fr)] lg:items-start lg:gap-6 lg:space-y-0">
       {/* Facturar el mes que esté seleccionado, no solo el de hoy: si cambias
           de hoja desde el menú, aquí se factura esa. */}
-      <div className="soft-card space-y-3 p-4 lg:max-w-md">
+      <div className="soft-card space-y-3 p-4">
         <div>
           <p className="text-xs font-semibold text-muted-foreground">Per facturar</p>
           <p className="text-base font-medium">

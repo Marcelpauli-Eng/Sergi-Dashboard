@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { FileCheck, Printer, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Stop } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import {
   IRPF,
   IVA,
@@ -354,6 +355,15 @@ export default function Factura({
   const [emitida, setEmitida] = useState<FacturaEmitida | null>(null);
   const [emitiendo, setEmitiendo] = useState(false);
   const [errorEmision, setErrorEmision] = useState<string | null>(null);
+  /**
+   * Qué comandas se dejan FUERA de la factura.
+   *
+   * Se guarda lo excluido y no lo incluido a propósito: los pedidos llegan
+   * de IndexedDB y pueden aparecer más mientras la pantalla está abierta.
+   * Guardando lo excluido, lo que llega nuevo entra solo; guardando lo
+   * incluido, se quedaría fuera sin que nadie lo hubiera decidido.
+   */
+  const [exclosos, setExclosos] = useState<Set<string>>(() => new Set());
 
   const conImporte = useMemo(
     () => entregats.filter((s) => s.price !== null && s.price > 0),
@@ -363,14 +373,27 @@ export default function Factura({
     () => entregats.filter((s) => s.price === null || s.price === 0),
     [entregats],
   );
+  const seleccionades = useMemo(
+    () => conImporte.filter((s) => !exclosos.has(s.id)),
+    [conImporte, exclosos],
+  );
 
   const lineas: LineaFactura[] = useMemo(
-    () => conImporte.map((s) => ({ comanda: s.id, importe: s.price as number })),
-    [conImporte],
+    () => seleccionades.map((s) => ({ comanda: s.id, importe: s.price as number })),
+    [seleccionades],
   );
   const totales = useMemo(() => calcularTotales(lineas), [lineas]);
   const paginas = useMemo(() => paginar(lineas), [lineas]);
   const hoy = new Date().toISOString().slice(0, 10);
+
+  const alternar = (id: string) => {
+    setExclosos((previo) => {
+      const seguent = new Set(previo);
+      if (seguent.has(id)) seguent.delete(id);
+      else seguent.add(id);
+      return seguent;
+    });
+  };
 
   /**
    * Emite la factura: el servidor le pone número y la registra en el Sheet.
@@ -419,15 +442,20 @@ export default function Factura({
     setBorrador("");
   };
 
+  const editarImport = (stop: Stop) => {
+    setEditando(stop.id);
+    setBorrador(stop.price !== null && stop.price > 0 ? String(stop.price) : "");
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-background lg:left-64">
-      <div className="mx-auto max-w-lg space-y-6 px-4 pb-28 pt-6">
+      <div className="mx-auto max-w-lg space-y-6 px-4 pb-28 pt-6 lg:max-w-4xl lg:px-8">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-2xl font-semibold tracking-tight">Factura</h2>
             <p className="text-sm text-muted-foreground">
-              {mes} · {conImporte.length}{" "}
-              {conImporte.length === 1 ? "comanda" : "comandes"}
+              {mes} · {seleccionades.length} de {conImporte.length}{" "}
+              {conImporte.length === 1 ? "comanda" : "comandes"} amb import
             </p>
           </div>
           <Button variant="ghost" size="touch" onClick={onTancar} aria-label="Tancar">
@@ -469,14 +497,7 @@ export default function Factura({
                       </Button>
                     </>
                   ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setEditando(stop.id);
-                        setBorrador("");
-                      }}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => editarImport(stop)}>
                       Posar import
                     </Button>
                   )}
@@ -486,29 +507,104 @@ export default function Factura({
           </div>
         )}
 
-        <div className="soft-card divide-y divide-border">
-          {conImporte.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-              Cap entrega amb import aquest mes.
-            </p>
-          ) : (
-            conImporte.map((stop) => (
-              <div key={stop.id} className="flex items-center gap-3 px-4 py-2.5">
-                <span className="flex-1 truncate text-sm">
-                  <span className="tabular-nums">{stop.id}</span>
-                  {stop.customer && (
-                    <span className="text-muted-foreground"> · {stop.customer}</span>
-                  )}
-                </span>
-                <span className="tabular-nums text-sm font-medium">
-                  {euros(stop.price as number)} €
-                </span>
+        {/*
+          Marcar y desmarcar comandas: una factura no tiene por qué llevar
+          todo el mes. Lo que se desmarca sigue entregado y con su importe en
+          la hoja, así que entra en la siguiente factura sin tocar nada.
+        */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3 px-1">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Comandes a facturar
+            </h3>
+            {conImporte.length > 0 && (
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={exclosos.size === 0}
+                  onClick={() => setExclosos(new Set())}
+                >
+                  Totes
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={seleccionades.length === 0}
+                  onClick={() => setExclosos(new Set(conImporte.map((s) => s.id)))}
+                >
+                  Cap
+                </Button>
               </div>
-            ))
-          )}
+            )}
+          </div>
+
+          <div className="soft-card divide-y divide-border">
+            {conImporte.length === 0 ? (
+              <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                Cap entrega amb import aquest mes.
+              </p>
+            ) : (
+              conImporte.map((stop) => {
+                const dins = !exclosos.has(stop.id);
+                return (
+                  // El <label> envuelve solo la casilla y el texto: si
+                  // envolviera también el importe, tocar para editarlo
+                  // desmarcaría la comanda de propina.
+                  <div
+                    key={stop.id}
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-2.5",
+                      !dins && "opacity-50",
+                    )}
+                  >
+                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={dins}
+                        onChange={() => alternar(stop.id)}
+                        className="size-[18px] shrink-0 accent-[var(--primary)]"
+                      />
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        <span className="tabular-nums">{stop.id}</span>
+                        {stop.customer && (
+                          <span className="text-muted-foreground"> · {stop.customer}</span>
+                        )}
+                      </span>
+                    </label>
+                    {editando === stop.id ? (
+                      <>
+                        <input
+                          value={borrador}
+                          onChange={(e) => setBorrador(e.target.value)}
+                          type="text"
+                          inputMode="decimal"
+                          autoFocus
+                          placeholder="0,00"
+                          className="w-20 rounded-lg bg-muted px-2 py-1.5 text-right text-base tabular-nums outline-none"
+                        />
+                        <Button size="sm" onClick={() => guardar(stop.id)}>
+                          Desar
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="tabular-nums"
+                        onClick={() => editarImport(stop)}
+                      >
+                        {euros(stop.price as number)} €
+                      </Button>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
 
-        <div className="soft-card space-y-2 p-4 text-sm">
+        <div className="soft-card space-y-2 p-4 text-sm lg:ml-auto lg:max-w-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Base imposable</span>
             <span className="tabular-nums font-medium">{euros(totales.base)} €</span>
@@ -535,7 +631,7 @@ export default function Factura({
       </div>
 
       <div className="fixed inset-x-0 bottom-0 lg:left-64 space-y-2 border-t border-border bg-background/95 p-4 backdrop-blur">
-        <div className="mx-auto max-w-lg space-y-2">
+        <div className="mx-auto max-w-lg space-y-2 lg:max-w-4xl">
           {errorEmision && (
             <p className="text-center text-sm text-status-incidencia">{errorEmision}</p>
           )}
@@ -557,7 +653,9 @@ export default function Factura({
               onClick={() => void emitir()}
             >
               <FileCheck strokeWidth={2.2} />
-              {emitiendo ? "Emetent…" : "Emetre factura"}
+              {emitiendo
+                ? "Emetent…"
+                : `Emetre factura · ${lineas.length} ${lineas.length === 1 ? "comanda" : "comandes"} · ${euros(totales.total)} €`}
             </Button>
           )}
         </div>
