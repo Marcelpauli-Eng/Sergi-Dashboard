@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { Check, Navigation, Phone, TriangleAlert, X } from "lucide-react";
 import type { Stop } from "@/lib/types";
 import { formatDistance, formatDuration, telHref } from "@/lib/format";
-import { parseImporte } from "@/lib/factura";
+import { euros, parseImporte } from "@/lib/factura";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,55 @@ interface Props {
   isLast?: boolean;
   /** Si se pasa, muestra un botón para desasignar la parada (p. ej. del calendario). */
   onRemove?: () => void;
+  /**
+   * Ficha completa en vez de tarjeta de lista.
+   *
+   * En una lista se ojean veinte comandas y lo que importa es el nombre y la
+   * calle; abierta a solas hay sitio de sobra y lo que hace falta es TODO lo
+   * que se sabe de ella, con su etiqueta y sin abreviar. Es el mismo
+   * componente porque los botones de entregar y de incidencia son los
+   * mismos: solo cambia cómo se reparte la información.
+   */
+  detall?: boolean;
+}
+
+/** Una fecha del Sheet, tal y como se lee: 01/07/2026. */
+function data(valor: string | null | undefined): string | null {
+  if (!valor) return null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(valor) ? valor.split("-").reverse().join("/") : valor;
+}
+
+/**
+ * Un dato de la ficha.
+ *
+ * Lo que falta se enseña con una raya en vez de esconderse: en una comanda
+ * que no se entrega, saber que NO hay teléfono es tan útil como el número.
+ */
+function Camp({
+  etiqueta,
+  valor,
+  mono,
+}: {
+  etiqueta: string;
+  valor: string | null | undefined;
+  mono?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="truncate text-[11px] font-medium uppercase tracking-wide text-tertiary-foreground">
+        {etiqueta}
+      </dt>
+      <dd
+        className={cn(
+          "truncate text-sm",
+          mono && "font-mono",
+          valor ? "text-foreground" : "text-tertiary-foreground",
+        )}
+      >
+        {valor || "—"}
+      </dd>
+    </div>
+  );
 }
 
 const CATEGORY_BADGE: Record<
@@ -55,6 +104,7 @@ export default function StopCard({
   isFirst,
   isLast,
   onRemove,
+  detall,
 }: Props) {
   const [showIncident, setShowIncident] = useState(false);
   const [showPrice, setShowPrice] = useState(false);
@@ -115,7 +165,7 @@ export default function StopCard({
     // un <li> dentro de otro <li>, que además rompe la hidratación—. Quien la
     // use dentro de una lista es el que pone su propio <li>.
     <div className="animate-rise-in overflow-hidden soft-card text-card-foreground">
-      <div className={cn("flex gap-3 p-4", done && "opacity-55")}>
+      <div className={cn("flex gap-3 p-4", detall && "sm:gap-4 sm:p-6", done && "opacity-55")}>
         {/* Controles de orden manual (solo pendientes) */}
         {reorderable && isOpen && (
           <div className="flex shrink-0 flex-col items-center justify-center gap-1 text-tertiary-foreground">
@@ -163,7 +213,12 @@ export default function StopCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <p className="min-w-0 flex-1 truncate text-base font-semibold">
+            <p
+              className={cn(
+                "min-w-0 flex-1 truncate font-semibold",
+                detall ? "text-xl" : "text-base",
+              )}
+            >
               {stop.customer || stop.address}
             </p>
             {badgeInfo && (
@@ -182,45 +237,77 @@ export default function StopCard({
             )}
           </div>
 
-          {/* Dirección y población */}
-          <p className="mt-0.5 text-sm text-muted-foreground">{stop.address}</p>
-          {stop.city && (
-            <p className="text-sm text-muted-foreground">{stop.city}</p>
-          )}
-
-          {/* Nº comanda y fecha de creación */}
-          <div className="mt-1 flex items-center gap-1.5 text-xs text-tertiary-foreground">
-            <p className="font-mono">{stop.id}</p>
-            {stop.creationDate && (
-              <>
-                <span aria-hidden>·</span>
-                <p>
-                  Creat:{" "}
-                  {stop.creationDate.match(/^\d{4}-\d{2}-\d{2}$/)
-                    ? stop.creationDate.split("-").reverse().join("/")
-                    : stop.creationDate}
-                </p>
-              </>
-            )}
-          </div>
-
-          {stop.measures && (
-            <p className="mt-1 text-xs text-tertiary-foreground">📦 {stop.measures}</p>
-          )}
-
-          {leg && isOpen && (
-            <p className="mt-1 text-xs text-tertiary-foreground">
-              {leg} des de la parada anterior
+          {/* Dirección y población. En la ficha, seguidas en una línea: hay
+              ancho de sobra y partirlas en dos solo alarga la tarjeta. */}
+          {detall ? (
+            <p className="mt-1 text-base text-muted-foreground">
+              {[stop.address, stop.city].filter(Boolean).join(" · ")}
             </p>
+          ) : (
+            <>
+              <p className="mt-0.5 text-sm text-muted-foreground">{stop.address}</p>
+              {stop.city && <p className="text-sm text-muted-foreground">{stop.city}</p>}
+            </>
+          )}
+
+          {detall ? (
+            /* Todo lo que se sabe de la comanda, cada dato con su nombre. En
+               la tarjeta de lista esto no cabe y por eso allí va apretado en
+               una línea de letra pequeña. */
+            <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-border pt-4 sm:grid-cols-3 lg:grid-cols-4">
+              <Camp etiqueta="Comanda" valor={stop.id} mono />
+              <Camp etiqueta="Creada" valor={data(stop.creationDate)} />
+              <Camp etiqueta="Repartiment" valor={data(stop.date)} />
+              <Camp
+                etiqueta="Import"
+                valor={stop.price !== null ? `${euros(stop.price)} €` : null}
+              />
+              <Camp etiqueta="Telèfon" valor={stop.phone} />
+              <Camp etiqueta="Mides" valor={stop.measures} />
+              {leg && isOpen && <Camp etiqueta="Des de l'anterior" valor={leg} />}
+            </dl>
+          ) : (
+            <>
+              {/* Nº comanda y fecha de creación */}
+              <div className="mt-1 flex items-center gap-1.5 text-xs text-tertiary-foreground">
+                <p className="font-mono">{stop.id}</p>
+                {stop.creationDate && (
+                  <>
+                    <span aria-hidden>·</span>
+                    <p>Creat: {data(stop.creationDate)}</p>
+                  </>
+                )}
+              </div>
+
+              {stop.measures && (
+                <p className="mt-1 text-xs text-tertiary-foreground">📦 {stop.measures}</p>
+              )}
+
+              {leg && isOpen && (
+                <p className="mt-1 text-xs text-tertiary-foreground">
+                  {leg} des de la parada anterior
+                </p>
+              )}
+            </>
           )}
 
           {stop.notes && (
-            <p className="mt-2.5 rounded-lg bg-warning-surface px-3 py-2 text-sm text-warning-foreground">
+            <div
+              className={cn(
+                "rounded-lg bg-warning-surface px-3 py-2 text-sm text-warning-foreground",
+                detall ? "mt-4" : "mt-2.5",
+              )}
+            >
+              {detall && (
+                <p className="mb-0.5 text-[11px] font-medium uppercase tracking-wide opacity-70">
+                  Observacions
+                </p>
+              )}
               {stop.notes}
-            </p>
+            </div>
           )}
 
-          <div className="mt-3 flex flex-col gap-2">
+          <div className={cn("flex flex-col gap-2", detall ? "mt-4" : "mt-3")}>
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" size="sm" onClick={() => setShowNav(true)}>
                 <Navigation />

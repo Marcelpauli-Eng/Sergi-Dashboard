@@ -72,6 +72,20 @@ interface Env {
     privateKey: string;
     sheetId: string;
     /**
+     * Documento donde se registran las facturas emitidas.
+     *
+     * Aparte del de los repartos a propósito. El de repartos lo comparte la
+     * empresa —lo necesita, es su hoja de pedidos— y Google Sheets no sabe
+     * ocultar una pestaña a quien tiene acceso al documento: esconderla es
+     * cosmético y la protección de hojas limita la edición, no la lectura.
+     * Lo que se factura es del transportista, así que va a otro archivo que
+     * solo comparte con la cuenta de servicio.
+     *
+     * Si no se define, cae en el documento de repartos, que es como
+     * funcionaba antes y sigue valiendo si a nadie le importa que se vea.
+     */
+    facturasSheetId: string;
+    /**
      * Nombre de la pestaña con los pedidos.
      *
      * `null` —lo normal— significa "la del mes en curso, búscala tú": la
@@ -112,6 +126,10 @@ const loaders: { [K in keyof Env]: () => Env[K] } = {
     serviceAccountEmail: required("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
     privateKey: parsePrivateKey(required("GOOGLE_PRIVATE_KEY")),
     sheetId: required("GOOGLE_SHEET_ID"),
+    facturasSheetId: optional(
+      "GOOGLE_SHEET_ID_FACTURAS",
+      required("GOOGLE_SHEET_ID"),
+    ),
     sheetTab: optionalOrNull("GOOGLE_SHEET_TAB"),
     mapsApiKey: required("GOOGLE_MAPS_API_KEY"),
   }),

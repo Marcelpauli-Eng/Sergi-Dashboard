@@ -733,7 +733,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
           className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
           onClick={() => setComandaOberta(null)}
         >
-          <div className="relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="relative w-full max-w-md sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
             <Button
               variant="secondary"
               size="icon"
@@ -744,6 +744,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
               <X />
             </Button>
             <StopCard
+              detall
               stop={comandaOberta}
               onDelivered={(id, price) => {
                 handleDelivered(id, price);
@@ -1516,7 +1517,7 @@ function Bossa({
 
       {previewStop && (
         <div className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => setPreviewStop(null)}>
-          <div className="relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="relative w-full max-w-md sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
             <Button
               variant="secondary"
               size="icon"
@@ -1526,7 +1527,7 @@ function Bossa({
             >
               <X />
             </Button>
-            <StopCard stop={previewStop} onDelivered={() => {}} onIncident={() => {}} />
+            <StopCard detall stop={previewStop} onDelivered={() => {}} onIncident={() => {}} />
             {onAssign && (
               <Button
                 className="mt-4 w-full"
@@ -1833,7 +1834,7 @@ function TabHistorial({
           className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
           onClick={() => setObert(null)}
         >
-          <div className="relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="relative w-full max-w-md sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
             <Button
               variant="secondary"
               size="icon"
@@ -1844,6 +1845,7 @@ function TabHistorial({
               <X />
             </Button>
             <StopCard
+              detall
               stop={obert}
               onDelivered={(id, price) => {
                 onDelivered(id, price);
