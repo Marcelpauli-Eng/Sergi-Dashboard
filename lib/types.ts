@@ -33,6 +33,11 @@ export interface Order {
   rawStatus: string;
   /** Categoría de estado derivada del valor original de la celda. */
   statusCategory: "pendent" | "en_curs" | "entregat" | "incidencia";
+  /**
+   * Importe cobrado por este pedido, sin IVA. Lo pone el transportista al
+   * entregar. `null` mientras no se haya entregado o no se haya puesto.
+   */
+  price: number | null;
   /** Coordenadas cacheadas en el Sheet para no re-geocodificar cada día. */
   lat: number | null;
   lng: number | null;
@@ -109,6 +114,30 @@ export interface DeliveryRecord {
   recordedAt: string;
   /** Texto libre, solo para incidencias. */
   note?: string | null;
+  /** Importe cobrado, sin IVA. Solo en las entregas. */
+  price?: number | null;
+}
+
+/**
+ * Una factura ya emitida, tal y como queda registrada en la pestaña
+ * "Factures" del Sheet.
+ *
+ * Guarda sus propias líneas (comandas e importes) y no solo una referencia a
+ * los pedidos: una factura emitida no puede cambiar porque después se toque
+ * una fila de la hoja. Reimprimirla tiene que dar exactamente el mismo papel.
+ */
+export interface FacturaEmitida {
+  /** Correlativo dentro de la serie. Sin ceros: se formatean al imprimir. */
+  numero: number;
+  /** Fecha de emisión, YYYY-MM-DD. */
+  fecha: string;
+  /** Pestaña del Sheet que se facturó, que es el mes de trabajo. */
+  periodo: string;
+  lineas: { comanda: string; importe: number }[];
+  base: number;
+  iva: number;
+  irpf: number;
+  total: number;
 }
 
 /** Datos públicos de un transportista. El PIN nunca sale del servidor. */

@@ -57,14 +57,24 @@ export default function LoginForm() {
     "h-14 w-full rounded-full bg-secondary pl-12 pr-12 text-[15px] outline-none transition-shadow placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/25";
 
   return (
-    <main className="flex min-h-svh flex-col bg-card">
+    <main className="flex min-h-svh flex-col bg-card lg:flex-row">
       {/* ── Mitad cálida: marca e ilustración ──────────────────────────── */}
-      <div className="warm-gradient relative min-h-[36svh] shrink-0 overflow-hidden pt-[max(1rem,env(safe-area-inset-top))]">
+      <div className="warm-gradient relative min-h-[36svh] shrink-0 overflow-hidden pt-[max(1rem,env(safe-area-inset-top))] lg:flex lg:min-h-svh lg:w-[46%] lg:flex-col lg:pt-10">
         <div className="flex items-center gap-2 px-6">
           <CamionLogo />
           <span className="text-2xl font-bold tracking-tight">
             Rep<span className="text-primary">arto</span>
           </span>
+        </div>
+
+        <div className="hidden px-6 lg:mt-auto lg:block lg:pb-16 lg:pt-24">
+          <p className="max-w-sm text-[28px] font-semibold leading-tight tracking-tight">
+            Los pedidos del día, en la ruta más corta.
+          </p>
+          <p className="mt-3 max-w-sm text-base text-muted-foreground">
+            Funciona sin cobertura: una vez dentro, la app se descarga el
+            trabajo del día y lo guarda en el dispositivo.
+          </p>
         </div>
 
         {/*
@@ -86,7 +96,7 @@ export default function LoginForm() {
           height={1010}
           priority
           aria-hidden
-          className="pointer-events-none absolute -right-8 bottom-0 h-[82%] w-auto select-none object-contain"
+          className="pointer-events-none absolute -right-8 bottom-0 h-[82%] w-auto select-none object-contain lg:hidden"
           style={{
             // Dos máscaras que se cruzan: la horizontal disuelve el canto
             // izquierdo y la radial redondea el resto. Van en `style` y no en
@@ -103,8 +113,8 @@ export default function LoginForm() {
       </div>
 
       {/* ── Hoja blanca con el formulario ──────────────────────────────── */}
-      <div className="relative z-10 -mt-8 flex-1 rounded-t-[2rem] bg-card px-6 pb-10 pt-8">
-        <div className="mx-auto w-full max-w-sm animate-rise-in">
+      <div className="relative z-10 -mt-8 flex-1 rounded-t-[2rem] bg-card px-6 pb-10 pt-8 lg:mt-0 lg:flex lg:items-center lg:rounded-none lg:px-12 lg:py-0">
+        <div className="mx-auto w-full max-w-sm animate-rise-in lg:max-w-md">
           <h1 className="text-[26px] font-bold tracking-tight">Hola de nuevo</h1>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-3">

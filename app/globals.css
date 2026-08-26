@@ -447,6 +447,55 @@ html {
   }
 }
 
+/*
+ * La hoja de la factura.
+ *
+ * En pantalla vive fuera del viewport: la factura es A4 y no hay forma de
+ * enseñarla entera en un móvil sin encogerla hasta lo ilegible. Al imprimir
+ * se esconde todo lo demás con `visibility` —y no con `display`— para no
+ * recalcular la maqueta y que las cajas caigan donde deben.
+ */
+.factura-full {
+  position: fixed;
+  top: 0;
+  left: -20000px;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .factura-full,
+  .factura-full * {
+    visibility: visible;
+  }
+
+  .factura-full {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  /* Una hoja por página, sin dejar una en blanco al final. */
+  .factura-hoja {
+    break-after: page;
+  }
+
+  .factura-hoja:last-child {
+    break-after: auto;
+  }
+}
+
 /* Sin transparencias: el material se vuelve sólido, no borroso. */
 @media (prefers-reduced-transparency: reduce) {
   .material {

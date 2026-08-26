@@ -1,7 +1,7 @@
 import "server-only";
 import { today, addDays } from "./dates";
 import { navUrlFor, fullRouteUrlFor } from "./routing";
-import type { DeliveryRecord, Manifest, RouteDay, Stop } from "./types";
+import type { FacturaEmitida, DeliveryRecord, Manifest, RouteDay, Stop } from "./types";
 
 /**
  * Modo demo: la app entera funcionando con datos inventados.
@@ -152,6 +152,7 @@ function toStop(sample: Sample, date: string, sequence: number): Stop {
     statusCategory: recorded 
       ? (recorded.status === "entregado" ? "entregat" : "incidencia")
       : "pendent",
+    price: recorded?.price ?? null,
     lat: sample.lat,
     lng: sample.lng,
     sequence,
@@ -193,4 +194,27 @@ export function demoManifest(timezone: string): Manifest {
     today: buildDay(TODAY_SAMPLES, todayDate),
     tomorrow: buildDay(TOMORROW_SAMPLES, addDays(todayDate, 1)),
   };
+}
+
+/**
+ * Facturas emitidas durante la sesión de demo. En memoria, como las entregas:
+ * al reiniciar el servidor la serie vuelve a empezar, que es lo que se quiere
+ * al enseñar la app varias veces seguidas.
+ */
+const facturasDemo: FacturaEmitida[] = [];
+
+export function demoFacturas(): FacturaEmitida[] {
+  return [...facturasDemo].sort((a, b) => b.numero - a.numero);
+}
+
+export function emitirFacturaDemo(
+  datos: Omit<FacturaEmitida, "numero"> & { primerNumero: number },
+): FacturaEmitida {
+  const numero =
+    facturasDemo.length > 0
+      ? Math.max(...facturasDemo.map((f) => f.numero)) + 1
+      : datos.primerNumero;
+  const factura: FacturaEmitida = { ...datos, numero };
+  facturasDemo.push(factura);
+  return factura;
 }

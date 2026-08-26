@@ -95,6 +95,13 @@ export const COLUMNS = {
     "Data Lliurament",
   ],
 
+  /**
+   * Lo que el transportista cobra por ese pedido. La app ESCRIBE aquí el
+   * importe que teclea al dar por entregada la parada, y es de donde sale
+   * la factura de fin de mes. Sin IVA: los impuestos se calculan al facturar.
+   */
+  price: ["Import", "Importe", "Preu", "Precio", "Cobrat", "Cobrado"],
+
   /** Nota de incidencia del transportista. La app ESCRIBE aquí. */
   incidentNote: ["Incidencia", "Motivo", "Nota Transportista", "Motiu"],
 
@@ -122,6 +129,7 @@ export const MANAGED_COLUMNS: ColumnKey[] = [
   "status",
   "deliveredAt",
   "incidentNote",
+  "price",
   "lat",
   "lng",
   "date",

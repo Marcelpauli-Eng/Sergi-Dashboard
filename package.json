@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "check": "node --no-warnings --env-file=.env.local scripts/check-sheet.mts",
-    "env:json": "node --no-warnings scripts/env-from-json.mts"
+    "env:json": "node --no-warnings scripts/env-from-json.mts",
+    "check:factura": "node --no-warnings scripts/check-factura.mts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.3.3",

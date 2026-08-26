@@ -118,6 +118,7 @@ export function applyOutbox(manifest: Manifest, items: OutboxItem[]): Manifest {
         ...stop,
         status: pending.status,
         statusCategory: CATEGORIA_DE[pending.status],
+        price: pending.price ?? stop.price,
       };
     }),
   });
@@ -140,6 +141,7 @@ export async function recordDelivery(
   orderId: string,
   status: Exclude<DeliveryStatus, "pendiente">,
   note: string | null = null,
+  price: number | null = null,
 ): Promise<void> {
   const item: OutboxItem = {
     clientId: crypto.randomUUID(),
@@ -148,6 +150,7 @@ export async function recordDelivery(
     status,
     recordedAt: new Date().toISOString(),
     note,
+    price,
     syncedAt: null,
     attempts: 0,
     lastError: null,

@@ -11,7 +11,7 @@ import {
   MissingColumnsError,
   type ColumnKey,
 } from "./sheet-schema";
-import type { DeliveryRecord, DeliveryStatus, Order } from "./types";
+import type { DeliveryRecord, DeliveryStatus, FacturaEmitida, Order } from "./types";
 
 const API = "https://sheets.googleapis.com/v4/spreadsheets";
 
@@ -162,15 +162,43 @@ export interface SheetSnapshot {
 }
 
 /**
+ * Qué pestaña leer cuando nadie ha dicho una en concreto.
+ *
+ * La hoja de la oficina tiene una pestaña por mes, así que "la de siempre"
+ * es la de hoy. Se pregunta a Google qué pestañas hay y se busca la del mes
+ * en curso; si aún no existe —a principios de mes, o si nadie la ha creado
+ * todavía— se tira de la última anterior, que es donde están los pedidos que
+ * quedan por entregar.
+ *
+ * `GOOGLE_SHEET_TAB` sigue mandando por encima de todo: es la vía de escape
+ * para apuntar a una pestaña concreta. Si no está puesta, esto se encarga.
+ */
+async function resolverPestanya(): Promise<string> {
+  if (env.google.sheetTab) return env.google.sheetTab;
+
+  const tabs = await listSheetTabs();
+  const mes = today(env.timezone).slice(0, 7);
+
+  const delMes = findMonthTab(tabs, mes);
+  if (delMes) return delMes;
+
+  const anterior = findLatestTabUpTo(tabs, mes);
+  if (anterior) return anterior;
+
+  throw new Error(noTabFoundMessage(tabs, mes));
+}
+
+/**
  * Lee la hoja entera y la normaliza.
  *
  * Se piden los valores sin formatear y las fechas como número de serie:
  * así el parseo no depende del locale con el que esté configurada la hoja.
  *
- * @param sheetTab - Nombre de la pestaña a leer. Si no se pasa, usa la de env.
+ * @param sheetTab - Nombre de la pestaña a leer. Si no se pasa, se elige la
+ *                   del mes en curso (ver `resolverPestanya`).
  */
 export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot> {
-  const tab = sheetTab ?? env.google.sheetTab;
+  const tab = sheetTab ?? (await resolverPestanya());
 
   const data = (await sheetsFetch(
     `/values/${encodeURIComponent(range("A1:ZZ", tab))}` +
@@ -252,6 +280,7 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
       status: parseStatus(cell(row, "status")),
       rawStatus: text(cell(row, "status")),
       statusCategory: parseStatusCategory(cell(row, "status")),
+      price: parseNumber(cell(row, "price")),
       lat: parseNumber(cell(row, "lat")),
       lng: parseNumber(cell(row, "lng")),
       rowNumber,
@@ -403,6 +432,15 @@ export async function writeDeliveries(
           value: record.note,
         });
       }
+      if (record.price !== null && record.price !== undefined) {
+        updates.push({
+          rowNumber: order.rowNumber,
+          column: "price",
+          // Con coma decimal, que es como escribe la oficina en la hoja.
+          // `parseNumber` lo vuelve a leer sin problema.
+          value: record.price.toFixed(2).replace(".", ","),
+        });
+      }
     } else if (type === "date") {
       updates.push({
         rowNumber: order.rowNumber,
@@ -440,4 +478,137 @@ export async function cacheCoordinates(
   }
 
   await writeCells(updates, headerMap, snapshot.sheetTab);
+}
+
+/* ── Registro de facturas emitidas ──────────────────────────────────────── */
+
+/**
+ * Las facturas emitidas viven en su propia pestaña del mismo documento.
+ *
+ * En el Sheet y no en el móvil a propósito: es lo que permite que el número
+ * correlativo no dependa del dispositivo, que la oficina las vea sin pedir
+ * nada, y que un cambio de teléfono no se lleve por delante la serie.
+ */
+export const TAB_FACTURAS = "Factures";
+
+const CABECERA_FACTURAS = [
+  "Número",
+  "Data",
+  "Període",
+  "Comandes",
+  "Imports",
+  "Base",
+  "IVA",
+  "IRPF",
+  "Total",
+];
+
+/** Crea la pestaña con su cabecera la primera vez que se emite una factura. */
+async function asegurarTabFacturas(): Promise<void> {
+  const tabs = await listSheetTabs();
+  if (tabs.includes(TAB_FACTURAS)) return;
+
+  await sheetsFetch(":batchUpdate", {
+    method: "POST",
+    body: JSON.stringify({
+      requests: [{ addSheet: { properties: { title: TAB_FACTURAS } } }],
+    }),
+  });
+
+  await sheetsFetch(
+    `/values/${encodeURIComponent(range("A1:I1", TAB_FACTURAS))}` +
+      `?valueInputOption=USER_ENTERED`,
+    { method: "PUT", body: JSON.stringify({ values: [CABECERA_FACTURAS] }) },
+  );
+}
+
+/** Número con coma decimal, como el resto de importes de la hoja. */
+function importeSheet(valor: number): string {
+  return valor.toFixed(2).replace(".", ",");
+}
+
+function filaAFactura(fila: unknown[]): FacturaEmitida | null {
+  const numero = parseNumber(fila[0]);
+  if (numero === null) return null;
+
+  const comandas = text(fila[3]).split(",").map((c) => c.trim()).filter(Boolean);
+  const importes = text(fila[4]).split(",").map((i) => parseNumber(i.trim()) ?? 0);
+
+  return {
+    numero,
+    fecha: text(fila[1]),
+    periodo: text(fila[2]),
+    lineas: comandas.map((comanda, i) => ({ comanda, importe: importes[i] ?? 0 })),
+    base: parseNumber(fila[5]) ?? 0,
+    iva: parseNumber(fila[6]) ?? 0,
+    irpf: parseNumber(fila[7]) ?? 0,
+    total: parseNumber(fila[8]) ?? 0,
+  };
+}
+
+/** Todas las facturas emitidas, de la más reciente a la más antigua. */
+export async function readFacturas(): Promise<FacturaEmitida[]> {
+  const tabs = await listSheetTabs();
+  if (!tabs.includes(TAB_FACTURAS)) return [];
+
+  const data = (await sheetsFetch(
+    `/values/${encodeURIComponent(range("A2:I", TAB_FACTURAS))}` +
+      `?valueRenderOption=UNFORMATTED_VALUE`,
+  )) as { values?: unknown[][] };
+
+  return (data.values ?? [])
+    .map(filaAFactura)
+    .filter((f): f is FacturaEmitida => f !== null)
+    .sort((a, b) => b.numero - a.numero);
+}
+
+/**
+ * Emite una factura: le asigna el siguiente número de la serie y la registra.
+ *
+ * El número se calcula aquí, en el servidor, leyendo la hoja justo antes de
+ * escribir. Hacerlo en el móvil daría números repetidos en cuanto haya dos
+ * dispositivos o dos pestañas abiertas.
+ *
+ * ponytail: sin bloqueo. Dos emisiones simultáneas podrían coger el mismo
+ * número. Con un transportista no pasa; si algún día son varios, hace falta
+ * un candado de verdad (o mover la serie a una base de datos).
+ */
+export async function emitirFactura(datos: {
+  fecha: string;
+  periodo: string;
+  lineas: { comanda: string; importe: number }[];
+  base: number;
+  iva: number;
+  irpf: number;
+  total: number;
+  /** Número con el que arranca la serie si todavía no hay ninguna factura. */
+  primerNumero: number;
+}): Promise<FacturaEmitida> {
+  await asegurarTabFacturas();
+
+  const emitidas = await readFacturas();
+  const numero =
+    emitidas.length > 0
+      ? Math.max(...emitidas.map((f) => f.numero)) + 1
+      : datos.primerNumero;
+
+  const fila = [
+    numero,
+    datos.fecha,
+    datos.periodo,
+    datos.lineas.map((l) => l.comanda).join(", "),
+    datos.lineas.map((l) => importeSheet(l.importe)).join(", "),
+    importeSheet(datos.base),
+    importeSheet(datos.iva),
+    importeSheet(datos.irpf),
+    importeSheet(datos.total),
+  ];
+
+  await sheetsFetch(
+    `/values/${encodeURIComponent(range("A:I", TAB_FACTURAS))}:append` +
+      `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { method: "POST", body: JSON.stringify({ values: [fila] }) },
+  );
+
+  return { ...datos, numero };
 }

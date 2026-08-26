@@ -12,6 +12,9 @@ const recordSchema = z.object({
   date: z.string().optional().nullable(),
   recordedAt: z.string().datetime(),
   note: z.string().max(500).nullable().optional(),
+  /** Importe cobrado, sin IVA. Tope alto pero finito: evita que un dedazo
+   *  meta un número absurdo en la hoja. */
+  price: z.number().min(0).max(1_000_000).nullable().optional(),
 });
 
 const schema = z.object({

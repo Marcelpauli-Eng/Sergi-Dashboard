@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 
 interface Props {
   stop: Stop;
-  onDelivered: (orderId: string) => void;
+  onDelivered: (orderId: string, price: number | null) => void;
   onIncident: (orderId: string, note: string) => void;
   /** Si true, muestra los botones de subir/bajar. */
   reorderable?: boolean;
@@ -56,8 +56,15 @@ export default function StopCard({
   onRemove,
 }: Props) {
   const [showIncident, setShowIncident] = useState(false);
+  const [showPrice, setShowPrice] = useState(false);
   const [showNav, setShowNav] = useState(false);
   const [note, setNote] = useState("");
+  const [price, setPrice] = useState("");
+
+  // Coma o punto: en el móvil el teclado numérico da una u otro según el
+  // idioma, y aquí las dos significan lo mismo.
+  const importe = price.trim() === "" ? null : Number(price.replace(",", "."));
+  const importeValido = importe === null || (Number.isFinite(importe) && importe >= 0);
 
   // `false` durante el render de servidor y `true` ya en el cliente, sin
   // pasar por un estado: createPortal necesita el DOM, que en el servidor no
@@ -278,9 +285,62 @@ export default function StopCard({
 
       {canClose && (
         <div className="hairline p-3.5">
-          {!showIncident ? (
+          {showPrice ? (
+            /* Cuánto se cobra por esta entrega. Va aquí y no al final de mes
+               porque es el único momento en que el transportista lo tiene
+               delante. Se puede dejar en blanco: primero entregar, que es su
+               trabajo; el importe se puede poner luego desde l'Historial. */
+            <div className="animate-fade-in space-y-3">
+              <label htmlFor={`price-${stop.id}`} className="block text-sm font-medium">
+                Quant cobres per aquesta entrega?
+              </label>
+              <div className="flex items-center gap-2 rounded-lg bg-muted px-3">
+                <input
+                  id={`price-${stop.id}`}
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  type="text"
+                  inputMode="decimal"
+                  autoFocus
+                  placeholder="0,00"
+                  className="w-full bg-transparent py-2.5 text-base tabular-nums placeholder:text-tertiary-foreground outline-none"
+                />
+                <span className="text-base text-muted-foreground">€</span>
+              </div>
+              <div className="flex gap-1">
+                <Button
+                  size="touch"
+                  className="flex-1"
+                  disabled={!importeValido}
+                  onClick={() => {
+                    onDelivered(stop.id, importe);
+                    setShowPrice(false);
+                    setPrice("");
+                  }}
+                >
+                  <Check strokeWidth={2.5} />
+                  Entregat
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="touch"
+                  className="shrink-0"
+                  onClick={() => {
+                    setShowPrice(false);
+                    setPrice("");
+                  }}
+                >
+                  Cancel·lar
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Si ho deixes en blanc, l&apos;entrega es guarda igualment i
+                podràs posar l&apos;import en generar la factura.
+              </p>
+            </div>
+          ) : !showIncident ? (
             <div className="flex items-center gap-1">
-              <Button size="touch" className="flex-1" onClick={() => onDelivered(stop.id)}>
+              <Button size="touch" className="flex-1" onClick={() => setShowPrice(true)}>
                 <Check strokeWidth={2.5} />
                 Entregat
               </Button>

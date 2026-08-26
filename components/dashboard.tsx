@@ -5,23 +5,25 @@ import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
   CalendarDays,
-  Check,
   ChevronLeft,
   ChevronRight,
   Clock,
+  FileText,
   History,
   Menu,
-  Moon,
   Route,
   Search,
   Settings,
-  Smartphone,
-  Sun,
   X,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import RouteTrace from "@/components/route-trace";
 import HomeSummary from "@/components/home-summary";
+import Factures from "@/components/factures";
+import Ajustos from "@/components/ajustos";
+import Sidebar from "@/components/sidebar";
+import { leerDatosFacturacion } from "@/lib/ajustes-factura";
+import type { DatosFacturacion } from "@/lib/factura";
 import {
   recordDelivery,
   recordDateAssignment,
@@ -36,8 +38,6 @@ import {
   subscribeLocalPrefs,
   getThemePreference,
   getThemePreferenceServer,
-  setThemePreference,
-  type ThemePreference,
 } from "@/lib/sync";
 import { formatDistance, formatDuration } from "@/lib/format";
 import { formatLongDate, getMonthGrid, getYearMonth } from "@/lib/dates";
@@ -83,7 +83,15 @@ const MONTH_NAMES = ["Gener", "Febrer", "Març", "Abril", "Maig", "Juny", "Julio
 
 // ── Main Dashboard ─────────────────────────────────────────────────────
 
-type TabValue = "avui" | "calendari" | "historial";
+type TabValue = "avui" | "calendari" | "historial" | "factures";
+
+/** Encabezado de cada sección en ordenador e iPad. */
+const TITOLS: Record<TabValue, { titol: string; subtitol: string }> = {
+  avui: { titol: "Avui", subtitol: "La ruta del dia i les parades pendents." },
+  calendari: { titol: "Calendari", subtitol: "Assigna comandes als dies de repartiment." },
+  historial: { titol: "Historial", subtitol: "Tot el que s'ha entregat i les incidències." },
+  factures: { titol: "Factures", subtitol: "Factura el mes i consulta les emeses." },
+};
 
 export default function Dashboard({ driverName }: { driverName: string }) {
   const router = useRouter();
@@ -124,6 +132,11 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
   // ── Ajustes: tema claro/oscuro ─────────────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Inicialización perezosa: en el servidor `leerDatosFacturacion` devuelve
+  // los valores de partida y en el cliente los guardados. No hay riesgo de
+  // desajuste al hidratar porque esto no se pinta hasta que se abre la
+  // factura o los ajustes.
+  const [datosFactura, setDatosFactura] = useState<DatosFacturacion>(leerDatosFacturacion);
   const theme = useSyncExternalStore(
     subscribeLocalPrefs,
     getThemePreference,
@@ -336,8 +349,8 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     }
   }, [todayStops, selectedSheetTab, router, isManualOrder]);
 
-  const handleDelivered = (orderId: string) => {
-    void recordDelivery(orderId, "entregado");
+  const handleDelivered = (orderId: string, price: number | null = null) => {
+    void recordDelivery(orderId, "entregado", null, price);
   };
   const handleIncident = (orderId: string, note: string) => {
     void recordDelivery(orderId, "incidencia", note || null);
@@ -353,7 +366,19 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   };
 
   return (
-    <div className="mx-auto flex min-h-svh max-w-2xl flex-col pb-[calc(4.25rem+env(safe-area-inset-bottom))]">
+    <div className="lg:flex">
+      <Sidebar
+        activa={activeTab}
+        onSeccio={(seccion) => {
+          setActiveTab(seccion);
+          setSettingsOpen(false);
+        }}
+        driverName={driverName}
+        full={selectedSheetTab || manifest?.sheetTab || ""}
+        onAjustos={() => setSettingsOpen(true)}
+      />
+
+      <div className="mx-auto flex min-h-svh w-full max-w-2xl flex-col pb-[calc(4.25rem+env(safe-area-inset-bottom))] lg:mx-0 lg:max-w-none lg:pb-0">
       {manifest?.demo && (
         // Texto negro sobre el naranja del sistema: en blanco no hay
         // contraste suficiente y este aviso tiene que leerse sí o sí.
@@ -365,7 +390,8 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       <header className="warm-gradient sticky top-0 z-20 pt-[env(safe-area-inset-top)]">
         <div className="flex items-center justify-between gap-4 px-4 py-2.5">
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-semibold">{driverName}</h1>
+            {/* El nombre ya está abajo del todo en la barra lateral. */}
+            <h1 className="truncate text-lg font-semibold lg:hidden">{driverName}</h1>
             <div className="flex items-center gap-1.5">
               {todayDate && (
                 <p className="text-xs text-muted-foreground first-letter:uppercase">
@@ -387,7 +413,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}
-              className="pressable flex size-9 items-center justify-center rounded-full bg-muted text-primary"
+              className="pressable flex size-9 items-center justify-center rounded-full bg-muted text-primary lg:hidden"
               aria-label="Ajustos"
             >
               <Settings className="size-5" />
@@ -458,50 +484,27 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         </div>
       )}
 
-      {/* ── Ajustes: aparença ─────────────────────────────────────────── */}
+      {/* Ajustes: una página con apartados, no un panel. */}
       {settingsOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
-          <div
-            className="absolute inset-0 animate-fade-in bg-black/40"
-            onClick={() => setSettingsOpen(false)}
-          />
-          <div className="relative w-full animate-rise-in rounded-t-[20px] bg-background p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Ajustos</h3>
-              <button
-                onClick={() => setSettingsOpen(false)}
-                className="pressable rounded-full bg-muted p-1.5 text-muted-foreground"
-                aria-label="Tancar"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-
-            <p className="mb-2 px-1 text-xs font-semibold text-muted-foreground">Aparença</p>
-            <div className="overflow-hidden rounded-xl bg-card">
-              {(
-                [
-                  { value: "light", label: "Clar", icon: Sun },
-                  { value: "dark", label: "Fosc", icon: Moon },
-                  { value: "system", label: "Sistema", icon: Smartphone },
-                ] as { value: ThemePreference; label: string; icon: typeof Sun }[]
-              ).map(({ value, label, icon: Icon }) => (
-                <button
-                  key={value}
-                  onClick={() => setThemePreference(value)}
-                  className="hairline flex w-full items-center gap-3 px-4 py-3 text-left text-base first:border-t-0"
-                >
-                  <Icon className="size-5 shrink-0 text-muted-foreground" />
-                  <span className="flex-1">{label}</span>
-                  {theme === value && <Check className="size-5 shrink-0 text-primary" strokeWidth={2.5} />}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+        <Ajustos
+          driverName={driverName}
+          theme={theme}
+          datosFactura={datosFactura}
+          onDatosFactura={setDatosFactura}
+          onTancar={() => setSettingsOpen(false)}
+        />
       )}
 
-      <main className="flex-1 px-4 py-5">
+      <main className="flex-1 px-4 py-5 lg:mx-auto lg:w-full lg:max-w-6xl lg:px-8 lg:py-8">
+        {/* En el móvil el sitio lo dice la barra de abajo; en pantalla grande
+            hace falta un título, que si no te pierdes en tanto blanco. */}
+        <div className="mb-6 hidden lg:block">
+          <h2 className="text-2xl font-semibold tracking-tight">
+            {TITOLS[activeTab].titol}
+          </h2>
+          <p className="text-sm text-muted-foreground">{TITOLS[activeTab].subtitol}</p>
+        </div>
+
         {loading ? (
           <p className="py-16 text-center text-base text-muted-foreground">Cargando…</p>
         ) : !manifest ? (
@@ -540,12 +543,21 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 onIncident={handleIncident}
               />
             )}
+            {activeTab === "factures" && (
+              <Factures
+                entregats={historyStops.entregat}
+                mes={selectedSheetTab || manifest?.sheetTab || ""}
+                datos={datosFactura}
+                online={online}
+                onImporte={handleDelivered}
+              />
+            )}
           </>
         )}
       </main>
 
       {/* ── Bottom Navigation ─────────────────────────────────────────── */}
-      <nav className="material fixed bottom-0 left-0 right-0 z-20 mx-auto flex max-w-2xl border-t border-border pb-[env(safe-area-inset-bottom)]">
+      <nav className="material fixed bottom-0 left-0 right-0 z-20 mx-auto flex max-w-2xl border-t border-border pb-[env(safe-area-inset-bottom)] lg:hidden">
         <button
           onClick={() => setActiveTab("avui")}
           className={cn(
@@ -576,7 +588,18 @@ export default function Dashboard({ driverName }: { driverName: string }) {
           <History className="size-6" strokeWidth={activeTab === "historial" ? 2.3 : 1.8} />
           Historial
         </button>
+        <button
+          onClick={() => setActiveTab("factures")}
+          className={cn(
+            "pressable flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1 text-[10px] font-medium",
+            activeTab === "factures" ? "text-primary" : "text-tertiary-foreground",
+          )}
+        >
+          <FileText className="size-6" strokeWidth={activeTab === "factures" ? 2.3 : 1.8} />
+          Factures
+        </button>
       </nav>
+      </div>
     </div>
   );
 }
@@ -607,7 +630,7 @@ function TabAvui({
   generatingRoute: boolean;
   online: boolean;
   onGenerateRoute: () => void;
-  onDelivered: (id: string) => void;
+  onDelivered: (id: string, price: number | null) => void;
   onIncident: (id: string, note: string) => void;
   setRouteResult: (res: RouteResult | null) => void;
   setIsManualOrder: (b: boolean) => void;
@@ -679,7 +702,7 @@ function TabAvui({
       {enCurs.length > 0 && (
         <div className="mb-6 space-y-3">
           <h3 className="px-1 text-sm font-semibold text-status-en-curs">En curs</h3>
-          <ul className="space-y-3">
+          <ul className="space-y-3 xl:grid xl:grid-cols-2 xl:gap-3 xl:space-y-0">
             {enCurs.map((stop) => (
               <StopCard
                 key={stop.id}
@@ -695,7 +718,7 @@ function TabAvui({
       {pendents.length > 0 && (
         <div className="space-y-3">
           <h3 className="px-1 text-sm font-semibold text-status-pendent">Pendents</h3>
-          <ul className="space-y-3">
+          <ul className="space-y-3 xl:grid xl:grid-cols-2 xl:gap-3 xl:space-y-0">
             {todayStops.map((stop, index) => {
               if (stop.statusCategory !== "pendent") return null;
 
@@ -996,7 +1019,7 @@ function TabHistorial({
   onIncident,
 }: {
   historyStops: { entregat: Stop[]; incidencia: Stop[] };
-  onDelivered: (id: string) => void;
+  onDelivered: (id: string, price: number | null) => void;
   onIncident: (id: string, note: string) => void;
 }) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -1067,7 +1090,7 @@ function TabHistorial({
               <h3 className="sticky top-0 z-10 bg-background py-1 text-sm font-semibold">
                 {group.date === "Sense data" ? group.date : formatLongDate(group.date)}
               </h3>
-              <ul className="space-y-3">
+              <ul className="space-y-3 xl:grid xl:grid-cols-2 xl:gap-3 xl:space-y-0">
                 {group.stops.map((stop) => (
                   <li key={stop.id}>
                     <StopCard stop={stop} onDelivered={onDelivered} onIncident={onIncident} />
