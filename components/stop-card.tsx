@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Check, Navigation, Phone, TriangleAlert, X } from "lucide-react";
 import type { Stop } from "@/lib/types";
 import { formatDistance, formatDuration, telHref } from "@/lib/format";
+import { parseImporte } from "@/lib/factura";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -62,9 +63,11 @@ export default function StopCard({
   const [price, setPrice] = useState("");
 
   // Coma o punto: en el móvil el teclado numérico da una u otro según el
-  // idioma, y aquí las dos significan lo mismo.
-  const importe = price.trim() === "" ? null : Number(price.replace(",", "."));
-  const importeValido = importe === null || (Number.isFinite(importe) && importe >= 0);
+  // idioma. La cuenta la hace `parseImporte`, la misma que la factura, para
+  // que "12.50" valga lo mismo tecleado aquí que tecleado allí.
+  const importeParseado = parseImporte(price);
+  const importeValido = importeParseado !== undefined;
+  const importe = importeParseado ?? null;
 
   // `false` durante el render de servidor y `true` ya en el cliente, sin
   // pasar por un estado: createPortal necesita el DOM, que en el servidor no

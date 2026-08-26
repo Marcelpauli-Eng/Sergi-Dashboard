@@ -14,8 +14,11 @@ export async function GET() {
 
   try {
     const allTabs = await listSheetTabs();
-    // Solo mostramos las 3 últimas pestañas (las más recientes)
-    const tabs = allTabs.slice(-3);
+    // Las últimas pestañas, que son los meses más recientes. Doce y no tres
+    // porque Informes compara meses entre sí: con tres no hay comparativa
+    // que valga. Sigue siendo un tope para que una hoja con años de historia
+    // no llene el desplegable.
+    const tabs = allTabs.slice(-12);
     return NextResponse.json({ tabs }, {
       headers: { "Cache-Control": "no-store" },
     });

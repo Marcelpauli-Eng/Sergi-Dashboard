@@ -10,7 +10,7 @@
  */
 
 import assert from "node:assert/strict";
-import { calcularTotales, euros, paginar, LINEAS_POR_PAGINA } from "../lib/factura.ts";
+import { calcularTotales, euros, paginar, parseImporte, LINEAS_POR_PAGINA } from "../lib/factura.ts";
 
 const linea = (comanda: string, importe: number) => ({ comanda, importe });
 
@@ -73,3 +73,43 @@ assert.equal(euros(0), "0,00");
 }
 
 console.log("\x1b[32m✓\x1b[0m Los números de la factura cuadran");
+
+// ── Lo que se teclea en un campo de importe ──────────────────────────────
+// El punto es la trampa: en español separa los miles, pero mucha gente lo
+// teclea como coma decimal. Confundirlos multiplica el importe por cien y la
+// factura sale mal sin que nadie vea nada raro por el camino.
+{
+  // Vacío es "sin importe", que es válido y no es lo mismo que un error.
+  assert.equal(parseImporte(""), null);
+  assert.equal(parseImporte("   "), null);
+
+  // Coma decimal, que es como se escribe aquí.
+  assert.equal(parseImporte("12,50"), 12.5);
+  assert.equal(parseImporte("0,05"), 0.05);
+
+  // Punto decimal: quien lo teclea quiere 12,50 €, no 1.250 €.
+  assert.equal(parseImporte("12.50"), 12.5);
+
+  // Con coma, los puntos son miles. Es el ida y vuelta de `euros()`.
+  assert.equal(parseImporte("1.234,50"), 1234.5);
+  assert.equal(parseImporte(euros(1234.5)), 1234.5);
+  assert.equal(parseImporte(euros(80)), 80);
+
+  // Sin coma, grupos de tres cifras también son miles.
+  assert.equal(parseImporte("1.234"), 1234);
+  assert.equal(parseImporte("12.345.678"), 12345678);
+
+  // Enteros y espacios sueltos.
+  assert.equal(parseImporte("80"), 80);
+  assert.equal(parseImporte(" 80 "), 80);
+
+  // Se redondea a céntimos: más decimales no significan nada en una factura.
+  assert.equal(parseImporte("12,509"), 12.51);
+
+  // Y lo que no es un número se rechaza, que no es lo mismo que valer cero.
+  for (const basura of ["abc", "12,5,5", "12.5.5", "-3", "1,2,3", "€10", "12abc"]) {
+    assert.equal(parseImporte(basura), undefined, `"${basura}" tendría que rechazarse`);
+  }
+}
+
+console.log("✓ lib/factura.ts — totales, páginas e importes tecleados");

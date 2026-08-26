@@ -1,25 +1,41 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Euro, Package, TriangleAlert } from "lucide-react";
-import type { Stop } from "@/lib/types";
+import type { Manifest, Stop } from "@/lib/types";
 import { euros } from "@/lib/factura";
 import { cn } from "@/lib/utils";
 
 /**
- * Informes del mes de trabajo.
+ * Informes.
  *
- * Todo sale del manifiesto que ya está en IndexedDB: no hay ni una llamada
- * de red, así que la pantalla funciona igual sin cobertura que el resto de
- * la app. Es la pantalla que más gana con una pantalla grande —cifras,
- * barras y tablas a la vez— y por eso el móvil la apila y el ordenador la
- * reparte en columnas, pero es la misma.
+ * Dos vistas sobre los mismos números: el full que se está trabajando, que
+ * sale de IndexedDB y por tanto funciona sin cobertura, y la comparativa
+ * entre meses, que sí la necesita porque hay que ir a leer los otros fulls.
+ *
+ * Es la pantalla que más gana con un ordenador —cifras, barras y tablas a la
+ * vez— y por eso el móvil la apila y el ordenador la reparte en columnas,
+ * pero es la misma.
  */
 
 interface Fila {
   clave: string;
   entregues: number;
   import: number;
+}
+
+interface Resum {
+  total: number;
+  entregats: number;
+  incidencies: number;
+  pendents: number;
+  ambImport: number;
+  senseImport: number;
+  facturat: number;
+  mitjana: number;
+  dies: { date: string; entregues: number; import: number }[];
+  clients: Fila[];
+  poblacions: Fila[];
 }
 
 function agrupar(stops: Stop[], clave: (s: Stop) => string): Fila[] {
@@ -34,53 +50,95 @@ function agrupar(stops: Stop[], clave: (s: Stop) => string): Fila[] {
   return [...mapa.values()].sort((a, b) => b.entregues - a.entregues || b.import - a.import);
 }
 
+/** Las cuentas de un full. Una sola función para el mes abierto y para la comparativa. */
+function resumir(stops: Stop[]): Resum {
+  const entregats = stops.filter((s) => s.statusCategory === "entregat");
+  const incidencies = stops.filter((s) => s.statusCategory === "incidencia");
+  const pendents = stops.filter(
+    (s) => s.statusCategory === "pendent" || s.statusCategory === "en_curs",
+  );
+  const ambImport = entregats.filter((s) => s.price !== null && s.price > 0);
+  const facturat = ambImport.reduce((suma, s) => suma + (s.price ?? 0), 0);
+
+  // Por día: solo los días que tienen algo, ordenados. Un mes con huecos no
+  // dibuja treinta barras a cero.
+  const perDia = new Map<string, { entregues: number; import: number }>();
+  for (const s of entregats) {
+    if (!s.date) continue;
+    const d = perDia.get(s.date) ?? { entregues: 0, import: 0 };
+    d.entregues += 1;
+    d.import += s.price ?? 0;
+    perDia.set(s.date, d);
+  }
+
+  return {
+    total: stops.length,
+    entregats: entregats.length,
+    incidencies: incidencies.length,
+    pendents: pendents.length,
+    ambImport: ambImport.length,
+    senseImport: entregats.length - ambImport.length,
+    facturat,
+    mitjana: ambImport.length > 0 ? facturat / ambImport.length : 0,
+    dies: [...perDia.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, v]) => ({ date, ...v })),
+    clients: agrupar(entregats, (s) => s.customer ?? "").slice(0, 8),
+    poblacions: agrupar(entregats, (s) => s.city ?? "").slice(0, 8),
+  };
+}
+
 export default function Informes({
   stops,
   mes,
+  fulls,
+  online,
 }: {
   /** Todas las comandas de la hoja seleccionada. */
   stops: Stop[];
   mes: string;
+  /** Los fulls que se pueden comparar. */
+  fulls: string[];
+  online: boolean;
 }) {
-  const dades = useMemo(() => {
-    const entregats = stops.filter((s) => s.statusCategory === "entregat");
-    const incidencies = stops.filter((s) => s.statusCategory === "incidencia");
-    const pendents = stops.filter(
-      (s) => s.statusCategory === "pendent" || s.statusCategory === "en_curs",
-    );
-    const ambImport = entregats.filter((s) => s.price !== null && s.price > 0);
-    const facturat = ambImport.reduce((suma, s) => suma + (s.price ?? 0), 0);
+  const [vista, setVista] = useState<"full" | "comparativa">("full");
+  const dades = useMemo(() => resumir(stops), [stops]);
 
-    // Por día: solo los días que tienen algo, ordenados. Un mes con huecos
-    // no dibuja treinta barras a cero.
-    const perDia = new Map<string, { entregues: number; import: number }>();
-    for (const s of entregats) {
-      if (!s.date) continue;
-      const d = perDia.get(s.date) ?? { entregues: 0, import: 0 };
-      d.entregues += 1;
-      d.import += s.price ?? 0;
-      perDia.set(s.date, d);
-    }
-    const dies = [...perDia.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, v]) => ({ date, ...v }));
+  return (
+    <div className="animate-fade-in space-y-6 pb-4">
+      <div className="flex items-center gap-1 self-start rounded-full bg-muted p-0.5 lg:w-fit">
+        {([
+          ["full", "Aquest full"],
+          ["comparativa", "Comparativa"],
+        ] as const).map(([v, etiqueta]) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setVista(v)}
+            aria-pressed={vista === v}
+            className={cn(
+              "pressable flex-1 rounded-full px-4 py-1.5 text-sm font-medium lg:flex-none",
+              vista === v ? "bg-card text-primary shadow-sm" : "text-muted-foreground",
+            )}
+          >
+            {etiqueta}
+          </button>
+        ))}
+      </div>
 
-    return {
-      total: stops.length,
-      entregats,
-      incidencies,
-      pendents,
-      ambImport,
-      senseImport: entregats.length - ambImport.length,
-      facturat,
-      mitjana: ambImport.length > 0 ? facturat / ambImport.length : 0,
-      dies,
-      clients: agrupar(entregats, (s) => s.customer ?? "").slice(0, 8),
-      poblacions: agrupar(entregats, (s) => s.city ?? "").slice(0, 8),
-    };
-  }, [stops]);
+      {vista === "full" ? (
+        <ResumDelFull dades={dades} mes={mes} />
+      ) : (
+        <Comparativa fulls={fulls} online={online} />
+      )}
+    </div>
+  );
+}
 
-  const fets = dades.entregats.length + dades.incidencies.length;
+/* ── El full que se está trabajando ─────────────────────────────────────── */
+
+function ResumDelFull({ dades, mes }: { dades: Resum; mes: string }) {
+  const fets = dades.entregats + dades.incidencies;
   const percentatge = dades.total > 0 ? Math.round((fets / dades.total) * 100) : 0;
   const maxDia = Math.max(1, ...dades.dies.map((d) => d.entregues));
 
@@ -96,14 +154,14 @@ export default function Informes({
   }
 
   return (
-    <div className="animate-fade-in space-y-6 pb-4">
+    <div className="space-y-6">
       {/* ── Cifras ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Xifra
           icono={<CheckCircle2 className="size-5" aria-hidden />}
           tono="success"
           etiqueta="Entregades"
-          valor={String(dades.entregats.length)}
+          valor={String(dades.entregats)}
           peu={`${percentatge}% del full`}
         />
         <Xifra
@@ -112,9 +170,7 @@ export default function Informes({
           etiqueta="Facturable"
           valor={`${euros(dades.facturat)} €`}
           peu={
-            dades.senseImport > 0
-              ? `${dades.senseImport} sense import`
-              : "totes amb import"
+            dades.senseImport > 0 ? `${dades.senseImport} sense import` : "totes amb import"
           }
         />
         <Xifra
@@ -122,14 +178,14 @@ export default function Informes({
           tono="primary"
           etiqueta="Mitjana per entrega"
           valor={`${euros(dades.mitjana)} €`}
-          peu={`${dades.ambImport.length} amb import`}
+          peu={`${dades.ambImport} amb import`}
         />
         <Xifra
           icono={<TriangleAlert className="size-5" aria-hidden />}
           tono="warning"
           etiqueta="Incidències"
-          valor={String(dades.incidencies.length)}
-          peu={`${dades.pendents.length} pendents`}
+          valor={String(dades.incidencies)}
+          peu={`${dades.pendents} pendents`}
         />
       </div>
 
@@ -160,7 +216,7 @@ export default function Informes({
                   {/* El envoltorio `flex-1` es lo que le da alto definido a la
                       barra: un porcentaje contra un padre de alto automático
                       no resuelve, y la barra se quedaba en nada. */}
-                  <div className="flex w-full min-h-0 flex-1 items-end">
+                  <div className="flex min-h-0 w-full flex-1 items-end">
                     <div
                       className="w-full rounded-t-md bg-primary/80 transition-colors group-hover:bg-primary"
                       style={{ height: `${Math.max(4, (d.entregues / maxDia) * 100)}%` }}
@@ -180,9 +236,9 @@ export default function Informes({
           <h3 className="mb-4 text-base font-semibold">Estat del full</h3>
           <ul className="space-y-3">
             {[
-              { label: "Entregades", n: dades.entregats.length, color: "var(--success)" },
-              { label: "Pendents", n: dades.pendents.length, color: "var(--primary)" },
-              { label: "Incidències", n: dades.incidencies.length, color: "var(--warning)" },
+              { label: "Entregades", n: dades.entregats, color: "var(--success)" },
+              { label: "Pendents", n: dades.pendents, color: "var(--primary)" },
+              { label: "Incidències", n: dades.incidencies, color: "var(--warning)" },
             ].map(({ label, n, color }) => (
               <li key={label}>
                 <div className="mb-1 flex items-baseline justify-between text-sm">
@@ -215,6 +271,209 @@ export default function Informes({
     </div>
   );
 }
+
+/* ── La comparativa entre meses ─────────────────────────────────────────── */
+
+interface Mes {
+  full: string;
+  resum: Resum;
+}
+
+/**
+ * Compara los fulls entre sí.
+ *
+ * Lee cada full por el mismo endpoint que usa la sincronización de cada día
+ * (`/api/manifest?tab=…`) en vez de inventar uno nuevo: ya devuelve las
+ * comandas de un full y ya sabe de sesiones y de permisos. En serie y no en
+ * paralelo porque detrás hay una llamada a Google por full, y doce de golpe
+ * es la manera de que te limiten.
+ *
+ * Necesita cobertura, y es lo único de esta pantalla que la necesita.
+ */
+function Comparativa({ fulls, online }: { fulls: string[]; online: boolean }) {
+  const [mesos, setMesos] = useState<Mes[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [carregant, setCarregant] = useState(false);
+
+  useEffect(() => {
+    if (!online || fulls.length === 0) return;
+    let cancelat = false;
+
+    void (async () => {
+      setCarregant(true);
+      setError(null);
+      const recollits: Mes[] = [];
+      try {
+        for (const full of fulls) {
+          const resposta = await fetch(`/api/manifest?tab=${encodeURIComponent(full)}`);
+          if (cancelat) return;
+          if (!resposta.ok) {
+            // Un full que no se deja leer no tumba la comparativa: se queda
+            // fuera y los demás se enseñan igual.
+            console.warn(`No s'ha pogut llegir el full "${full}"`);
+            continue;
+          }
+          const manifest = (await resposta.json()) as Manifest;
+          recollits.push({ full, resum: resumir(manifest.today?.stops ?? []) });
+        }
+        if (!cancelat) {
+          setMesos(recollits);
+          if (recollits.length === 0) setError("No s'ha pogut llegir cap full.");
+        }
+      } catch (e) {
+        if (!cancelat) setError(e instanceof Error ? e.message : "Error desconegut");
+      } finally {
+        if (!cancelat) setCarregant(false);
+      }
+    })();
+
+    return () => {
+      cancelat = true;
+    };
+  }, [fulls, online]);
+
+  if (!online) {
+    return (
+      <div className="soft-card px-6 py-12 text-center">
+        <p className="text-base font-medium">Necessites cobertura per comparar</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Els altres fulls no estan descarregats: cal anar a buscar-los.
+        </p>
+      </div>
+    );
+  }
+
+  if (carregant && mesos === null) {
+    return (
+      <p className="py-16 text-center text-sm text-muted-foreground">
+        Llegint {fulls.length} {fulls.length === 1 ? "full" : "fulls"}…
+      </p>
+    );
+  }
+
+  if (error) {
+    return <p className="py-16 text-center text-sm text-status-incidencia">{error}</p>;
+  }
+
+  if (!mesos || mesos.length === 0) {
+    return (
+      <p className="py-16 text-center text-sm text-muted-foreground">
+        No hi ha fulls per comparar.
+      </p>
+    );
+  }
+
+  const maxFacturat = Math.max(1, ...mesos.map((m) => m.resum.facturat));
+  const totals = mesos.reduce(
+    (acc, m) => ({
+      entregats: acc.entregats + m.resum.entregats,
+      incidencies: acc.incidencies + m.resum.incidencies,
+      facturat: acc.facturat + m.resum.facturat,
+    }),
+    { entregats: 0, incidencies: 0, facturat: 0 },
+  );
+
+  return (
+    <div className="space-y-6">
+      <section className="soft-card p-5">
+        <h3 className="text-base font-semibold">Facturable per full</h3>
+        <p className="mb-4 text-sm text-muted-foreground">
+          {mesos.length} {mesos.length === 1 ? "full llegit" : "fulls llegits"} · {euros(totals.facturat)} € en total
+        </p>
+        <div className="flex h-56 items-stretch gap-3 overflow-x-auto pb-1">
+          {mesos.map((m) => (
+            <div
+              key={m.full}
+              className="group flex h-full min-w-20 flex-1 flex-col items-center gap-1.5"
+              title={`${m.full} · ${m.resum.entregats} entregues · ${euros(m.resum.facturat)} €`}
+            >
+              <span className="text-xs font-semibold tabular-nums">
+                {euros(m.resum.facturat)} €
+              </span>
+              <div className="flex min-h-0 w-full flex-1 items-end">
+                <div
+                  className="w-full rounded-t-lg bg-primary/80 transition-colors group-hover:bg-primary"
+                  style={{ height: `${Math.max(2, (m.resum.facturat / maxFacturat) * 100)}%` }}
+                />
+              </div>
+              <span className="w-full truncate text-center text-[11px] text-muted-foreground">
+                {m.full}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="overflow-x-auto soft-card">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border">
+              {["Full", "Comandes", "Entregades", "Incidències", "Pendents", "Facturable", "Mitjana"].map(
+                (etiqueta, i) => (
+                  <th
+                    key={etiqueta}
+                    className={cn(
+                      "px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
+                      i === 0 ? "text-left" : "text-right",
+                    )}
+                  >
+                    {etiqueta}
+                  </th>
+                ),
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {mesos.map((m) => (
+              <tr key={m.full} className="border-b border-border last:border-0">
+                <td className="px-4 py-2 font-medium">{m.full}</td>
+                <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                  {m.resum.total}
+                </td>
+                <td className="px-4 py-2 text-right tabular-nums">{m.resum.entregats}</td>
+                <td className="px-4 py-2 text-right tabular-nums">
+                  {m.resum.incidencies > 0 ? (
+                    <span className="text-status-incidencia">{m.resum.incidencies}</span>
+                  ) : (
+                    <span className="text-tertiary-foreground">0</span>
+                  )}
+                </td>
+                <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                  {m.resum.pendents}
+                </td>
+                <td className="px-4 py-2 text-right font-semibold tabular-nums">
+                  {euros(m.resum.facturat)} €
+                </td>
+                <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                  {euros(m.resum.mitjana)} €
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-border">
+              <td className="px-4 py-2.5 text-xs text-muted-foreground">Total</td>
+              <td />
+              <td className="px-4 py-2.5 text-right font-semibold tabular-nums">
+                {totals.entregats}
+              </td>
+              <td className="px-4 py-2.5 text-right font-semibold tabular-nums">
+                {totals.incidencies}
+              </td>
+              <td />
+              <td className="px-4 py-2.5 text-right font-semibold tabular-nums">
+                {euros(totals.facturat)} €
+              </td>
+              <td />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── Piezas ─────────────────────────────────────────────────────────────── */
 
 function Xifra({
   icono,
@@ -268,7 +527,7 @@ function Rànquing({ titol, files }: { titol: string; files: Fila[] }) {
               </span>
               <div className="col-span-2 mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
                 <div
-                  className={cn("h-full rounded-full bg-primary/70")}
+                  className="h-full rounded-full bg-primary/70"
                   style={{ width: `${(f.entregues / max) * 100}%` }}
                 />
               </div>

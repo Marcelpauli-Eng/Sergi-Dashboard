@@ -152,8 +152,29 @@ export function getMonthGrid(year: number, month: number): DateString[] {
   return grid;
 }
 
+/**
+ * Los siete días de la semana a la que pertenece `date`, de lunes a domingo.
+ *
+ * Misma idea que `getMonthGrid`: aritmética en UTC sobre el día del
+ * calendario, sin horas ni zonas horarias de por medio.
+ */
+export function getWeekGrid(date: DateString): DateString[] {
+  const [y, m, d] = date.split("-").map(Number);
+  const base = new Date(Date.UTC(y, m - 1, d));
+  const dayOfWeek = base.getUTCDay(); // 0 es domingo
+  const desdeDilluns = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+
+  const semana: DateString[] = [];
+  for (let i = 0; i < 7; i++) {
+    const dia = new Date(Date.UTC(y, m - 1, d - desdeDilluns + i));
+    semana.push(dia.toISOString().slice(0, 10));
+  }
+  return semana;
+}
+
 /** Extrae el año y mes de una DateString */
 export function getYearMonth(dateStr: DateString): { year: number, month: number } {
   const [y, m] = dateStr.split("-").map(Number);
   return { year: y, month: m };
 }
+

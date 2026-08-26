@@ -10,6 +10,7 @@ import {
   IVA,
   calcularTotales,
   euros,
+  parseImporte,
   fechaCorta,
   formatearNumero,
   paginar,
@@ -329,6 +330,8 @@ export function Hoja({
 
 /* ── La pantalla de repaso ──────────────────────────────────────────────── */
 
+
+
 export default function Factura({
   entregats,
   mes,
@@ -350,8 +353,14 @@ export default function Factura({
   onEmesa?: () => void;
   onTancar: () => void;
 }) {
-  const [editando, setEditando] = useState<string | null>(null);
-  const [borrador, setBorrador] = useState("");
+  /**
+   * Lo que hay escrito en cada campo de importe, por comanda.
+   *
+   * Se guarda el texto y no el número: mientras escribes "12," eso no es un
+   * número todavía, y convertirlo a cada tecla te borra la coma según la
+   * pones. El número solo aparece al confirmar el campo.
+   */
+  const [esborranys, setEsborranys] = useState<Record<string, string>>({});
   const [emitida, setEmitida] = useState<FacturaEmitida | null>(null);
   const [emitiendo, setEmitiendo] = useState(false);
   const [errorEmision, setErrorEmision] = useState<string | null>(null);
@@ -433,18 +442,55 @@ export default function Factura({
     }
   };
 
-  const guardar = (orderId: string) => {
-    const limpio = borrador.trim().replace(",", ".");
-    const valor = limpio === "" ? null : Number(limpio);
-    if (valor !== null && (!Number.isFinite(valor) || valor < 0)) return;
-    onImporte(orderId, valor);
-    setEditando(null);
-    setBorrador("");
+  /** Confirma el importe de una comanda. No hace nada si no ha cambiado. */
+  const desar = (stop: Stop) => {
+    const cru = esborranys[stop.id];
+    if (cru === undefined) return; // no se ha tocado
+    const valor = parseImporte(cru);
+
+    // Un valor imposible se queda en el campo, marcado en rojo, en vez de
+    // desaparecer: quien lo ha escrito tiene que poder verlo y corregirlo.
+    if (valor === undefined) return;
+
+    // Vaciar el campo NO borra el importe de la hoja. En toda la cadena
+    // —cola local, `applyOutbox`, escritura en el Sheet— un importe nulo
+    // significa "no lo toques", que es lo que permite marcar una entrega sin
+    // precio sin pisar el que ya hubiera. Así que el campo vuelve a lo que
+    // hay guardado en vez de quedarse en blanco fingiendo que se ha borrado.
+    // Para corregir un importe se escribe el bueno encima.
+    if (valor === null) {
+      setEsborranys((previo) => ({
+        ...previo,
+        [stop.id]: stop.price !== null && stop.price > 0 ? euros(stop.price) : "",
+      }));
+      return;
+    }
+
+    // Se deja escrito el importe ya formateado en vez de borrar el borrador:
+    // el campo enseña "12,50" en el acto, sin el parpadeo al valor anterior
+    // que habría mientras la escritura llega a la base local.
+    setEsborranys((previo) => ({ ...previo, [stop.id]: euros(valor) }));
+    if (valor !== stop.price) onImporte(stop.id, valor);
   };
 
-  const editarImport = (stop: Stop) => {
-    setEditando(stop.id);
-    setBorrador(stop.price !== null && stop.price > 0 ? String(stop.price) : "");
+  /**
+   * Salta al siguiente campo de importe.
+   *
+   * Se busca en el DOM en vez de guardar una lista de refs: los campos ya
+   * están en el orden en que se ven, que es justo el orden en que se quiere
+   * ir. El Tab del navegador ya hace esto solo; esto es para el Intro, que
+   * en un teclado numérico cae más a mano.
+   */
+  const seguentImport = (actual: HTMLInputElement) => {
+    const camps = [...document.querySelectorAll<HTMLInputElement>("input[data-import]")];
+    const seguent = camps[camps.indexOf(actual) + 1];
+    seguent?.focus();
+  };
+
+  /** Lleva el foco al primer importe que falte. */
+  const anarAlPrimerBuit = () => {
+    const camps = [...document.querySelectorAll<HTMLInputElement>("input[data-import]")];
+    (camps.find((c) => c.value.trim() === "") ?? camps[0])?.focus();
   };
 
   return (
@@ -463,54 +509,16 @@ export default function Factura({
           </Button>
         </div>
 
-        {sinImporte.length > 0 && (
-          <div className="soft-card space-y-3 p-4">
-            <p className="text-sm font-semibold text-status-incidencia">
-              {sinImporte.length}{" "}
-              {sinImporte.length === 1 ? "entrega sense import" : "entregues sense import"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              No entren a la factura fins que no els posis preu.
-            </p>
-            <ul className="space-y-2">
-              {sinImporte.map((stop) => (
-                <li key={stop.id} className="flex items-center gap-2">
-                  <span className="flex-1 truncate text-sm">
-                    <span className="tabular-nums">{stop.id}</span>
-                    {stop.customer && (
-                      <span className="text-muted-foreground"> · {stop.customer}</span>
-                    )}
-                  </span>
-                  {editando === stop.id ? (
-                    <>
-                      <input
-                        value={borrador}
-                        onChange={(e) => setBorrador(e.target.value)}
-                        type="text"
-                        inputMode="decimal"
-                        autoFocus
-                        placeholder="0,00"
-                        className="w-20 rounded-lg bg-muted px-2 py-1.5 text-right text-base tabular-nums outline-none"
-                      />
-                      <Button size="sm" onClick={() => guardar(stop.id)}>
-                        Desar
-                      </Button>
-                    </>
-                  ) : (
-                    <Button variant="ghost" size="sm" onClick={() => editarImport(stop)}>
-                      Posar import
-                    </Button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
         {/*
-          Marcar y desmarcar comandas: una factura no tiene por qué llevar
-          todo el mes. Lo que se desmarca sigue entregado y con su importe en
-          la hoja, así que entra en la siguiente factura sin tocar nada.
+          Una sola lista con TODAS las entregas del mes, cada una con su
+          casilla y su importe editable ahí mismo.
+
+          Antes había dos listas —las que tenían importe y las que no— y una
+          comanda saltaba de una a otra en cuanto le ponías precio: la fila
+          desaparecía de debajo del cursor y el siguiente Tab caía en
+          cualquier sitio. Con una sola lista el orden no se mueve, así que
+          se pueden rellenar veinte importes seguidos a base de teclear y
+          tabular sin levantar la vista.
         */}
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3 px-1">
@@ -539,31 +547,57 @@ export default function Factura({
             )}
           </div>
 
+          {sinImporte.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-warning-surface px-4 py-2.5">
+              <p className="text-sm text-warning-foreground">
+                <strong className="font-semibold">
+                  {sinImporte.length}{" "}
+                  {sinImporte.length === 1 ? "entrega sense import" : "entregues sense import"}
+                </strong>
+                : no entren a la factura fins que no els posis preu.
+              </p>
+              <Button variant="secondary" size="sm" onClick={anarAlPrimerBuit}>
+                Omplir imports
+              </Button>
+            </div>
+          )}
+
           <div className="soft-card divide-y divide-border">
-            {conImporte.length === 0 ? (
+            {entregats.length === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                Cap entrega amb import aquest mes.
+                Cap entrega aquest mes.
               </p>
             ) : (
-              conImporte.map((stop) => {
-                const dins = !exclosos.has(stop.id);
+              entregats.map((stop) => {
+                const teImport = stop.price !== null && stop.price > 0;
+                const dins = teImport && !exclosos.has(stop.id);
+                const valor = esborranys[stop.id] ?? (teImport ? euros(stop.price as number) : "");
+                const malament = valor.trim() !== "" && parseImporte(valor) === undefined;
+
                 return (
                   // El <label> envuelve solo la casilla y el texto: si
-                  // envolviera también el importe, tocar para editarlo
+                  // envolviera también el importe, escribir en él
                   // desmarcaría la comanda de propina.
                   <div
                     key={stop.id}
                     className={cn(
-                      "flex items-center gap-3 px-4 py-2.5",
-                      !dins && "opacity-50",
+                      "flex items-center gap-3 px-4 py-2",
+                      teImport && !dins && "opacity-50",
                     )}
                   >
-                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+                    <label
+                      className={cn(
+                        "flex min-w-0 flex-1 items-center gap-3",
+                        teImport ? "cursor-pointer" : "cursor-not-allowed",
+                      )}
+                    >
                       <input
                         type="checkbox"
                         checked={dins}
+                        disabled={!teImport}
                         onChange={() => alternar(stop.id)}
                         className="size-[18px] shrink-0 accent-[var(--primary)]"
+                        aria-label={`Incloure la comanda ${stop.id} a la factura`}
                       />
                       <span className="min-w-0 flex-1 truncate text-sm">
                         <span className="tabular-nums">{stop.id}</span>
@@ -572,31 +606,37 @@ export default function Factura({
                         )}
                       </span>
                     </label>
-                    {editando === stop.id ? (
-                      <>
-                        <input
-                          value={borrador}
-                          onChange={(e) => setBorrador(e.target.value)}
-                          type="text"
-                          inputMode="decimal"
-                          autoFocus
-                          placeholder="0,00"
-                          className="w-20 rounded-lg bg-muted px-2 py-1.5 text-right text-base tabular-nums outline-none"
-                        />
-                        <Button size="sm" onClick={() => guardar(stop.id)}>
-                          Desar
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="tabular-nums"
-                        onClick={() => editarImport(stop)}
-                      >
-                        {euros(stop.price as number)} €
-                      </Button>
-                    )}
+                    <div className="flex shrink-0 items-center gap-1">
+                      <input
+                        data-import
+                        value={valor}
+                        onChange={(e) =>
+                          setEsborranys((previo) => ({ ...previo, [stop.id]: e.target.value }))
+                        }
+                        onBlur={() => desar(stop)}
+                        onKeyDown={(e) => {
+                          if (e.key !== "Enter") return;
+                          e.preventDefault();
+                          desar(stop);
+                          seguentImport(e.currentTarget);
+                        }}
+                        onFocus={(e) => e.currentTarget.select()}
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0,00"
+                        aria-label={`Import de la comanda ${stop.id}`}
+                        aria-invalid={malament || undefined}
+                        className={cn(
+                          "w-24 rounded-lg px-2 py-1.5 text-right text-base tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                          malament
+                            ? "bg-[color-mix(in_srgb,var(--destructive)_14%,transparent)] text-destructive"
+                            : teImport
+                              ? "bg-muted"
+                              : "bg-warning-surface",
+                        )}
+                      />
+                      <span className="w-3 text-sm text-muted-foreground">€</span>
+                    </div>
                   </div>
                 );
               })

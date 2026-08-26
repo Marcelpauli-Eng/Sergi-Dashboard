@@ -138,6 +138,45 @@ export function calcularTotales(lineas: LineaFactura[]): TotalesFactura {
  * agrupa los números de cuatro cifras: daría "1234,50" donde FactuSOL imprime
  * "1.234,50". Con una factura de mes se pasa de mil con facilidad.
  */
+/**
+ * Convierte lo que se teclea en un campo de importe a un número.
+ *
+ * Devuelve `null` con el campo vacío —que es "sin importe", un valor válido—
+ * y `undefined` si lo escrito no es un número. No es lo mismo: lo primero se
+ * guarda y lo segundo se rechaza.
+ *
+ * El punto es el problema. En español separa los miles ("1.234,50") pero
+ * mucha gente lo teclea como separador decimal ("12.50"), y confundirlos
+ * multiplica el importe por cien. La regla:
+ *
+ * - Si hay coma, manda la coma: los puntos son miles.
+ * - Si no hay coma pero los puntos separan grupos de tres cifras, son miles.
+ * - Si no, el punto es el separador decimal.
+ */
+export function parseImporte(cru: string): number | null | undefined {
+  const texto = cru.trim().replace(/\s/g, "");
+  if (texto === "") return null;
+  if (!/^\d[\d.,]*$/.test(texto)) return undefined;
+
+  let normalizado: string;
+  if (texto.includes(",")) {
+    // Más de una coma no es un número, es un dedazo.
+    if (texto.indexOf(",") !== texto.lastIndexOf(",")) return undefined;
+    normalizado = texto.replace(/\./g, "").replace(",", ".");
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(texto)) {
+    normalizado = texto.replace(/\./g, "");
+  } else {
+    if (texto.indexOf(".") !== texto.lastIndexOf(".")) return undefined;
+    normalizado = texto;
+  }
+
+  const valor = Number(normalizado);
+  if (!Number.isFinite(valor) || valor < 0) return undefined;
+  // Los importes son euros con céntimos: más decimales no significan nada y
+  // acaban en una factura que no cuadra por un céntimo.
+  return Math.round(valor * 100) / 100;
+}
+
 export function euros(valor: number): string {
   const negativo = valor < 0;
   const [entero, decimales] = Math.abs(valor).toFixed(2).split(".");
