@@ -92,12 +92,11 @@ async function pruneOutbox(): Promise<void> {
  * manifiesto. Y como este manifiesto parcheado se guarda en IndexedDB, el
  * estado incoherente sobrevivía a cerrar la app.
  */
-const CATEGORIA_DE: Record<
-  Exclude<DeliveryStatus, "pendiente">,
-  Stop["statusCategory"]
-> = {
+const CATEGORIA_DE: Record<DeliveryStatus, Stop["statusCategory"]> = {
   entregado: "entregat",
   incidencia: "incidencia",
+  // "pendiente" solo lo genera el deshacer, que devuelve la parada a la ruta.
+  pendiente: "pendent",
 };
 
 export function applyOutbox(manifest: Manifest, items: OutboxItem[]): Manifest {
@@ -106,7 +105,9 @@ export function applyOutbox(manifest: Manifest, items: OutboxItem[]): Manifest {
   const byOrderId = new Map(items.map((item) => [item.orderId, item]));
   const patchDay = (day: Manifest["today"]) => ({
     ...day,
-    stops: day.stops.map((stop) => {
+    // El tipo de vuelta es explícito: sin él TypeScript ensancha `status` a
+    // `string` al unir las dos formas que devuelve el `map`.
+    stops: day.stops.map((stop): Stop => {
       const pending = byOrderId.get(stop.id);
       if (!pending) return stop;
       const type = pending.type || "status";
@@ -114,6 +115,17 @@ export function applyOutbox(manifest: Manifest, items: OutboxItem[]): Manifest {
         return { ...stop, date: pending.date ?? "" };
       }
       if (!pending.status) return stop;
+      if (pending.status === "pendiente") {
+        // Deshacer: la parada vuelve tal cual estaba, importe incluido. Aquí
+        // un importe nulo SÍ borra, al contrario que en una entrega normal.
+        return {
+          ...stop,
+          status: "pendiente",
+          statusCategory: "pendent",
+          rawStatus: "",
+          price: pending.price ?? null,
+        };
+      }
       return {
         ...stop,
         status: pending.status,
@@ -139,7 +151,7 @@ export function applyOutbox(manifest: Manifest, items: OutboxItem[]): Manifest {
  */
 export async function recordDelivery(
   orderId: string,
-  status: Exclude<DeliveryStatus, "pendiente">,
+  status: DeliveryStatus,
   note: string | null = null,
   price: number | null = null,
 ): Promise<void> {

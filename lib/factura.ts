@@ -20,6 +20,21 @@ export const IVA = 21;
 /** Porcentaje de IRPF retenido. */
 export const IRPF = 1;
 
+export interface ClienteFacturacion {
+  nombre: string;
+  direccion: string;
+  cp: string;
+  poblacion: string;
+  provincia: string;
+  /**
+   * Código de cliente. Es la clave: es lo que se escribe en la columna
+   * "Client facturació" de la hoja para decir a quién se le factura cada
+   * comanda. Con un solo cliente da igual lo que ponga.
+   */
+  codigo: string;
+  nif: string;
+}
+
 export interface DatosFacturacion {
   emisor: {
     nombre: string;
@@ -30,15 +45,15 @@ export interface DatosFacturacion {
     nif: string;
     telefono: string;
   };
-  cliente: {
-    nombre: string;
-    direccion: string;
-    cp: string;
-    poblacion: string;
-    provincia: string;
-    codigo: string;
-    nif: string;
-  };
+  /**
+   * A quién se le factura. Una lista y no un solo cliente: se empezó con
+   * uno, pero facturar a dos empresas distintas no puede obligar a editar
+   * los ajustes entre una factura y la siguiente.
+   *
+   * El primero es el de por defecto: es al que van las comandas que no
+   * digan lo contrario, que hoy son todas.
+   */
+  clientes: ClienteFacturacion[];
   /** Código de artículo con el que se factura cada porte. */
   articulo: string;
   /**
@@ -78,10 +93,28 @@ const CLIENTE = {
  */
 export const DATOS_POR_DEFECTO: DatosFacturacion = {
   emisor: { ...EMISOR },
-  cliente: { ...CLIENTE },
+  clientes: [{ ...CLIENTE }],
   articulo: "112",
   primerNumero: 30,
 };
+
+/**
+ * El cliente al que le toca una comanda.
+ *
+ * Una comanda sin cliente asignado —que hoy son todas, porque la columna del
+ * Sheet es opcional— va al primero de la lista. Así añadir clientes no
+ * cambia nada de lo que ya funcionaba.
+ */
+export function clientePara(
+  datos: DatosFacturacion,
+  codigo: string | null,
+): ClienteFacturacion {
+  if (!codigo) return datos.clientes[0];
+  const encontrado = datos.clientes.find(
+    (c) => c.codigo.trim().toLowerCase() === codigo.trim().toLowerCase(),
+  );
+  return encontrado ?? datos.clientes[0];
+}
 
 /** El número tal y como se imprime: seis cifras con ceros delante. */
 export function formatearNumero(numero: number): string {

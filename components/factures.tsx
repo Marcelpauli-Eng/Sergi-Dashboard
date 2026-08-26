@@ -1,17 +1,45 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileCheck, Printer } from "lucide-react";
+import { Download, FileCheck, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Factura, { Hoja } from "@/components/factura";
 import type { FacturaEmitida, Stop } from "@/lib/types";
 import {
+  clientePara,
   euros,
   fechaCorta,
   formatearNumero,
   paginar,
   type DatosFacturacion,
 } from "@/lib/factura";
+import { componerHoja } from "@/lib/factura-hoja";
+import { descargarPdf } from "@/lib/pdf";
+
+/** Las hojas de una factura ya emitida, compuestas para imprimir o exportar. */
+function hojasDe(factura: FacturaEmitida, datos: DatosFacturacion) {
+  const paginas = paginar(factura.lineas);
+  return paginas.map((lineasPagina, i) =>
+    componerHoja({
+      datos,
+      cliente: clientePara(datos, factura.client),
+      numero: formatearNumero(factura.numero),
+      lineas: lineasPagina,
+      pagina: i + 1,
+      paginas: paginas.length,
+      fecha: fechaCorta(factura.fecha),
+      totales:
+        i === paginas.length - 1
+          ? {
+              base: factura.base,
+              iva: factura.iva,
+              irpf: factura.irpf,
+              total: factura.total,
+            }
+          : null,
+    }),
+  );
+}
 
 /**
  * Las facturas ya emitidas.
@@ -151,6 +179,19 @@ export default function Factures({
                 <Button
                   variant="ghost"
                   size="sm"
+                  aria-label={`Descarregar en PDF la factura ${formatearNumero(factura.numero)}`}
+                  onClick={() =>
+                    descargarPdf(
+                      hojasDe(factura, datos),
+                      `factura-${formatearNumero(factura.numero)}`,
+                    )
+                  }
+                >
+                  <Download />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   aria-label={`Imprimir la factura ${formatearNumero(factura.numero)}`}
                   onClick={() => {
                     setAImprimir(factura);
@@ -174,6 +215,7 @@ export default function Factures({
             <Hoja
               key={i}
               datos={datos}
+              cliente={clientePara(datos, aImprimir.client)}
               numero={formatearNumero(aImprimir.numero)}
               lineas={lineasPagina}
               pagina={i + 1}

@@ -33,6 +33,10 @@ interface Resum {
   senseImport: number;
   facturat: number;
   mitjana: number;
+  /** Importe ya puesto en comandas que aún no se han entregado. */
+  pendentAmbImport: number;
+  /** Comandas por hacer que todavía no tienen importe. */
+  pendentSenseImport: number;
   dies: { date: string; entregues: number; import: number }[];
   clients: Fila[];
   poblacions: Fila[];
@@ -60,6 +64,11 @@ function resumir(stops: Stop[]): Resum {
   const ambImport = entregats.filter((s) => s.price !== null && s.price > 0);
   const facturat = ambImport.reduce((suma, s) => suma + (s.price ?? 0), 0);
 
+  // Lo que queda por repartir y ya trae precio de la hoja. Hoy son pocas
+  // —el precio se pone al entregar— pero cuando la oficina lo deja puesto
+  // de antemano, esto es dinero conocido y no una estimación.
+  const pendentsCaros = pendents.filter((s) => s.price !== null && s.price > 0);
+
   // Por día: solo los días que tienen algo, ordenados. Un mes con huecos no
   // dibuja treinta barras a cero.
   const perDia = new Map<string, { entregues: number; import: number }>();
@@ -80,6 +89,8 @@ function resumir(stops: Stop[]): Resum {
     senseImport: entregats.length - ambImport.length,
     facturat,
     mitjana: ambImport.length > 0 ? facturat / ambImport.length : 0,
+    pendentAmbImport: pendentsCaros.reduce((suma, s) => suma + (s.price ?? 0), 0),
+    pendentSenseImport: pendents.length - pendentsCaros.length,
     dies: [...perDia.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, v]) => ({ date, ...v })),
@@ -188,6 +199,14 @@ function ResumDelFull({ dades, mes }: { dades: Resum; mes: string }) {
           peu={`${dades.pendents} pendents`}
         />
       </div>
+
+      {/* ── Previsión del full ─────────────────────────────────────────
+          Lo que ya está + lo que queda. Lo que queda son dos cosas muy
+          distintas y por eso van separadas: el importe que YA está puesto
+          en comandas sin entregar es dinero conocido, y el resto es una
+          estimación a partir de la media. Sumarlas en un solo número
+          disfrazaría de dato lo que es un cálculo. */}
+      <Previsio dades={dades} />
 
       <div className="grid gap-4 xl:grid-cols-3">
         {/* ── Entregas por día ───────────────────────────────────────── */}
@@ -534,6 +553,69 @@ function Rànquing({ titol, files }: { titol: string; files: Fila[] }) {
             </li>
           ))}
         </ul>
+      )}
+    </section>
+  );
+}
+
+function Previsio({ dades }: { dades: Resum }) {
+  const estimat = dades.pendentSenseImport * dades.mitjana;
+  const previsio = dades.facturat + dades.pendentAmbImport + estimat;
+  const maxim = Math.max(1, previsio);
+
+  const trams = [
+    { etiqueta: "Ja entregat", valor: dades.facturat, color: "var(--success)" },
+    { etiqueta: "Pendent amb import", valor: dades.pendentAmbImport, color: "var(--primary)" },
+    { etiqueta: "Estimat", valor: estimat, color: "var(--tertiary-foreground)" },
+  ];
+
+  return (
+    <section className="soft-card p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h3 className="text-base font-semibold">Previsió del full</h3>
+        <p className="text-2xl font-semibold tabular-nums tracking-tight">
+          {euros(previsio)} €
+        </p>
+      </div>
+      <p className="mb-4 text-sm text-muted-foreground">
+        {dades.pendents} {dades.pendents === 1 ? "comanda" : "comandes"} per repartir
+        {dades.pendentSenseImport > 0 &&
+          ` · ${dades.pendentSenseImport} a ${euros(dades.mitjana)} € de mitjana`}
+      </p>
+
+      {/* Una sola barra en tres tramos: se ve de un vistazo cuánto de la
+          previsión es dinero hecho y cuánto es todavía una suposición. */}
+      <div className="flex h-3 overflow-hidden rounded-full bg-muted">
+        {trams.map((t) => (
+          <div
+            key={t.etiqueta}
+            style={{ width: `${(t.valor / maxim) * 100}%`, background: t.color }}
+            title={`${t.etiqueta}: ${euros(t.valor)} €`}
+          />
+        ))}
+      </div>
+
+      <ul className="mt-4 grid gap-3 sm:grid-cols-3">
+        {trams.map((t) => (
+          <li key={t.etiqueta} className="flex items-center gap-2">
+            <span
+              className="size-2.5 shrink-0 rounded-full"
+              style={{ background: t.color }}
+              aria-hidden
+            />
+            <div className="min-w-0">
+              <p className="truncate text-xs text-muted-foreground">{t.etiqueta}</p>
+              <p className="text-sm font-semibold tabular-nums">{euros(t.valor)} €</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {dades.pendentSenseImport > 0 && dades.mitjana === 0 && (
+        <p className="mt-3 border-t border-border pt-3 text-xs text-tertiary-foreground">
+          Encara no hi ha cap entrega amb import, així que no hi ha mitjana amb què
+          estimar el que queda.
+        </p>
       )}
     </section>
   );

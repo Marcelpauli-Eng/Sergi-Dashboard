@@ -341,6 +341,18 @@ html {
   );
 }
 
+/*
+ * En el ordenador la franja de arriba es una barra de aplicación, no una
+ * cabecera cálida: el degradado la difuminaba con el contenido. En el iPad y
+ * en el móvil se queda como estaba, que ahí sí es la cabecera de la pantalla.
+ * El login sigue con su degradado: no es un <header>.
+ */
+@media (min-width: 64rem) and (pointer: fine) {
+  header.warm-gradient {
+    background: var(--background);
+  }
+}
+
 /* Tarjeta muy redondeada con sombra suave, en vez de un borde marcado. */
 .soft-card {
   border-radius: var(--radius);

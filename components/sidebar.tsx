@@ -8,8 +8,10 @@ import {
   FileText,
   History,
   LogOut,
+  Search,
   Settings,
   Truck,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,7 +24,13 @@ import { cn } from "@/lib/utils";
  * doble de sitios donde arreglar cada cosa—, solo puntos de ruptura.
  */
 
-export type Seccion = "avui" | "calendari" | "historial" | "factures" | "informes";
+export type Seccion =
+  | "avui"
+  | "calendari"
+  | "historial"
+  | "factures"
+  | "cobraments"
+  | "informes";
 
 const GRUPOS: { titol: string; items: { id: Seccion; label: string; icona: typeof Clock }[] }[] = [
   {
@@ -37,6 +45,7 @@ const GRUPOS: { titol: string; items: { id: Seccion; label: string; icona: typeo
     titol: "Administració",
     items: [
       { id: "factures", label: "Factures", icona: FileText },
+      { id: "cobraments", label: "Cobraments", icona: Wallet },
       { id: "informes", label: "Informes", icona: BarChart3 },
     ],
   },
@@ -49,6 +58,7 @@ export default function Sidebar({
   full,
   fulls,
   onFull,
+  onCercar,
   onAjustos,
 }: {
   activa: Seccion;
@@ -59,6 +69,7 @@ export default function Sidebar({
   /** Todas las pestañas del Sheet. Vacío mientras no se hayan podido leer. */
   fulls: string[];
   onFull: (full: string) => void;
+  onCercar: () => void;
   onAjustos: () => void;
 }) {
   const router = useRouter();
@@ -78,6 +89,19 @@ export default function Sidebar({
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3">
+        {/* Arriba del todo porque es lo que más se toca, y con el atajo a la
+            vista para que se aprenda solo. */}
+        <button
+          onClick={onCercar}
+          className="mb-5 flex w-full items-center gap-3 rounded-xl bg-muted px-3 py-2.5 text-left text-[15px] text-muted-foreground hover:bg-muted/70"
+        >
+          <Search className="size-5 shrink-0" strokeWidth={1.8} />
+          <span className="flex-1">Cercar</span>
+          <kbd className="rounded border border-border bg-card px-1.5 py-0.5 text-[11px] font-medium text-tertiary-foreground">
+            ⌘K
+          </kbd>
+        </button>
+
         {GRUPOS.map((grupo) => (
           <div key={grupo.titol} className="mb-5">
             <p className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wide text-tertiary-foreground">

@@ -11,7 +11,13 @@ import {
   MissingColumnsError,
   type ColumnKey,
 } from "./sheet-schema";
-import type { DeliveryRecord, DeliveryStatus, FacturaEmitida, Order } from "./types";
+import type {
+  DeliveryRecord,
+  DeliveryStatus,
+  EstatFactura,
+  FacturaEmitida,
+  Order,
+} from "./types";
 
 const API = "https://sheets.googleapis.com/v4/spreadsheets";
 
@@ -274,6 +280,7 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
       customer: text(cell(row, "customer")),
       address,
       city,
+      billingClient: text(cell(row, "billingClient")) || null,
       phone: text(cell(row, "phone")) || null,
       measures: text(cell(row, "measures")) || null,
       notes: text(cell(row, "notes")) || null,
@@ -414,7 +421,28 @@ export async function writeDeliveries(
 
     const type = record.type || "status";
 
-    if (type === "status") {
+    if (type === "status" && record.status === "pendiente") {
+      /*
+        Deshacer.
+
+        Es el ÚNICO sitio donde se vacían celdas, y por eso aquí un importe
+        nulo sí significa "bórralo" en vez del "no lo toques" que significa
+        en el resto de la función: deshacer tiene que dejar la fila como
+        estaba antes de marcarla, y el importe se escribió en ese mismo
+        momento. El valor anterior, si lo había, viaja en `record.price`.
+      */
+      updates.push({ rowNumber: order.rowNumber, column: "status", value: "" });
+      updates.push({ rowNumber: order.rowNumber, column: "deliveredAt", value: "" });
+      updates.push({ rowNumber: order.rowNumber, column: "incidentNote", value: "" });
+      updates.push({
+        rowNumber: order.rowNumber,
+        column: "price",
+        value:
+          record.price === null || record.price === undefined
+            ? ""
+            : record.price.toFixed(2).replace(".", ","),
+      });
+    } else if (type === "status") {
       updates.push({
         rowNumber: order.rowNumber,
         column: "status",
@@ -501,22 +529,66 @@ const CABECERA_FACTURAS = [
   "IVA",
   "IRPF",
   "Total",
+  // Añadidas después: en las hojas que ya existían se rellenan al vuelo
+  // (ver `asegurarTabFacturas`) y las filas antiguas se quedan vacías, que
+  // es lo correcto — cuando se emitieron solo había un cliente y nadie
+  // llevaba el cobro desde aquí.
+  "Client",
+  "Estat",
 ];
 
-/** Crea la pestaña con su cabecera la primera vez que se emite una factura. */
+/** Última columna de la pestaña de facturas. Va con `CABECERA_FACTURAS`. */
+const ULTIMA_COLUMNA_FACTURAS = "K";
+
+/** Cómo se escribe cada estado de cobro en la hoja, para que se lea a ojo. */
+const ESTAT_FACTURA_SHEET: Record<EstatFactura, string> = {
+  emesa: "Emesa",
+  enviada: "Enviada",
+  cobrada: "Cobrada",
+};
+
+function parseEstatFactura(valor: unknown): EstatFactura {
+  const texto = text(valor)
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  if (["cobrada", "cobrado", "pagada", "pagado"].includes(texto)) return "cobrada";
+  if (["enviada", "enviado", "presentada"].includes(texto)) return "enviada";
+  // Una celda vacía es una factura emitida y nada más: es el estado de
+  // partida y el de todas las que se emitieron antes de que esto existiera.
+  return "emesa";
+}
+
+/**
+ * Crea la pestaña con su cabecera, o le completa las columnas que le falten.
+ *
+ * Lo segundo es por las hojas que ya existían cuando la factura solo tenía
+ * nueve columnas: se les añaden "Client" y "Estat" sin tocar ni una fila de
+ * las que ya hay. Reescribir la cabecera entera es seguro porque los nombres
+ * de las columnas viejas no cambian, solo se añaden detrás.
+ */
 async function asegurarTabFacturas(): Promise<void> {
   const tabs = await listSheetTabs();
-  if (tabs.includes(TAB_FACTURAS)) return;
 
-  await sheetsFetch(":batchUpdate", {
-    method: "POST",
-    body: JSON.stringify({
-      requests: [{ addSheet: { properties: { title: TAB_FACTURAS } } }],
-    }),
-  });
+  if (!tabs.includes(TAB_FACTURAS)) {
+    await sheetsFetch(":batchUpdate", {
+      method: "POST",
+      body: JSON.stringify({
+        requests: [{ addSheet: { properties: { title: TAB_FACTURAS } } }],
+      }),
+    });
+  } else {
+    const actual = (await sheetsFetch(
+      `/values/${encodeURIComponent(range(`A1:${ULTIMA_COLUMNA_FACTURAS}1`, TAB_FACTURAS))}`,
+    )) as { values?: unknown[][] };
+    const cabecera = (actual.values?.[0] ?? []).map((c) => text(c));
+    // Ya está completa: no se toca nada.
+    if (cabecera.length >= CABECERA_FACTURAS.length) return;
+  }
 
   await sheetsFetch(
-    `/values/${encodeURIComponent(range("A1:I1", TAB_FACTURAS))}` +
+    `/values/${encodeURIComponent(range(`A1:${ULTIMA_COLUMNA_FACTURAS}1`, TAB_FACTURAS))}` +
       `?valueInputOption=USER_ENTERED`,
     { method: "PUT", body: JSON.stringify({ values: [CABECERA_FACTURAS] }) },
   );
@@ -543,6 +615,10 @@ function filaAFactura(fila: unknown[]): FacturaEmitida | null {
     iva: parseNumber(fila[6]) ?? 0,
     irpf: parseNumber(fila[7]) ?? 0,
     total: parseNumber(fila[8]) ?? 0,
+    // Las facturas de antes de que existieran estas columnas no las tienen:
+    // sin cliente (solo había uno) y recién emitidas por defecto.
+    client: text(fila[9]),
+    estat: parseEstatFactura(fila[10]),
   };
 }
 
@@ -552,7 +628,7 @@ export async function readFacturas(): Promise<FacturaEmitida[]> {
   if (!tabs.includes(TAB_FACTURAS)) return [];
 
   const data = (await sheetsFetch(
-    `/values/${encodeURIComponent(range("A2:I", TAB_FACTURAS))}` +
+    `/values/${encodeURIComponent(range(`A2:${ULTIMA_COLUMNA_FACTURAS}`, TAB_FACTURAS))}` +
       `?valueRenderOption=UNFORMATTED_VALUE`,
   )) as { values?: unknown[][] };
 
@@ -581,6 +657,8 @@ export async function emitirFactura(datos: {
   iva: number;
   irpf: number;
   total: number;
+  /** Código del cliente al que se emite. Vacío si solo hay uno. */
+  client?: string;
   /** Número con el que arranca la serie si todavía no hay ninguna factura. */
   primerNumero: number;
 }): Promise<FacturaEmitida> {
@@ -602,13 +680,52 @@ export async function emitirFactura(datos: {
     importeSheet(datos.iva),
     importeSheet(datos.irpf),
     importeSheet(datos.total),
+    datos.client ?? "",
+    ESTAT_FACTURA_SHEET.emesa,
   ];
 
   await sheetsFetch(
-    `/values/${encodeURIComponent(range("A:I", TAB_FACTURAS))}:append` +
+    `/values/${encodeURIComponent(range(`A:${ULTIMA_COLUMNA_FACTURAS}`, TAB_FACTURAS))}:append` +
       `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     { method: "POST", body: JSON.stringify({ values: [fila] }) },
   );
 
-  return { ...datos, numero };
+  return { ...datos, client: datos.client ?? "", estat: "emesa", numero };
+}
+
+/**
+ * Mueve una factura por los estados del cobro: emesa → enviada → cobrada.
+ *
+ * Se escribe en la hoja y no en el móvil a propósito, igual que la propia
+ * factura: quien pregunta si algo está cobrado suele ser la oficina, y allí
+ * lo ve sin tener que pedir nada.
+ *
+ * Busca la fila por el número de factura releyendo la pestaña, no por una
+ * posición cacheada: la serie no cambia de orden, pero alguien puede haber
+ * insertado una fila a mano.
+ */
+export async function actualizarEstadoFactura(
+  numero: number,
+  estat: EstatFactura,
+): Promise<FacturaEmitida | null> {
+  await asegurarTabFacturas();
+
+  const data = (await sheetsFetch(
+    `/values/${encodeURIComponent(range("A2:A", TAB_FACTURAS))}` +
+      `?valueRenderOption=UNFORMATTED_VALUE`,
+  )) as { values?: unknown[][] };
+
+  const indice = (data.values ?? []).findIndex((fila) => parseNumber(fila[0]) === numero);
+  if (indice === -1) return null;
+
+  // +2: la fila 1 es la cabecera y el rango empieza en la 2.
+  const fila = indice + 2;
+  await sheetsFetch(
+    `/values/${encodeURIComponent(range(`K${fila}`, TAB_FACTURAS))}` +
+      `?valueInputOption=USER_ENTERED`,
+    { method: "PUT", body: JSON.stringify({ values: [[ESTAT_FACTURA_SHEET[estat]]] }) },
+  );
+
+  const todas = await readFacturas();
+  return todas.find((f) => f.numero === numero) ?? null;
 }

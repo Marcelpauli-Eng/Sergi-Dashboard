@@ -1,4 +1,8 @@
-import { DATOS_POR_DEFECTO, type DatosFacturacion } from "./factura";
+import {
+  DATOS_POR_DEFECTO,
+  type ClienteFacturacion,
+  type DatosFacturacion,
+} from "./factura";
 
 /**
  * Los datos de emisor y cliente que salen en la factura.
@@ -21,7 +25,19 @@ export function leerDatosFacturacion(): DatosFacturacion {
     const guardado = window.localStorage.getItem(CLAVE);
     if (!guardado) return DATOS_POR_DEFECTO;
 
-    const datos = JSON.parse(guardado) as Partial<DatosFacturacion>;
+    const datos = JSON.parse(guardado) as Partial<DatosFacturacion> & {
+      /** Como se guardaba cuando solo podía haber un cliente. */
+      cliente?: Partial<ClienteFacturacion>;
+    };
+
+    // Lo guardado antes de que hubiera varios clientes trae `cliente` en vez
+    // de `clientes`. Se convierte al vuelo en una lista de uno: nadie tiene
+    // que volver a teclear los datos de su cliente por una versión nueva.
+    const clientes =
+      datos.clientes && datos.clientes.length > 0
+        ? datos.clientes.map((c) => ({ ...DATOS_POR_DEFECTO.clientes[0], ...c }))
+        : [{ ...DATOS_POR_DEFECTO.clientes[0], ...datos.cliente }];
+
     // Se fusiona por bloques con los valores de partida: si más adelante se
     // añade un campo nuevo, lo ya guardado sin él sigue sirviendo en vez de
     // dejar la factura con un hueco.
@@ -29,7 +45,7 @@ export function leerDatosFacturacion(): DatosFacturacion {
       ...DATOS_POR_DEFECTO,
       ...datos,
       emisor: { ...DATOS_POR_DEFECTO.emisor, ...datos.emisor },
-      cliente: { ...DATOS_POR_DEFECTO.cliente, ...datos.cliente },
+      clientes,
     };
   } catch {
     // JSON corrupto: mejor los valores de partida que una pantalla rota.

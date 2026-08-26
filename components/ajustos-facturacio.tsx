@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { guardarDatosFacturacion } from "@/lib/ajustes-factura";
-import type { DatosFacturacion } from "@/lib/factura";
+import type { ClienteFacturacion, DatosFacturacion } from "@/lib/factura";
 
 /**
  * Los datos que salen impresos en la factura.
@@ -25,7 +25,7 @@ const CAMPOS_EMISOR: [keyof DatosFacturacion["emisor"], string][] = [
   ["telefono", "Telèfon"],
 ];
 
-const CAMPOS_CLIENTE: [keyof DatosFacturacion["cliente"], string][] = [
+const CAMPOS_CLIENTE: [keyof ClienteFacturacion, string][] = [
   ["nombre", "Nom o raó social"],
   ["direccion", "Adreça"],
   ["cp", "Codi postal"],
@@ -34,6 +34,16 @@ const CAMPOS_CLIENTE: [keyof DatosFacturacion["cliente"], string][] = [
   ["codigo", "Codi de client"],
   ["nif", "N.I.F."],
 ];
+
+const CLIENT_BUIT: ClienteFacturacion = {
+  nombre: "",
+  direccion: "",
+  cp: "",
+  poblacion: "",
+  provincia: "",
+  codigo: "",
+  nif: "",
+};
 
 function Camp({
   etiqueta,
@@ -68,6 +78,30 @@ export default function AjustosFacturacio({
   onTancar: () => void;
 }) {
   const [esborrany, setEsborrany] = useState<DatosFacturacion>(datos);
+
+  const canviarClient = (
+    indice: number,
+    clau: keyof ClienteFacturacion,
+    valor: string,
+  ) => {
+    setEsborrany((d) => ({
+      ...d,
+      clientes: d.clientes.map((c, i) => (i === indice ? { ...c, [clau]: valor } : c)),
+    }));
+  };
+
+  const afegirClient = () => {
+    setEsborrany((d) => ({ ...d, clientes: [...d.clientes, { ...CLIENT_BUIT }] }));
+  };
+
+  const esborrarClient = (indice: number) => {
+    // Nunca se queda sin ninguno: sin cliente no hay factura que emitir.
+    setEsborrany((d) =>
+      d.clientes.length <= 1
+        ? d
+        : { ...d, clientes: d.clientes.filter((_, i) => i !== indice) },
+    );
+  };
 
   const desar = () => {
     guardarDatosFacturacion(esborrany);
@@ -104,21 +138,60 @@ export default function AjustosFacturacio({
         </section>
 
         <section className="space-y-3">
-          <h3 className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            A qui es factura
-          </h3>
-          <div className="soft-card space-y-3 p-4">
-            {CAMPOS_CLIENTE.map(([clau, etiqueta]) => (
-              <Camp
-                key={clau}
-                etiqueta={etiqueta}
-                valor={esborrany.cliente[clau]}
-                onCanvi={(valor) =>
-                  setEsborrany((d) => ({ ...d, cliente: { ...d.cliente, [clau]: valor } }))
-                }
-              />
-            ))}
+          <div className="flex items-center justify-between gap-3 px-1">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              A qui es factura
+            </h3>
+            <Button variant="ghost" size="sm" onClick={afegirClient}>
+              <Plus />
+              Afegir client
+            </Button>
           </div>
+
+          {/*
+            El primero de la lista es el de por defecto: se le facturan todas
+            las comandas que no digan otra cosa en la columna "Client
+            facturació" de la hoja. Mientras solo haya uno, esa columna no
+            hace falta para nada.
+          */}
+          <p className="px-1 text-xs text-tertiary-foreground">
+            Amb més d&apos;un client, el <strong>codi de client</strong> és el que
+            has de posar a la columna «Client facturació» del full per dir a qui
+            se li factura cada comanda. Les comandes sense codi van al primer.
+          </p>
+
+          {esborrany.clientes.map((client, i) => (
+            <div key={i} className="soft-card space-y-3 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold">
+                  {client.nombre.trim() || `Client ${i + 1}`}
+                  {i === 0 && (
+                    <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                      per defecte
+                    </span>
+                  )}
+                </p>
+                {esborrany.clientes.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Esborrar ${client.nombre.trim() || `client ${i + 1}`}`}
+                    onClick={() => esborrarClient(i)}
+                  >
+                    <Trash2 />
+                  </Button>
+                )}
+              </div>
+              {CAMPOS_CLIENTE.map(([clau, etiqueta]) => (
+                <Camp
+                  key={clau}
+                  etiqueta={etiqueta}
+                  valor={client[clau]}
+                  onCanvi={(valor) => canviarClient(i, clau, valor)}
+                />
+              ))}
+            </div>
+          ))}
         </section>
 
         <section className="space-y-3">

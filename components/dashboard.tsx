@@ -18,6 +18,7 @@ import {
   Route,
   Search,
   Settings,
+  Wallet,
   X,
 } from "lucide-react";
 import { db } from "@/lib/db";
@@ -25,6 +26,9 @@ import RouteTrace from "@/components/route-trace";
 import HomeSummary from "@/components/home-summary";
 import Factures from "@/components/factures";
 import Informes from "@/components/informes";
+import Cobraments from "@/components/cobraments";
+import Cercador from "@/components/cercador";
+import Desfer, { MARGE_DESFER_MS, type AccioDesfer } from "@/components/desfer";
 import Ajustos from "@/components/ajustos";
 import Sidebar from "@/components/sidebar";
 import { leerDatosFacturacion } from "@/lib/ajustes-factura";
@@ -88,7 +92,13 @@ const MONTH_NAMES = ["Gener", "Febrer", "Març", "Abril", "Maig", "Juny", "Julio
 
 // ── Main Dashboard ─────────────────────────────────────────────────────
 
-type TabValue = "avui" | "calendari" | "historial" | "factures" | "informes";
+type TabValue =
+  | "avui"
+  | "calendari"
+  | "historial"
+  | "factures"
+  | "cobraments"
+  | "informes";
 
 /** Las pestañas que en pantalla grande ocupan el alto entero sin scroll. */
 const A_PANTALLA_SENCERA: TabValue[] = ["calendari"];
@@ -99,6 +109,7 @@ const TITOLS: Record<TabValue, { titol: string; subtitol: string }> = {
   calendari: { titol: "Calendari", subtitol: "Assigna comandes als dies de repartiment." },
   historial: { titol: "Historial", subtitol: "Tot el que s'ha entregat i les incidències." },
   factures: { titol: "Factures", subtitol: "Factura el mes i consulta les emeses." },
+  cobraments: { titol: "Cobraments", subtitol: "Quines factures estan cobrades i quines no." },
   informes: { titol: "Informes", subtitol: "Com va el mes: entregues, imports i incidències." },
 };
 
@@ -164,6 +175,14 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
   const [generatingRoute, setGeneratingRoute] = useState(false);
 
+  // ── Buscador global (⌘K) ──────────────────────────────────────────────
+  const [cercantObert, setCercantObert] = useState(false);
+  /** La comanda que se ha abierto desde el buscador. */
+  const [comandaOberta, setComandaOberta] = useState<Stop | null>(null);
+
+  // ── Desfer ────────────────────────────────────────────────────────────
+  const [accioDesfer, setAccioDesfer] = useState<AccioDesfer | null>(null);
+
   const fetchTabs = useCallback(async () => {
     if (tabs.length > 0) return;
     setLoadingTabs(true);
@@ -189,6 +208,19 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     const t = setTimeout(() => void fetchTabs(), 0);
     return () => clearTimeout(t);
   }, [fetchTabs]);
+
+  useEffect(() => {
+    const tecla = (e: KeyboardEvent) => {
+      // ⌘K en Mac, Ctrl+K en el resto. Es el atajo que ya tiene todo el
+      // mundo en los dedos de otras aplicaciones.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCercantObert((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, []);
 
   const handleTabSelect = useCallback(
     async (tab: string) => {
@@ -368,11 +400,39 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     }
   }, [todayStops, selectedSheetTab, router, isManualOrder]);
 
+  /**
+   * Guarda cómo estaba una comanda antes de tocarla, para poder devolverla.
+   *
+   * Se captura ANTES de escribir, mirando lo que hay ahora en pantalla: una
+   * vez enviado el registro, el estado anterior ya no está en ningún sitio.
+   */
+  const anotarDesfer = (etiqueta: string, fer: () => void) => {
+    setAccioDesfer({ etiqueta, fer, quan: Date.now() });
+  };
+
+  const nomDe = (orderId: string) =>
+    allStops.find((s) => s.id === orderId)?.customer || orderId;
+
   const handleDelivered = (orderId: string, price: number | null = null) => {
+    const abans = allStops.find((s) => s.id === orderId);
     void recordDelivery(orderId, "entregado", null, price);
+    // Poner un importe a una comanda ya entregada no es "entregarla": no
+    // tiene nada que deshacer más allá del propio importe, y ofrecer Desfer
+    // ahí solo confunde.
+    if (abans && abans.statusCategory !== "entregat") {
+      const preuAbans = abans.price;
+      anotarDesfer(`${nomDe(orderId)} · entregada`, () =>
+        recordDelivery(orderId, "pendiente", null, preuAbans),
+      );
+    }
   };
   const handleIncident = (orderId: string, note: string) => {
+    const abans = allStops.find((s) => s.id === orderId);
+    const preuAbans = abans?.price ?? null;
     void recordDelivery(orderId, "incidencia", note || null);
+    anotarDesfer(`${nomDe(orderId)} · incidència`, () =>
+      recordDelivery(orderId, "pendiente", null, preuAbans),
+    );
   };
   const handleDateAssignment = (orderId: string, newDate: string | null) => {
     // Un día que ya ha pasado no admite pedidos nuevos: planificar hacia
@@ -381,7 +441,34 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     // otro día. El guardia va aquí, en el handler, y no solo en la pantalla,
     // para que valga sea cual sea la vía por la que se asigne.
     if (newDate !== null && todayDate && newDate < todayDate) return;
+    const dataAbans = allStops.find((s) => s.id === orderId)?.date || null;
     void recordDateAssignment(orderId, newDate);
+    anotarDesfer(
+      newDate
+        ? `${nomDe(orderId)} · al ${newDate.split("-").reverse().join("/")}`
+        : `${nomDe(orderId)} · treta del dia`,
+      () => recordDateAssignment(orderId, dataAbans),
+    );
+  };
+
+  // El aviso se retira solo pasado el margen. El temporizador vive aquí y no
+  // dentro del aviso para que cambiar de pestaña no lo reinicie.
+  useEffect(() => {
+    if (!accioDesfer) return;
+    const id = setTimeout(() => setAccioDesfer(null), MARGE_DESFER_MS);
+    return () => clearTimeout(id);
+  }, [accioDesfer]);
+
+  /**
+   * Cambiar de pantalla retira el aviso de Desfer.
+   *
+   * Se refiere a algo que ya no estás viendo, y encima se quedaba flotando
+   * por encima de los botones de la factura. Todas las vías de navegación
+   * pasan por aquí para que no se escape ninguna.
+   */
+  const anarA = (seccion: TabValue) => {
+    setActiveTab(seccion);
+    setAccioDesfer(null);
   };
 
   const pantallaSencera = A_PANTALLA_SENCERA.includes(activeTab);
@@ -395,13 +482,14 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       <Sidebar
         activa={activeTab}
         onSeccio={(seccion) => {
-          setActiveTab(seccion);
+          anarA(seccion);
           setSettingsOpen(false);
         }}
         driverName={driverName}
         full={selectedSheetTab || manifest?.sheetTab || ""}
         fulls={tabs}
         onFull={(full) => void handleTabSelect(full)}
+        onCercar={() => setCercantObert(true)}
         onAjustos={() => setSettingsOpen(true)}
       />
 
@@ -449,6 +537,14 @@ export default function Dashboard({ driverName }: { driverName: string }) {
           </div>
 
           <div className="flex shrink-0 items-center gap-2 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setCercantObert(true)}
+              className="pressable flex size-9 items-center justify-center rounded-full bg-muted text-primary"
+              aria-label="Cercar comandes"
+            >
+              <Search className="size-5" />
+            </button>
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}
@@ -567,7 +663,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 sensAssignar={unassignedStops.length}
                 entregats={historyStops.entregat.length}
                 incidencies={historyStops.incidencia.length}
-                onIr={setActiveTab}
+                onIr={anarA}
                 routeResult={routeResult}
                 generatingRoute={generatingRoute}
                 online={online}
@@ -603,6 +699,9 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 onImporte={handleDelivered}
               />
             )}
+            {activeTab === "cobraments" && (
+              <Cobraments datos={datosFactura} online={online} />
+            )}
             {activeTab === "informes" && (
               <Informes
                 stops={allStops}
@@ -617,6 +716,50 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       </div>
       </main>
 
+      {cercantObert && (
+        <Cercador
+          stops={allStops}
+          onTancar={() => setCercantObert(false)}
+          onObrir={(stop) => {
+            setCercantObert(false);
+            setComandaOberta(stop);
+          }}
+        />
+      )}
+
+      {/* La comanda que se ha abierto desde el buscador, con sus acciones. */}
+      {comandaOberta && (
+        <div
+          className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+          onClick={() => setComandaOberta(null)}
+        >
+          <div className="relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="secondary"
+              size="icon"
+              className="absolute -top-12 right-0 rounded-full text-white"
+              onClick={() => setComandaOberta(null)}
+              aria-label="Tancar"
+            >
+              <X />
+            </Button>
+            <StopCard
+              stop={comandaOberta}
+              onDelivered={(id, price) => {
+                handleDelivered(id, price);
+                setComandaOberta(null);
+              }}
+              onIncident={(id, note) => {
+                handleIncident(id, note);
+                setComandaOberta(null);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      <Desfer accio={accioDesfer} onTancar={() => setAccioDesfer(null)} />
+
       {/* ── Bottom Navigation ─────────────────────────────────────────── */}
       <nav className="material fixed bottom-0 left-0 right-0 z-20 mx-auto flex max-w-2xl border-t border-border pb-[env(safe-area-inset-bottom)] lg:hidden">
         {([
@@ -624,11 +767,12 @@ export default function Dashboard({ driverName }: { driverName: string }) {
           ["calendari", "Calendari", CalendarDays],
           ["historial", "Historial", History],
           ["factures", "Factures", FileText],
+          ["cobraments", "Cobrar", Wallet],
           ["informes", "Informes", BarChart3],
         ] as [TabValue, string, typeof Clock][]).map(([id, label, Icona]) => (
           <button
             key={id}
-            onClick={() => setActiveTab(id)}
+            onClick={() => anarA(id)}
             className={cn(
               "pressable flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1 text-[10px] font-medium",
               activeTab === id ? "text-primary" : "text-tertiary-foreground",

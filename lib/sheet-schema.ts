@@ -48,6 +48,23 @@ export const COLUMNS = {
   /** Población / ciudad. Complementa la dirección. */
   city: ["Població", "Poblacio", "Población", "Poblacion", "Ciudad", "City"],
 
+  /**
+   * Código del cliente al que se le factura este pedido.
+   *
+   * Opcional y NO gestionada: la app no la crea. Mientras no exista, todo se
+   * factura al único cliente de Ajustes, que es como funciona hoy. El día
+   * que haya que facturar a más de uno, se añade la columna a mano con el
+   * código de cliente en cada fila.
+   */
+  billingClient: [
+    "Client facturació",
+    "Client facturacio",
+    "Cliente facturación",
+    "Cliente facturacion",
+    "Client factura",
+    "Codi client",
+  ],
+
   phone: ["Telefon", "Telefono", "Teléfono", "Movil", "Contacto", "Phone"],
 
   /** Medidas del paquete. */

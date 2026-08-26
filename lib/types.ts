@@ -8,6 +8,9 @@
 
 export type DeliveryStatus = "pendiente" | "entregado" | "incidencia";
 
+/** Por dónde va el cobro de una factura ya emitida. */
+export type EstatFactura = "emesa" | "enviada" | "cobrada";
+
 /** Una fila del Sheet, ya normalizada. */
 export interface Order {
   /** Identificador único e inmutable del pedido (nº de comanda). */
@@ -24,6 +27,14 @@ export interface Order {
   address: string;
   /** Población / ciudad. Complementa la dirección. */
   city: string | null;
+  /**
+   * A quién se le factura este pedido, por su código de cliente.
+   *
+   * `null` cuando la hoja no tiene esa columna o la celda está vacía, que es
+   * el caso normal hoy: se factura todo al único cliente de Ajustes. Solo
+   * hace falta rellenarla el día que se le facture a más de uno.
+   */
+  billingClient: string | null;
   phone: string | null;
   /** Medidas del paquete. */
   measures: string | null;
@@ -108,7 +119,12 @@ export interface DeliveryRecord {
   orderId: string;
   /** Tipo de actualización. Si no se especifica, por retrocompatibilidad se asume "status". */
   type?: "status" | "date";
-  status?: Exclude<DeliveryStatus, "pendiente">;
+  /**
+   * "pendiente" es el deshacer: devuelve el pedido a como estaba antes de
+   * marcarlo, vaciando estado, hora e incidencia en la hoja. Solo lo genera
+   * el botón de Desfer.
+   */
+  status?: DeliveryStatus;
   date?: string | null;
   /** ISO timestamp del momento real en que se pulsó el botón, no del envío. */
   recordedAt: string;
@@ -133,6 +149,16 @@ export interface FacturaEmitida {
   fecha: string;
   /** Pestaña del Sheet que se facturó, que es el mes de trabajo. */
   periodo: string;
+  /**
+   * Código del cliente al que se le emitió. Vacío en las facturas anteriores
+   * a que hubiera más de un cliente: entonces solo había uno.
+   */
+  client: string;
+  /**
+   * Por dónde va el cobro. Lo mueve a mano el transportista desde la app y
+   * se guarda en la hoja, que es donde la oficina lo puede ver.
+   */
+  estat: EstatFactura;
   lineas: { comanda: string; importe: number }[];
   base: number;
   iva: number;

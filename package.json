@@ -10,7 +10,8 @@
     "check": "node --no-warnings --env-file=.env.local scripts/check-sheet.mts",
     "env:json": "node --no-warnings scripts/env-from-json.mts",
     "check:factura": "node --no-warnings scripts/check-factura.mts",
-    "check:dates": "node --no-warnings scripts/check-dates.mts"
+    "check:dates": "node --no-warnings scripts/check-dates.mts",
+    "check:pdf": "node --no-warnings scripts/check-pdf.mts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.3.3",

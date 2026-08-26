@@ -1,7 +1,14 @@
 import "server-only";
 import { today, addDays } from "./dates";
 import { navUrlFor, fullRouteUrlFor } from "./routing";
-import type { FacturaEmitida, DeliveryRecord, Manifest, RouteDay, Stop } from "./types";
+import type {
+  EstatFactura,
+  FacturaEmitida,
+  DeliveryRecord,
+  Manifest,
+  RouteDay,
+  Stop,
+} from "./types";
 
 /**
  * Modo demo: la app entera funcionando con datos inventados.
@@ -33,7 +40,15 @@ export const DEMO_DRIVER = {
 const demoDeliveries = new Map<string, DeliveryRecord>();
 
 export function recordDemoDeliveries(records: DeliveryRecord[]): void {
-  for (const record of records) demoDeliveries.set(record.orderId, record);
+  for (const record of records) {
+    // Deshacer: la entrega desaparece del registro y la parada vuelve a
+    // pendiente, que es exactamente lo que hace vaciar las celdas del Sheet.
+    if (record.type !== "date" && record.status === "pendiente") {
+      demoDeliveries.delete(record.orderId);
+      continue;
+    }
+    demoDeliveries.set(record.orderId, record);
+  }
 }
 
 export function resetDemoDeliveries(): void {
@@ -144,6 +159,7 @@ function toStop(sample: Sample, date: string, sequence: number): Stop {
     customer: sample.customer,
     address: sample.address,
     city: null,
+    billingClient: null,
     phone: sample.phone ?? null,
     measures: null,
     notes: sample.notes ?? null,
@@ -216,5 +232,15 @@ export function emitirFacturaDemo(
       : datos.primerNumero;
   const factura: FacturaEmitida = { ...datos, numero };
   facturasDemo.push(factura);
+  return factura;
+}
+
+export function actualizarEstadoFacturaDemo(
+  numero: number,
+  estat: EstatFactura,
+): FacturaEmitida | null {
+  const factura = facturasDemo.find((f) => f.numero === numero);
+  if (!factura) return null;
+  factura.estat = estat;
   return factura;
 }
