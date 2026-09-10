@@ -53,6 +53,10 @@ export default function SyncBar({
         aria-hidden
       />
       <p
+        // El texto va truncado a una línea: los errores del servidor pueden
+        // ser un párrafo entero. Las primeras palabras ya dicen qué pasa, y
+        // el resto se lee pasando el ratón por encima.
+        title={error ?? undefined}
         className={cn(
           "min-w-0 flex-1 truncate text-xs",
           error ? "text-destructive" : "text-muted-foreground",

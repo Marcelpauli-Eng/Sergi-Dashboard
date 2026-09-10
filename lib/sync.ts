@@ -391,7 +391,12 @@ export async function flushOutbox(): Promise<number> {
   if (response.status === 401) throw new SessionExpiredError();
 
   if (!response.ok) {
-    const message = `El servidor respondió ${response.status}`;
+    // Cuando el servidor sabe qué pasa, lo dice —una variable de entorno sin
+    // poner, típicamente—. Enseñar eso en vez de "respondió 500" es lo que
+    // distingue "esto se arregla en Vercel en dos minutos" de ir a leer los
+    // logs con el móvil en la mano, en mitad del reparto.
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    const message = body.error ?? `El servidor respondió ${response.status}`;
     await db.transaction("rw", db.outbox, async () => {
       for (const item of pending) {
         await db.outbox.update(item.clientId, {

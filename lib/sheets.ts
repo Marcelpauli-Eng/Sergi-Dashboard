@@ -732,22 +732,37 @@ export async function emitirFactura(datos: {
  * decide `lib/importes.ts`, que no depende de la red y se puede comprobar.
  */
 
-/** Crea la pestaña de importes la primera vez que hace falta. */
+/**
+ * Crea la pestaña de importes la primera vez que hace falta, con su cabecera.
+ *
+ * Que exista no basta: si alguien la crea a mano y se queda sin cabecera, el
+ * primer importe se escribiría en la fila 1 y a partir de ahí `planImportes`
+ * —que cuenta desde la 2— actualizaría la fila equivocada. Por eso la
+ * cabecera se escribe también cuando la pestaña ya estaba pero está vacía.
+ */
 async function asegurarTabImports(): Promise<void> {
   const doc = docFacturas();
   const tabs = await tabsFacturas(doc);
-  if (tabs.includes(TAB_IMPORTS)) return;
 
-  await sheetsFetch(
-    ":batchUpdate",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        requests: [{ addSheet: { properties: { title: TAB_IMPORTS } } }],
-      }),
-    },
-    doc,
-  );
+  if (tabs.includes(TAB_IMPORTS)) {
+    const actual = (await sheetsFetch(
+      `/values/${encodeURIComponent(range("A1:D1", TAB_IMPORTS))}`,
+      undefined,
+      doc,
+    )) as { values?: unknown[][] };
+    if ((actual.values?.[0] ?? []).some((c) => text(c) !== "")) return;
+  } else {
+    await sheetsFetch(
+      ":batchUpdate",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          requests: [{ addSheet: { properties: { title: TAB_IMPORTS } } }],
+        }),
+      },
+      doc,
+    );
+  }
 
   await sheetsFetch(
     `/values/${encodeURIComponent(range("A1:D1", TAB_IMPORTS))}?valueInputOption=USER_ENTERED`,
@@ -755,6 +770,23 @@ async function asegurarTabImports(): Promise<void> {
     doc,
   );
 }
+
+/*
+  La pestaña de importes es UNA para todos los fulls, así que el mapa vale
+  igual para cualquiera. Sin esta caché, la comparativa de Informes —que lee
+  doce fulls seguidos— pedía doce veces la misma pestaña y agotaba la cuota
+  de lecturas por minuto de Sheets (60 por usuario), que no tira abajo solo
+  los importes: se lleva por delante la sincronización entera.
+
+  Medio minuto es más que suficiente para cubrir esa ráfaga, y un precio
+  recién tecleado se ve igual porque la pantalla lo pinta desde la cola local
+  antes de que el servidor conteste. Al escribir se tira la caché igualmente.
+
+  ponytail: caché en memoria del proceso; en Vercel cada instancia tiene la
+  suya. Si algún día hace falta compartirla, un KV.
+*/
+const CACHE_IMPORTES_MS = 30_000;
+let cacheImportes: { guardado: number; datos: Map<string, number> } | null = null;
 
 /**
  * El importe de cada comanda, por número de comanda.
@@ -764,18 +796,30 @@ async function asegurarTabImports(): Promise<void> {
  * eso no es un error.
  */
 export async function readImportes(): Promise<Map<string, number>> {
-  const doc = docFacturas();
-  const tabs = await tabsFacturas(doc);
-  if (!tabs.includes(TAB_IMPORTS)) return new Map();
+  if (cacheImportes && Date.now() - cacheImportes.guardado < CACHE_IMPORTES_MS) {
+    return cacheImportes.datos;
+  }
 
+  /*
+    Se pide el rango directamente en vez de preguntar antes qué pestañas hay.
+    Eran dos llamadas por manifiesto y la cuota de Sheets se cuenta por
+    llamadas, no por datos. Si la pestaña no existe todavía Google contesta
+    400, y aquí eso significa "no hay ningún importe puesto", que no es un
+    error: una instalación recién estrenada está justo así.
+  */
   const data = (await sheetsFetch(
     `/values/${encodeURIComponent(range("A2:B", TAB_IMPORTS))}` +
       `?valueRenderOption=UNFORMATTED_VALUE`,
     undefined,
-    doc,
-  )) as { values?: unknown[][] };
+    docFacturas(),
+  ).catch((error: unknown) => {
+    if (String(error).includes("respondió 400")) return { values: [] };
+    throw error;
+  })) as { values?: unknown[][] };
 
-  return parseImportes(data.values ?? []);
+  const datos = parseImportes(data.values ?? []);
+  cacheImportes = { guardado: Date.now(), datos };
+  return datos;
 }
 
 /**
@@ -826,6 +870,8 @@ export async function writeImportes(entradas: ImporteEntrada[]): Promise<void> {
       doc,
     );
   }
+
+  cacheImportes = null;
 }
 
 /**
