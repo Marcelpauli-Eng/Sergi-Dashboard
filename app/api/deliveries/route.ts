@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { writeDeliveries } from "@/lib/sheets";
 import { isDemoMode, recordDemoDeliveries } from "@/lib/demo";
+import { isConfigError } from "@/lib/env";
 
 const recordSchema = z.object({
   clientId: z.string().uuid(),
@@ -70,6 +71,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error("Error escribiendo entregas en el Sheet:", error);
+
+    // Falta una variable de entorno —típicamente el documento de facturas,
+    // que es donde van los importes—. Decirlo ahorra buscar a ciegas por qué
+    // la cola no sube. El estado de la entrega SÍ se ha escrito: se escribe
+    // antes que el importe, y reintentar reescribe las mismas celdas.
+    if (isConfigError(error)) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
     return NextResponse.json(
       { error: "No se ha podido escribir en el Google Sheet" },
       { status: 502 },

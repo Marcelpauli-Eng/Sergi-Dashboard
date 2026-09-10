@@ -1,6 +1,11 @@
 import "server-only";
 import { env } from "./env";
-import { readSheet, cacheCoordinates, type SheetSnapshot } from "./sheets";
+import {
+  readImportes,
+  readSheet,
+  cacheCoordinates,
+  type SheetSnapshot,
+} from "./sheets";
 import {
   geocodeAddress,
   navUrlFor,
@@ -76,12 +81,41 @@ export async function fillMissingCoordinates(
   }
 }
 
+/**
+ * Avisa del fallo de los importes una sola vez por proceso.
+ *
+ * Es casi siempre el mismo y es de configuración: sin el documento privado
+ * no hay dónde leerlos. Escupir la traza entera en cada sincronización
+ * —cada vez que alguien abre la app o vuelve a la pestaña— entierra en el
+ * log cualquier otra cosa que sí sea nueva.
+ */
+let yaAvisado = false;
+function avisarUnaVez(error: unknown): void {
+  if (yaAvisado) return;
+  yaAvisado = true;
+  const mensaje = error instanceof Error ? error.message : String(error);
+  console.warn(`No se han podido leer los importes: ${mensaje}`);
+}
+
 export async function buildManifest(
   driverId: string,
   driverName: string,
   sheetTab?: string,
 ): Promise<Manifest> {
-  const snapshot = await readSheet(sheetTab);
+  /*
+    Las dos lecturas van en paralelo porque son documentos distintos: los
+    pedidos salen de la hoja que comparte la empresa y los importes del
+    archivo privado del transportista. Una espera a la otra no aporta nada.
+  */
+  const [snapshot, importes] = await Promise.all([
+    readSheet(sheetTab),
+    readImportes().catch((error) => {
+      // Que no se puedan leer los importes no puede dejar sin ruta a nadie:
+      // se sigue con los pedidos y sin precios, que es lo accesorio.
+      avisarUnaVez(error);
+      return new Map<string, number>();
+    }),
+  ]);
 
   if (snapshot.skipped.length > 0) {
     console.warn(
@@ -114,6 +148,9 @@ export async function buildManifest(
     const { rowNumber: _rowNumber, ...rest } = order;
     return {
       ...rest,
+      // El único sitio de donde sale un importe. `readSheet` ya no lee la
+      // columna de la hoja de repartos: ver el porqué allí.
+      price: importes.get(order.id) ?? null,
       sequence: index + 1,
       navUrl: navUrlFor(order),
       legDistanceMeters: null,

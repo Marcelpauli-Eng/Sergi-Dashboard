@@ -75,7 +75,21 @@ export async function getSession(): Promise<Driver | null> {
   try {
     const { payload } = await jwtVerify(token, secret());
     if (!payload.sub) return null;
-    return { id: payload.sub, name: String(payload.name ?? payload.sub) };
+
+    /*
+      La firma dice que la cookie la emitimos nosotros, no que quien la lleva
+      siga dado de alta. Sin esta comprobación, quitar a alguien de DRIVERS
+      no le cerraba la sesión: seguía entrando hasta que la cookie caducara,
+      y caduca al año. Se vio con una sesión de modo demo entrando en los
+      datos de verdad.
+
+      El nombre sale de la configuración y no de la cookie, así que
+      renombrar a alguien surte efecto sin tener que volver a entrar.
+    */
+    const alta = env.drivers.find((driver) => driver.id === payload.sub);
+    if (!alta) return null;
+
+    return { id: alta.id, name: alta.name };
   } catch {
     // Token caducado o manipulado: se trata como sesión inexistente.
     return null;

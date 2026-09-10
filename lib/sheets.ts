@@ -4,6 +4,13 @@ import { env } from "./env";
 import { parseSheetDate, formatSheetTimestamp, today } from "./dates";
 import { findMonthTab, findLatestTabUpTo, noTabFoundMessage } from "./sheet-tab";
 import {
+  CABECERA_IMPORTS,
+  TAB_IMPORTS,
+  parseImportes,
+  planImportes,
+  type ImporteEntrada,
+} from "./importes.ts";
+import {
   columnLetter,
   parseNumber,
   parsePriority,
@@ -219,7 +226,21 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
       status: parseStatus(cell(row, "status")),
       rawStatus: text(cell(row, "status")),
       statusCategory: parseStatusCategory(cell(row, "status")),
-      price: parseNumber(cell(row, "price")),
+      /*
+        El importe NO se lee de aquí.
+
+        La columna "Import" de la hoja de repartos ya no es de la app: los
+        precios viven en el documento privado. Y leerla "por si acaso" no es
+        gratis — la oficina escribe en esa hoja lo que quiere. En la hoja
+        real había dos celdas con formato de fecha y un "18/08/2026 13:41"
+        dentro, que Google devuelve como el número 46252,57: la app las leía
+        como 46.252,57 € y se habrían ido a una factura tal cual.
+
+        Los importes que quedaran escritos aquí se mudan con
+        `npm run migrar:imports`, que sí mira el formato de la celda y avisa
+        de las que no son un importe en vez de tragárselas.
+      */
+      price: null,
       lat: parseNumber(cell(row, "lat")),
       lng: parseNumber(cell(row, "lng")),
       rowNumber,
@@ -341,6 +362,9 @@ export async function writeDeliveries(
   const byId = new Map(snapshot.orders.map((order) => [order.id, order]));
 
   const updates: CellUpdate[] = [];
+  /* Los importes no van a la hoja de repartos: la comparte la empresa. Se
+     juntan aquí y se escriben en el documento privado, junto a las facturas. */
+  const importes: ImporteEntrada[] = [];
   const applied: string[] = [];
   const notFound: string[] = [];
 
@@ -366,13 +390,10 @@ export async function writeDeliveries(
       updates.push({ rowNumber: order.rowNumber, column: "status", value: "" });
       updates.push({ rowNumber: order.rowNumber, column: "deliveredAt", value: "" });
       updates.push({ rowNumber: order.rowNumber, column: "incidentNote", value: "" });
-      updates.push({
-        rowNumber: order.rowNumber,
-        column: "price",
-        value:
-          record.price === null || record.price === undefined
-            ? ""
-            : record.price.toFixed(2).replace(".", ","),
+      importes.push({
+        orderId: record.orderId,
+        price: record.price ?? null,
+        sheetTab: snapshot.sheetTab,
       });
     } else if (type === "status") {
       updates.push({
@@ -393,12 +414,10 @@ export async function writeDeliveries(
         });
       }
       if (record.price !== null && record.price !== undefined) {
-        updates.push({
-          rowNumber: order.rowNumber,
-          column: "price",
-          // Con coma decimal, que es como escribe la oficina en la hoja.
-          // `parseNumber` lo vuelve a leer sin problema.
-          value: record.price.toFixed(2).replace(".", ","),
+        importes.push({
+          orderId: record.orderId,
+          price: record.price,
+          sheetTab: snapshot.sheetTab,
         });
       }
     } else if (type === "date") {
@@ -409,22 +428,32 @@ export async function writeDeliveries(
       });
     } else if (type === "price") {
       // Solo el importe. Ni estado ni hora de entrega: corregir un precio no
-      // puede cambiar cuándo se entregó. Como en el deshacer, aquí un nulo
-      // sí vacía la celda, porque es lo que se ha pedido explícitamente.
-      updates.push({
-        rowNumber: order.rowNumber,
-        column: "price",
-        value:
-          record.price === null || record.price === undefined
-            ? ""
-            : record.price.toFixed(2).replace(".", ","),
+      // puede cambiar cuándo se entregó. Aquí un nulo sí borra, porque es lo
+      // que se ha pedido explícitamente.
+      importes.push({
+        orderId: record.orderId,
+        price: record.price ?? null,
+        sheetTab: snapshot.sheetTab,
       });
     }
 
     applied.push(record.orderId);
   }
 
+  /*
+    El estado va primero y el importe después, y en ese orden a propósito.
+
+    Si guardar el importe falla —el documento privado sin configurar, o sin
+    compartir— la entrega ya está escrita en la hoja y el error sube, así que
+    la cola lo reintenta. Reintentar es seguro porque reescribe las mismas
+    celdas con los mismos valores, incluida la hora, que viaja en el propio
+    registro y no se recalcula.
+
+    Al revés, un fallo al escribir el importe dejaría sin marcar una entrega
+    ya hecha, que es el peor error posible en esta app.
+  */
   await writeCells(updates, headerMap, sheetTab);
+  await writeImportes(importes);
   return { applied, notFound };
 }
 
@@ -692,6 +721,111 @@ export async function emitirFactura(datos: {
   );
 
   return { ...datos, client: datos.client ?? "", estat: "emesa", numero };
+}
+
+/* ── Los importes de cada comanda ───────────────────────────────────────── */
+
+/**
+ * Lee y escribe la pestaña privada de importes.
+ *
+ * Aquí solo está el transporte: qué fila se actualiza y cuál se añade lo
+ * decide `lib/importes.ts`, que no depende de la red y se puede comprobar.
+ */
+
+/** Crea la pestaña de importes la primera vez que hace falta. */
+async function asegurarTabImports(): Promise<void> {
+  const doc = docFacturas();
+  const tabs = await tabsFacturas(doc);
+  if (tabs.includes(TAB_IMPORTS)) return;
+
+  await sheetsFetch(
+    ":batchUpdate",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        requests: [{ addSheet: { properties: { title: TAB_IMPORTS } } }],
+      }),
+    },
+    doc,
+  );
+
+  await sheetsFetch(
+    `/values/${encodeURIComponent(range("A1:D1", TAB_IMPORTS))}?valueInputOption=USER_ENTERED`,
+    { method: "PUT", body: JSON.stringify({ values: [CABECERA_IMPORTS] }) },
+    doc,
+  );
+}
+
+/**
+ * El importe de cada comanda, por número de comanda.
+ *
+ * Si la pestaña no existe todavía devuelve un mapa vacío en vez de fallar:
+ * una instalación recién puesta en marcha no tiene ningún importe puesto, y
+ * eso no es un error.
+ */
+export async function readImportes(): Promise<Map<string, number>> {
+  const doc = docFacturas();
+  const tabs = await tabsFacturas(doc);
+  if (!tabs.includes(TAB_IMPORTS)) return new Map();
+
+  const data = (await sheetsFetch(
+    `/values/${encodeURIComponent(range("A2:B", TAB_IMPORTS))}` +
+      `?valueRenderOption=UNFORMATTED_VALUE`,
+    undefined,
+    doc,
+  )) as { values?: unknown[][] };
+
+  return parseImportes(data.values ?? []);
+}
+
+/**
+ * Guarda los importes en el documento privado.
+ *
+ * Se relee la columna de comandas justo antes de escribir por lo mismo que
+ * en la hoja de repartos: puede haber crecido desde la última vez.
+ */
+export async function writeImportes(entradas: ImporteEntrada[]): Promise<void> {
+  if (entradas.length === 0) return;
+  await asegurarTabImports();
+
+  const doc = docFacturas();
+  const data = (await sheetsFetch(
+    `/values/${encodeURIComponent(range("A2:A", TAB_IMPORTS))}`,
+    undefined,
+    doc,
+  )) as { values?: unknown[][] };
+
+  const plan = planImportes(
+    entradas,
+    (data.values ?? []).map((fila) => text(fila[0])),
+    formatSheetTimestamp(new Date().toISOString(), env.timezone),
+  );
+
+  if (plan.actualizar.length > 0) {
+    await sheetsFetch(
+      `/values:batchUpdate`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          valueInputOption: "USER_ENTERED",
+          data: plan.actualizar.map(({ fila, valores }) => ({
+            range: range(`A${fila}:D${fila}`, TAB_IMPORTS),
+            values: [valores],
+          })),
+        }),
+      },
+      doc,
+    );
+  }
+
+  if (plan.nuevas.length > 0) {
+    await sheetsFetch(
+      `/values/${encodeURIComponent(range("A:D", TAB_IMPORTS))}:append` +
+        `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      { method: "POST", body: JSON.stringify({ values: plan.nuevas }) },
+      doc,
+    );
+  }
 }
 
 /**

@@ -47,22 +47,31 @@ async function request(input: string, init?: RequestInit): Promise<Response> {
 
 /**
  * Cuánto tiempo se sigue confiando en lo que dice el móvil por encima de lo
- * que responde el servidor, para una entrega ya subida.
+ * que responde el servidor, para una entrega YA subida.
  *
  * Hace falta porque entre que escribimos en el Google Sheet y que esa
- * escritura se ve al releerlo puede pasar un momento; y en modo demo sobre
- * Vercel, la petición siguiente puede atender otra instancia que no conozca
- * la entrega. Sin este margen, una parada recién entregada reaparecería
- * como pendiente, que es el peor error posible en esta app.
+ * escritura se ve al releerlo puede pasar un momento. Sin ese margen, una
+ * parada recién entregada reaparecería como pendiente, que es el peor error
+ * posible en esta app.
+ *
+ * Se cuenta desde que se SUBIÓ, no desde que se tecleó, que es justo el
+ * hueco a cubrir; y es corto a propósito. Mientras dura, este móvil pisa lo
+ * que digan las hojas: con los diez minutos que había antes, corregir un
+ * importe a mano en la hoja no se veía en la app hasta pasado ese rato, y
+ * parecía que el cambio no se había guardado.
+ *
+ * En modo demo sobre Vercel una parada puede reaparecer pendiente si la
+ * petición siguiente cae en otra instancia. Es la demo: los datos son de
+ * mentira y viven en memoria.
  */
-const TRUST_LOCAL_MS = 10 * 60 * 1000;
+const TRUST_LOCAL_MS = 60 * 1000;
 
 /** Entregas que deben imponerse sobre lo que diga el servidor. */
 async function locallyAuthoritative(): Promise<OutboxItem[]> {
   const cutoff = Date.now() - TRUST_LOCAL_MS;
   return (await db.outbox.toArray()).filter(
     (item) =>
-      item.syncedAt === null || new Date(item.recordedAt).getTime() > cutoff,
+      item.syncedAt === null || new Date(item.syncedAt).getTime() > cutoff,
   );
 }
 
@@ -362,15 +371,19 @@ export async function flushOutbox(): Promise<number> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      records: pending.map(({ clientId, orderId, type, status, date, recordedAt, note }) => ({
-        clientId,
-        orderId,
-        type: type || "status",
-        status,
-        date,
-        recordedAt,
-        note,
-      })),
+      // El registro entero menos lo que solo importa aquí dentro (si ya se
+      // subió, cuántos intentos lleva, el último error). Enumerar campo a
+      // campo dejó el importe sin subir: se tecleaba, se veía en pantalla y
+      // no llegaba a ninguna hoja, porque nadie se acordó de añadirlo a esta
+      // lista al crear la columna de precios.
+      records: pending.map(
+        ({ syncedAt: _syncedAt, attempts: _attempts, lastError: _lastError, ...record }) => ({
+          ...record,
+          // Los registros que quedaran en la cola de una versión anterior no
+          // llevan tipo.
+          type: record.type || "status",
+        }),
+      ),
       ...(sheetTab ? { sheetTab } : {}),
     }),
   });

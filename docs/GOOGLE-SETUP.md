@@ -7,12 +7,13 @@ Al terminar tendrás estos cinco datos para `.env.local`:
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | El email del "usuario robot" |
 | `GOOGLE_PRIVATE_KEY` | Su contraseña, en forma de clave |
 | `GOOGLE_SHEET_ID` | Qué documento hay que leer |
+| `GOOGLE_SHEET_ID_FACTURAS` | El documento **privado**: facturas y precios |
 | `GOOGLE_MAPS_API_KEY` | Para geocodificar y calcular rutas |
 
-(Hay una quinta, `GOOGLE_SHEET_TAB`, que normalmente **no hace falta**: si el
+(Hay una sexta, `GOOGLE_SHEET_TAB`, que normalmente **no hace falta**: si el
 documento tiene una pestaña por mes, la app busca sola la del mes en curso.)
 
-Tiempo estimado: 15 minutos.
+Tiempo estimado: 20 minutos.
 
 ---
 
@@ -158,7 +159,40 @@ Solo si quieres forzar una pestaña concreta, pon su nombre **exacto**
 > logs; ese día no saldrán pedidos, porque en la pestaña del mes pasado no
 > hay ninguno con fecha de hoy. `npm run check` también te lo dice.
 
-## Paso 9 · Rellenar `.env.local`
+## Paso 9 · El segundo documento: el privado
+
+El Sheet de arriba **lo comparte la empresa**: es su hoja de pedidos, la
+necesita. Y Google Sheets **no sabe ocultar una pestaña** a quien tiene
+acceso al documento — esconderla es cosmético, y la protección de hojas
+limita la edición, no la lectura.
+
+Así que lo que cobras no puede vivir ahí. Va en **otro documento**, que no
+comparte nadie:
+
+1. Google Sheets → **documento nuevo, en blanco**. No hace falta ponerle
+   pestañas ni cabeceras: la app crea `Factures` (las facturas emitidas) e
+   `Imports` (lo que cobras por cada porte) la primera vez que las necesita.
+2. **Compartir** → el mismo email del robot → **Editor** → Enviar.
+   Y a nadie más.
+3. Coge su ID de la URL, igual que en el paso 8, y ponlo en
+   `GOOGLE_SHEET_ID_FACTURAS`.
+
+Sin esta variable el reparto funciona, pero no se puede facturar y **una
+entrega con importe se queda pendiente de subir**: el precio no tiene dónde
+guardarse. La app nunca lo escribe en la hoja de la empresa.
+
+> **Si ya venías usando la columna `Import` de la hoja de repartos:** lo que
+> haya escrito ahí lo sigue viendo la empresa. Para mudarlo:
+>
+> ```bash
+> npm run migrar:imports              # solo copia
+> npm run migrar:imports -- --borrar  # y vacía la columna original
+> ```
+>
+> Primero sin `--borrar`, comprueba el resultado en el documento privado, y
+> entonces vacía.
+
+## Paso 10 · Rellenar `.env.local`
 
 ```bash
 cp .env.example .env.local
@@ -170,6 +204,7 @@ Debe quedar así:
 GOOGLE_SERVICE_ACCOUNT_EMAIL="reparto@reparto-123456.iam.gserviceaccount.com"
 GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvQ...\n-----END PRIVATE KEY-----\n"
 GOOGLE_SHEET_ID="1a2B3cD4eF5gH6iJ7kL8mN9oP"
+GOOGLE_SHEET_ID_FACTURAS="9zY8xW7vU6tS5rQ4pO3nM2l"
 GOOGLE_MAPS_API_KEY="AIzaSy..."
 
 DEPOT_ADDRESS="Carrer de Mallorca 401, 08013 Barcelona"
@@ -184,7 +219,7 @@ El PIN de `DRIVERS` te lo inventas tú. Si tu hoja tiene columna
 en ella; si no la tiene, hay un solo transportista y verá todos los pedidos
 del día.
 
-## Paso 10 · Comprobar que todo está bien
+## Paso 11 · Comprobar que todo está bien
 
 ```bash
 npm run check

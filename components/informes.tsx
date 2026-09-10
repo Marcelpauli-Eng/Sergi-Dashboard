@@ -140,7 +140,7 @@ export default function Informes({
       {vista === "full" ? (
         <ResumDelFull dades={dades} mes={mes} />
       ) : (
-        <Comparativa fulls={fulls} online={online} />
+        <Comparativa fulls={fulls} online={online} mes={mes} stops={stops} />
       )}
     </div>
   );
@@ -307,10 +307,25 @@ interface Mes {
  * paralelo porque detrás hay una llamada a Google por full, y doce de golpe
  * es la manera de que te limiten.
  *
- * Necesita cobertura, y es lo único de esta pantalla que la necesita.
+ * El full abierto no se va a buscar: son las mismas comandas que ya están
+ * en pantalla, y leerlas del servidor dejaba la comparativa una entrega por
+ * detrás de todo lo demás —lo que acababas de corregir salía con el valor
+ * viejo hasta la siguiente descarga—. Los otros fulls sí, que no están
+ * descargados, y por eso esto necesita cobertura.
  */
-function Comparativa({ fulls, online }: { fulls: string[]; online: boolean }) {
-  const [mesos, setMesos] = useState<Mes[] | null>(null);
+function Comparativa({
+  fulls,
+  online,
+  mes,
+  stops,
+}: {
+  fulls: string[];
+  online: boolean;
+  /** El full abierto: ese sale de `stops` y no del servidor. */
+  mes: string;
+  stops: Stop[];
+}) {
+  const [altres, setAltres] = useState<Mes[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [carregant, setCarregant] = useState(false);
 
@@ -324,6 +339,7 @@ function Comparativa({ fulls, online }: { fulls: string[]; online: boolean }) {
       const recollits: Mes[] = [];
       try {
         for (const full of fulls) {
+          if (full === mes) continue;
           const resposta = await fetch(`/api/manifest?tab=${encodeURIComponent(full)}`);
           if (cancelat) return;
           if (!resposta.ok) {
@@ -336,8 +352,13 @@ function Comparativa({ fulls, online }: { fulls: string[]; online: boolean }) {
           recollits.push({ full, resum: resumir(manifest.today?.stops ?? []) });
         }
         if (!cancelat) {
-          setMesos(recollits);
-          if (recollits.length === 0) setError("No s'ha pogut llegir cap full.");
+          setAltres(recollits);
+          // Con el full abierto ya hay algo que enseñar: solo es un error
+          // cuando no se ha podido leer ninguno de los otros y encima el
+          // abierto no está en la lista.
+          if (recollits.length === 0 && !fulls.includes(mes)) {
+            setError("No s'ha pogut llegir cap full.");
+          }
         }
       } catch (e) {
         if (!cancelat) setError(e instanceof Error ? e.message : "Error desconegut");
@@ -349,7 +370,20 @@ function Comparativa({ fulls, online }: { fulls: string[]; online: boolean }) {
     return () => {
       cancelat = true;
     };
-  }, [fulls, online]);
+  }, [fulls, online, mes]);
+
+  // El full abierto se calcula aquí, no en el efecto: así cada cambio que se
+  // guarda se ve en la comparativa en el mismo momento.
+  const mesos = useMemo(() => {
+    if (altres === null) return null;
+    return fulls
+      .map((full) =>
+        full === mes
+          ? { full, resum: resumir(stops) }
+          : (altres.find((m) => m.full === full) ?? null),
+      )
+      .filter((m): m is Mes => m !== null);
+  }, [fulls, mes, stops, altres]);
 
   if (!online) {
     return (
@@ -362,7 +396,7 @@ function Comparativa({ fulls, online }: { fulls: string[]; online: boolean }) {
     );
   }
 
-  if (carregant && mesos === null) {
+  if (carregant && altres === null) {
     return (
       <p className="py-16 text-center text-sm text-muted-foreground">
         Llegint {fulls.length} {fulls.length === 1 ? "full" : "fulls"}…

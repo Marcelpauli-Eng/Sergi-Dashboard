@@ -171,9 +171,9 @@ try {
   fail(`Google ha rechazado las credenciales: ${message}`, hint);
 }
 
-const api = async (path: string) => {
+const api = async (path: string, doc: string = sheetId!) => {
   const response = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}${path}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${doc}${path}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   return { status: response.status, body: await response.text() };
@@ -369,4 +369,71 @@ if (dataRows.length > 0) {
   dim(`prioridad:     ${cell(sample, "priority") || "(vacía)"}`);
 }
 
-console.log(`\n\x1b[32mTodo correcto. La app puede leer tu Google Sheet.\x1b[0m\n`);
+// ── 7. El documento privado: facturas e importes ──────────────────────────
+
+/*
+  El dinero no va en el documento de arriba, que lo comparte la empresa:
+  Google Sheets no sabe ocultar una pestaña a quien tiene acceso al archivo,
+  así que las facturas y lo que se cobra por cada porte viven en otro
+  documento. Aquí se comprueba que ese otro documento está en condiciones, y
+  que en la hoja de repartos no queden importes a la vista.
+*/
+
+const facturasId = process.env.GOOGLE_SHEET_ID_FACTURAS?.trim();
+/** Si el dinero no tiene dónde guardarse, el resumen final no puede decir
+ *  que todo está correcto: se factura y se cobra desde aquí. */
+let faltaPrivado = false;
+
+console.log(`\nDocumento privado (facturas e importes):`);
+
+if (!facturasId) {
+  faltaPrivado = true;
+  warn("GOOGLE_SHEET_ID_FACTURAS sin definir");
+  dim("Sin ella no se puede facturar, y una entrega con importe se queda");
+  dim("pendiente de subir: el precio no tiene dónde guardarse.");
+  dim("Crea un documento aparte, compártelo como EDITOR con la cuenta de");
+  dim(`servicio (${email}) y pon su ID en .env.local.`);
+} else if (facturasId === sheetId) {
+  faltaPrivado = true;
+  bad("GOOGLE_SHEET_ID_FACTURAS apunta al MISMO documento que ve la empresa");
+  dim("Esconder la pestaña no vale: quien tiene acceso al documento la puede");
+  dim("volver a enseñar. Tiene que ser otro archivo.");
+} else {
+  const metaFacturas = await api("?fields=properties.title", facturasId);
+  if (metaFacturas.status === 403 || metaFacturas.status === 404) {
+    faltaPrivado = true;
+    bad(`No se puede abrir el documento privado (Google respondió ${metaFacturas.status})`);
+    dim(`Compártelo como EDITOR con ${email}, y comprueba que el ID es solo`);
+    dim("el trozo de la URL entre /d/ y /edit.");
+  } else if (metaFacturas.status !== 200) {
+    faltaPrivado = true;
+    bad(`Google respondió ${metaFacturas.status}: ${metaFacturas.body.slice(0, 200)}`);
+  } else {
+    const titulo = (JSON.parse(metaFacturas.body) as { properties: { title: string } })
+      .properties.title;
+    ok(`Acceso al documento "${titulo}"`);
+    dim('Las pestañas "Factures" e "Imports" se crean solas al hacer falta.');
+  }
+}
+
+// Lo que ya estuviera escrito en la columna de importes no lo borra nadie:
+// la app ha dejado de escribir ahí, pero la empresa lo sigue viendo.
+if (headerMap.price !== undefined) {
+  const conImporte = dataRows.filter((r) => cell(r, "price").trim() !== "").length;
+  if (conImporte > 0) {
+    // "Con algo escrito" y no "importes": en la hoja real había celdas de
+    // esta columna con formato de fecha dentro. Quién es dinero y quién no
+    // lo decide `migrar:imports`, que sí mira el formato de cada celda.
+    warn(`La columna "${headerRow[headerMap.price]}" tiene ${conImporte} celda(s) con algo escrito`);
+    dim(`Son las de la pestaña "${tab}"; puede haberlas en otras.`);
+    dim("La app ya no escribe ahí, pero lo que quede lo sigue viendo la");
+    dim("empresa. Para mudarlo al documento privado:  npm run migrar:imports");
+  }
+}
+
+console.log(
+  faltaPrivado
+    ? `\n\x1b[33mLa app puede leer tu Google Sheet, pero el dinero no tiene dónde` +
+        ` guardarse: repasa el documento privado de arriba.\x1b[0m\n`
+    : `\n\x1b[32mTodo correcto. La app puede leer tu Google Sheet.\x1b[0m\n`,
+);

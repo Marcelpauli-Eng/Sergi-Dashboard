@@ -288,6 +288,25 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     };
   }, [sync]);
 
+  /**
+   * Cualquier cambio se sube y se vuelve a bajar solo.
+   *
+   * Todo lo que se toca —entregar, corregir un importe, mover un día— deja
+   * algo en la cola, así que basta con mirarla: en cuanto para la mano se
+   * sincroniza. Sin esto el cambio se veía en este móvil pero las hojas y
+   * las pantallas que leen del servidor (la comparativa, las facturas) se
+   * quedaban con lo de antes hasta que alguien le daba a Actualizar.
+   *
+   * El respiro es para no salir corriendo con cada tecla al corregir varios
+   * importes seguidos. Si falla —sin cobertura— no reintenta desde aquí: de
+   * eso ya se encargan el evento `online` y el volver a la pestaña.
+   */
+  useEffect(() => {
+    if (pendingCount === 0) return;
+    const id = setTimeout(() => void sync(), 800);
+    return () => clearTimeout(id);
+  }, [pendingCount, sync]);
+
   const manifest = stored?.data;
   // En un useMemo porque el `?? []` creaba un array nuevo en cada render, y
   // de él cuelgan la clasificación, el buscador y la comanda abierta: sin

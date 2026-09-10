@@ -113,9 +113,13 @@ export const COLUMNS = {
   ],
 
   /**
-   * Lo que el transportista cobra por ese pedido. La app ESCRIBE aquí el
-   * importe que teclea al dar por entregada la parada, y es de donde sale
-   * la factura de fin de mes. Sin IVA: los impuestos se calculan al facturar.
+   * Lo que el transportista cobra por ese pedido. Sin IVA: los impuestos se
+   * calculan al facturar.
+   *
+   * La app ya NO escribe aquí ni crea la columna: el importe va al documento
+   * privado (`lib/importes.ts`), porque esta hoja la ve la empresa entera.
+   * Se sigue leyendo como respaldo mientras queden importes de antes de la
+   * separación; para mudarlos, `npm run migrar:imports`.
    */
   price: ["Import", "Importe", "Preu", "Precio", "Cobrat", "Cobrado"],
 
@@ -141,12 +145,18 @@ export type ColumnKey = keyof typeof COLUMNS;
  */
 export const REQUIRED_COLUMNS: ColumnKey[] = ["id", "address"];
 
-/** Columnas que la app crea automáticamente si no existen en la hoja. */
+/**
+ * Columnas que la app crea automáticamente si no existen en la hoja.
+ *
+ * `price` NO está: los importes viven en el documento privado del
+ * transportista (pestaña "Imports"), no en la hoja que comparte la empresa.
+ * Se sigue LEYENDO si la columna existe, para no perder los que ya hubiera
+ * puestos antes de separarlos, pero la app no la crea ni escribe en ella.
+ */
 export const MANAGED_COLUMNS: ColumnKey[] = [
   "status",
   "deliveredAt",
   "incidentNote",
-  "price",
   "lat",
   "lng",
   "date",

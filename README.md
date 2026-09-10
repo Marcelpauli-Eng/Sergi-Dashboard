@@ -37,6 +37,7 @@ mismos valores, así que un reintento nunca duplica nada.
 | `lib/sheet-schema.ts` | **Mapeo de columnas del Sheet.** El único archivo a tocar si cambian los nombres de las columnas. |
 | `lib/sheet-tab.ts` | Elige la pestaña del mes en curso cuando hay una por mes. |
 | `lib/sheet-cells.ts` | Cómo se interpreta **una** celda (estados, importes, prioridades). |
+| `lib/importes.ts` | El registro privado de precios: qué fila se actualiza y cuál se añade. |
 | `lib/sheets.ts` | Lee y escribe en el Google Sheet. Las facturas van a su propio documento (ver `GOOGLE_SHEET_ID_FACTURAS`). |
 | `lib/outbox.ts` | Cómo se ve en pantalla lo que aún no ha llegado al Sheet. |
 | `lib/routing.ts` | Geocoding y cálculo de la ruta óptima. |
@@ -66,6 +67,7 @@ mensaje qué se rompe si falla**, que es lo que hace falta a los seis meses.
 | `check:factura` | Los números de la factura, al céntimo, y a qué cliente va. |
 | `check:ajustes` | Que los datos guardados en el móvil sobrevivan a una versión nueva. |
 | `check:outbox` | Que lo que se hace sin cobertura se vea bien en pantalla. |
+| `check:importes` | Que los precios acaben en el documento privado, una fila por comanda. |
 | `check:pdf` | Que el PDF que se exporta sea un PDF válido. |
 
 Aparte está `npm run check` (`scripts/check-sheet.mts`), que sí habla con
@@ -95,7 +97,7 @@ vez de en el Sheet.
 
 ### 1. Google Cloud
 
-👉 **[Guía paso a paso con todos los clics](docs/GOOGLE-SETUP.md)** (15 min)
+👉 **[Guía paso a paso con todos los clics](docs/GOOGLE-SETUP.md)** (20 min)
 
 En resumen: creas un proyecto, habilitas **Google Sheets API**, **Geocoding
 API** y **Routes API**, creas una **cuenta de servicio** con su clave JSON, y
@@ -128,10 +130,15 @@ catalanas: `Data`, `Adreça`, `Població`, `Nº Comanda`, `Client`, `Telèfon`,
 `Prioritat`, `Estat de l'entrega`…). Si en tu hoja se llaman de otra forma,
 añádela a `lib/sheet-schema.ts`.
 
-#### El documento de facturas va aparte
+#### El dinero va en otro documento
 
-Las facturas emitidas se registran en una pestaña `Factures`, y va **en otro
-documento**: `GOOGLE_SHEET_ID_FACTURAS` es obligatoria para facturar.
+`GOOGLE_SHEET_ID_FACTURAS` apunta al documento privado del transportista, con
+dos pestañas:
+
+| Pestaña | Qué guarda |
+|---|---|
+| `Factures` | Las facturas emitidas, con sus líneas y su número de serie. |
+| `Imports` | Lo que se cobra por cada comanda, por número de comanda. |
 
 El motivo: el documento de repartos lo comparte la empresa —lo necesita, es
 su hoja de pedidos— y **Google Sheets no sabe ocultar una pestaña a quien
@@ -140,15 +147,31 @@ la protección de hojas limita la edición, no la lectura. Lo que factura el
 transportista no es asunto de la empresa, así que la única separación real es
 otro archivo, compartido solo con la cuenta de servicio (Editor).
 
+La app ya **no escribe** en la columna `Import` de la hoja de repartos, ni la
+crea. La sigue *leyendo* como respaldo mientras queden importes viejos sin
+mudar; el documento privado siempre manda.
+
 Sin esa variable el resto de la app funciona igual, pero la pantalla de
-Factures dice que falta por configurar. Antes caían en el documento de
-repartos: un olvido al desplegar y la empresa se encontraba las facturas en
-su hoja, justo lo que esta separación evita.
+Factures dice que falta por configurar, y una entrega con importe queda «sin
+enviar» hasta que se ponga —el estado sí se escribe; lo que no se puede
+guardar en ninguna parte es el precio. Antes caían en el documento de
+repartos: un olvido al desplegar y la empresa se encontraba las facturas y
+los precios en su hoja, justo lo que esta separación evita.
 
 > **Al cambiarla con facturas ya emitidas:** la serie se calcula a partir de
 > la última factura que haya en *ese* documento. O copias la pestaña
 > `Factures` al nuevo, o pones en Ajustes → Facturació un «primer número» por
 > encima de la última emitida. Si no, se repetirían números.
+
+**Mudar los importes que ya estén en la hoja de la empresa:**
+
+```bash
+npm run migrar:imports              # solo copia, no toca nada
+npm run migrar:imports -- --borrar  # y vacía la columna original
+```
+
+Por defecto solo copia. Vaciar la columna borra un dato que hasta ese momento
+no está en ningún otro sitio, así que va aparte y con la copia ya comprobada.
 
 **Qué ve el transportista.** Todo lo que no esté marcado como entregado, sin
 filtrar por fecha. En esta hoja no hay ninguna columna que diga qué día toca
