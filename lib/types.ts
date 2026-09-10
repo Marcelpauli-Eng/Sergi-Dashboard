@@ -6,7 +6,18 @@
  * un cambio de columnas en el Sheet solo afecte a `lib/sheet-schema.ts`.
  */
 
-export type DeliveryStatus = "pendiente" | "entregado" | "incidencia";
+/**
+ * Los estados de una entrega, como lista y como tipo.
+ *
+ * La lista es lo que valida la API (`app/api/deliveries/route.ts`), y el tipo
+ * sale de ella. Escribirlos dos veces costó caro: el esquema se quedó sin
+ * "pendiente" —el estado que manda el botón de Desfer— y como la cola se
+ * sube en un solo lote, un deshacer devolvía 400 y se llevaba por delante
+ * todo lo que hubiera pendiente detrás, importes incluidos.
+ */
+export const DELIVERY_STATUSES = ["pendiente", "entregado", "incidencia"] as const;
+
+export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
 /** Por dónde va el cobro de una factura ya emitida. */
 export type EstatFactura = "emesa" | "enviada" | "cobrada";

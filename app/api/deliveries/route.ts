@@ -4,12 +4,13 @@ import { getSession } from "@/lib/session";
 import { writeDeliveries } from "@/lib/sheets";
 import { isDemoMode, recordDemoDeliveries } from "@/lib/demo";
 import { isConfigError } from "@/lib/env";
+import { DELIVERY_STATUSES } from "@/lib/types";
 
 const recordSchema = z.object({
   clientId: z.string().uuid(),
   orderId: z.string().min(1),
   type: z.enum(["status", "date", "price"]).optional().default("status"),
-  status: z.enum(["entregado", "incidencia"]).optional(),
+  status: z.enum(DELIVERY_STATUSES).optional(),
   date: z.string().optional().nullable(),
   recordedAt: z.string().datetime(),
   note: z.string().max(500).nullable().optional(),
@@ -42,8 +43,15 @@ export async function POST(request: NextRequest) {
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
+    // Con el campo delante. "Petición inválida" a secas deja al transportista
+    // mirando una pantalla que no dice nada y a quien lo mantiene leyendo
+    // logs; el nombre del campo suele ser el arreglo entero.
+    const [problema] = parsed.error.issues;
     return NextResponse.json(
-      { error: "Petición inválida", detail: parsed.error.issues },
+      {
+        error: `Petición inválida: ${problema.path.join(".") || "cuerpo"} — ${problema.message}`,
+        detail: parsed.error.issues,
+      },
       { status: 400 },
     );
   }

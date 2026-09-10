@@ -84,8 +84,15 @@ export async function POST(request: Request) {
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
+    // Con el campo delante. "Petición inválida" a secas deja al transportista
+    // mirando una pantalla que no dice nada y a quien lo mantiene leyendo
+    // logs; el nombre del campo suele ser el arreglo entero.
+    const [problema] = parsed.error.issues;
     return NextResponse.json(
-      { error: "Petición inválida", detail: parsed.error.issues },
+      {
+        error: `Petición inválida: ${problema.path.join(".") || "cuerpo"} — ${problema.message}`,
+        detail: parsed.error.issues,
+      },
       { status: 400 },
     );
   }
