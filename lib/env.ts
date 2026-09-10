@@ -81,10 +81,12 @@ interface Env {
      * Lo que se factura es del transportista, así que va a otro archivo que
      * solo comparte con la cuenta de servicio.
      *
-     * Si no se define, cae en el documento de repartos, que es como
-     * funcionaba antes y sigue valiendo si a nadie le importa que se vea.
+     * `null` si no se define, y entonces facturar falla con un mensaje que
+     * lo dice. Antes caía en el documento de repartos: un olvido al
+     * configurar y la empresa se encontraba las facturas en su hoja, que es
+     * exactamente lo que esto evita. El resto de la app no lo necesita.
      */
-    facturasSheetId: string;
+    facturasSheetId: string | null;
     /**
      * Nombre de la pestaña con los pedidos.
      *
@@ -126,10 +128,7 @@ const loaders: { [K in keyof Env]: () => Env[K] } = {
     serviceAccountEmail: required("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
     privateKey: parsePrivateKey(required("GOOGLE_PRIVATE_KEY")),
     sheetId: required("GOOGLE_SHEET_ID"),
-    facturasSheetId: optional(
-      "GOOGLE_SHEET_ID_FACTURAS",
-      required("GOOGLE_SHEET_ID"),
-    ),
+    facturasSheetId: optionalOrNull("GOOGLE_SHEET_ID_FACTURAS"),
     sheetTab: optionalOrNull("GOOGLE_SHEET_TAB"),
     mapsApiKey: required("GOOGLE_MAPS_API_KEY"),
   }),

@@ -7,6 +7,8 @@ import {
   ArrowUpDown,
   BarChart3,
   CalendarDays,
+  CalendarRange,
+  Check,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -16,6 +18,7 @@ import {
   Inbox,
   Menu,
   Route,
+  RotateCw,
   Search,
   Settings,
   Wallet,
@@ -36,6 +39,7 @@ import { euros, type DatosFacturacion } from "@/lib/factura";
 import {
   recordDelivery,
   recordDateAssignment,
+  recordPrice,
   syncNow,
   SessionExpiredError,
   getSelectedTab,
@@ -177,8 +181,15 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
   // ── Buscador global (⌘K) ──────────────────────────────────────────────
   const [cercantObert, setCercantObert] = useState(false);
-  /** La comanda que se ha abierto desde el buscador. */
-  const [comandaOberta, setComandaOberta] = useState<Stop | null>(null);
+  /**
+   * La comanda abierta desde el buscador, POR SU ID y no por una copia.
+   *
+   * Guardar el objeto congelaba lo que se veía: al corregir el importe la
+   * ficha seguía enseñando el anterior, porque el que estaba pintado era una
+   * copia de antes del cambio. Con el id se vuelve a buscar en cada render y
+   * enseña siempre lo que hay.
+   */
+  const [comandaObertaId, setComandaObertaId] = useState<string | null>(null);
 
   // ── Desfer ────────────────────────────────────────────────────────────
   const [accioDesfer, setAccioDesfer] = useState<AccioDesfer | null>(null);
@@ -278,7 +289,13 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   }, [sync]);
 
   const manifest = stored?.data;
-  const allStops = manifest?.today?.stops ?? []; // manifest.today.stops is now all stops in the sheet!
+  // En un useMemo porque el `?? []` creaba un array nuevo en cada render, y
+  // de él cuelgan la clasificación, el buscador y la comanda abierta: sin
+  // esto se recalculaba todo cada vez que se pintaba cualquier cosa.
+  const allStops = useMemo(
+    () => manifest?.today?.stops ?? [],
+    [manifest],
+  ); // manifest.today.stops son TODAS las comandas del full
   const todayDate = manifest?.today?.date ?? ""; // The "today" date on the server
 
   // Clasificación de todos los pedidos
@@ -413,6 +430,10 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   const nomDe = (orderId: string) =>
     allStops.find((s) => s.id === orderId)?.customer || orderId;
 
+  const comandaOberta = comandaObertaId
+    ? (allStops.find((s) => s.id === comandaObertaId) ?? null)
+    : null;
+
   const handleDelivered = (orderId: string, price: number | null = null) => {
     const abans = allStops.find((s) => s.id === orderId);
     void recordDelivery(orderId, "entregado", null, price);
@@ -426,6 +447,17 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       );
     }
   };
+  /**
+   * Corrige el importe de una comanda, sin tocar nada más.
+   *
+   * Distinto de `handleDelivered`: aquel marca la entrega y por tanto
+   * reescribe la hora en el full. Cambiar un precio mal tecleado no puede
+   * mover la hora a la que se entregó de verdad.
+   */
+  const handleImporte = (orderId: string, importe: number | null) => {
+    void recordPrice(orderId, importe);
+  };
+
   const handleIncident = (orderId: string, note: string) => {
     const abans = allStops.find((s) => s.id === orderId);
     const preuAbans = abans?.price ?? null;
@@ -592,40 +624,74 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       {/* ── Panel del menú hamburguesa ────────────────────────────────── */}
       {menuOpen && (
         <div className="material sticky top-[calc(env(safe-area-inset-top)+3.9rem)] z-10 animate-fade-in px-4 py-4">
-          <p className="mb-3 text-xs font-semibold text-muted-foreground">
-            Selecciona la hoja
+          <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-tertiary-foreground">
+            Full
           </p>
           {loadingTabs ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">
-              Cargando pestañas…
-            </p>
+            /* Tres siluetas del alto de una fila en vez de un texto: el panel
+               no da un salto de alto cuando llega la lista. */
+            <div className="soft-card divide-y divide-border overflow-hidden">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex h-12 items-center px-3.5">
+                  <div className="h-3.5 w-32 animate-pulse rounded-full bg-muted" />
+                </div>
+              ))}
+            </div>
           ) : tabs.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">
-              No se han podido cargar las pestañas
-            </p>
+            <div className="soft-card px-3.5 py-4 text-center">
+              <p className="text-sm text-muted-foreground">
+                {online
+                  ? "No s'han pogut carregar els fulls"
+                  : "Sense connexió: no es pot llegir la llista de fulls"}
+              </p>
+              {online && (
+                <button
+                  type="button"
+                  onClick={() => void fetchTabs()}
+                  className="pressable mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary"
+                >
+                  <RotateCw className="size-4" />
+                  Torna-ho a provar
+                </button>
+              )}
+            </div>
           ) : (
-            <div className="flex flex-wrap gap-2">
+            /* Doce fulls no caben en una pantalla de móvil: la lista se queda
+               en poco más de media y el resto se hace con el dedo. */
+            <ul className="soft-card max-h-[52svh] divide-y divide-border overflow-y-auto overscroll-contain">
               {tabs.map((tab) => {
                 const isActive =
                   tab === selectedSheetTab ||
                   (!selectedSheetTab && tab === manifest?.sheetTab);
                 return (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => void handleTabSelect(tab)}
-                    className={cn(
-                      "pressable rounded-full px-3.5 py-2 text-sm font-medium",
-                      isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-foreground",
-                    )}
-                  >
-                    {tab}
-                  </button>
+                  <li key={tab}>
+                    <button
+                      type="button"
+                      onClick={() => void handleTabSelect(tab)}
+                      aria-current={isActive ? "true" : undefined}
+                      className="flex w-full items-center gap-3 px-3.5 py-3 text-left active:bg-muted"
+                    >
+                      <CalendarRange
+                        className={cn(
+                          "size-5 shrink-0",
+                          isActive ? "text-primary" : "text-tertiary-foreground",
+                        )}
+                        strokeWidth={isActive ? 2.2 : 1.8}
+                      />
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1 truncate text-[15px]",
+                          isActive ? "font-semibold text-primary" : "font-medium",
+                        )}
+                      >
+                        {tab}
+                      </span>
+                      {isActive && <Check className="size-4 shrink-0 text-primary" />}
+                    </button>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           )}
         </div>
       )}
@@ -688,6 +754,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 mes={selectedSheetTab || manifest?.sheetTab || ""}
                 onDelivered={handleDelivered}
                 onIncident={handleIncident}
+                onImporte={handleImporte}
               />
             )}
             {activeTab === "factures" && (
@@ -696,7 +763,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 mes={selectedSheetTab || manifest?.sheetTab || ""}
                 datos={datosFactura}
                 online={online}
-                onImporte={handleDelivered}
+                onImporte={handleImporte}
               />
             )}
             {activeTab === "cobraments" && (
@@ -722,7 +789,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
           onTancar={() => setCercantObert(false)}
           onObrir={(stop) => {
             setCercantObert(false);
-            setComandaOberta(stop);
+            setComandaObertaId(stop.id);
           }}
         />
       )}
@@ -731,28 +798,29 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       {comandaOberta && (
         <div
           className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
-          onClick={() => setComandaOberta(null)}
+          onClick={() => setComandaObertaId(null)}
         >
           <div className="relative w-full max-w-md sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
             <Button
               variant="secondary"
               size="icon"
               className="absolute -top-12 right-0 rounded-full text-white"
-              onClick={() => setComandaOberta(null)}
+              onClick={() => setComandaObertaId(null)}
               aria-label="Tancar"
             >
               <X />
             </Button>
             <StopCard
               detall
+              onImporte={handleImporte}
               stop={comandaOberta}
               onDelivered={(id, price) => {
                 handleDelivered(id, price);
-                setComandaOberta(null);
+                setComandaObertaId(null);
               }}
               onIncident={(id, note) => {
                 handleIncident(id, note);
-                setComandaOberta(null);
+                setComandaObertaId(null);
               }}
             />
           </div>
@@ -1606,20 +1674,25 @@ function TabHistorial({
   mes,
   onDelivered,
   onIncident,
+  onImporte,
 }: {
   historyStops: { entregat: Stop[]; incidencia: Stop[] };
   /** Nombre del full, solo para el nombre del CSV. */
   mes: string;
   onDelivered: (id: string, price: number | null) => void;
   onIncident: (id: string, note: string) => void;
+  onImporte: (id: string, importe: number | null) => void;
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [ordre, setOrdre] = useState<{ clau: ClauHistorial; asc: boolean }>({
     clau: "date",
     asc: false,
   });
-  /** La comanda abierta desde la tabla, para poder tocarla sin salir. */
-  const [obert, setObert] = useState<Stop | null>(null);
+  /**
+   * La comanda abierta desde la tabla, por su id: si se guarda el objeto, al
+   * corregir el importe la ficha se queda enseñando el de antes.
+   */
+  const [obertId, setObertId] = useState<string | null>(null);
 
   const allHistory = useMemo(() => [...historyStops.entregat, ...historyStops.incidencia], [historyStops]);
 
@@ -1656,6 +1729,8 @@ function TabHistorial({
       return signo * va.localeCompare(vb, "ca", { numeric: true });
     });
   }, [filteredHistory, ordre]);
+
+  const obert = obertId ? (allHistory.find((s) => s.id === obertId) ?? null) : null;
 
   const totalImport = useMemo(
     () => ordenat.reduce((suma, s) => suma + (s.price ?? 0), 0),
@@ -1764,7 +1839,7 @@ function TabHistorial({
                 {ordenat.map((stop) => (
                   <tr
                     key={stop.id}
-                    onClick={() => setObert(stop)}
+                    onClick={() => setObertId(stop.id)}
                     className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/60"
                   >
                     <td className="px-4 py-2 tabular-nums">{stop.id}</td>
@@ -1832,28 +1907,29 @@ function TabHistorial({
       {obert && (
         <div
           className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
-          onClick={() => setObert(null)}
+          onClick={() => setObertId(null)}
         >
           <div className="relative w-full max-w-md sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
             <Button
               variant="secondary"
               size="icon"
               className="absolute -top-12 right-0 rounded-full text-white"
-              onClick={() => setObert(null)}
+              onClick={() => setObertId(null)}
               aria-label="Tancar"
             >
               <X />
             </Button>
             <StopCard
               detall
+              onImporte={onImporte}
               stop={obert}
               onDelivered={(id, price) => {
                 onDelivered(id, price);
-                setObert(null);
+                setObertId(null);
               }}
               onIncident={(id, note) => {
                 onIncident(id, note);
-                setObert(null);
+                setObertId(null);
               }}
             />
           </div>

@@ -144,7 +144,8 @@ export default function Factures({
           Emeses
         </h3>
         <p className="mb-3 px-1 text-xs text-muted-foreground">
-          Registrades al full, a la pestanya «Factures».
+          Registrades en el teu document de factures, a part del full de
+          repartiment que comparteix l&apos;empresa.
         </p>
 
         {error && <p className="text-sm text-status-incidencia">{error}</p>}

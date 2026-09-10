@@ -36,6 +36,23 @@ function serialToDateString(serial: number): DateString {
 }
 
 /**
+ * ¿Existe ese día en el calendario?
+ *
+ * Un 31 de febrero pasa los rangos —día entre 1 y 31, mes entre 1 y 12— y
+ * no es una fecha. Colarlo es peor que descartar la fila: la comanda queda
+ * con una fecha que no le toca a ningún día del calendario, así que
+ * desaparece de la rejilla sin aparecer tampoco en la bolsa de pendientes.
+ */
+function esDiaReal(year: number, month: number, day: number): boolean {
+  const fecha = new Date(Date.UTC(year, month - 1, day));
+  return (
+    fecha.getUTCFullYear() === year &&
+    fecha.getUTCMonth() === month - 1 &&
+    fecha.getUTCDate() === day
+  );
+}
+
+/**
  * Convierte lo que venga de una celda de fecha a `YYYY-MM-DD`.
  *
  * Acepta el número de serie de Sheets (cuando la celda es una fecha de
@@ -58,7 +75,10 @@ export function parseSheetDate(value: unknown): DateString | null {
 
   // Ya viene en ISO: 2026-08-04 (o con hora detrás).
   const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  if (iso) {
+    if (!esDiaReal(Number(iso[1]), Number(iso[2]), Number(iso[3]))) return null;
+    return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  }
 
   // Formato español: 4/8/2026, 04-08-2026, 4.8.26 — con hora opcional
   // detrás ("8/08/2026 13:50"), que es como queda la celda cuando la app
@@ -72,7 +92,7 @@ export function parseSheetDate(value: unknown): DateString | null {
     const month = Number(eu[2]);
     let year = Number(eu[3]);
     if (year < 100) year += 2000;
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    if (!esDiaReal(year, month, day)) return null;
     return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   }
 

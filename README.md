@@ -36,12 +36,41 @@ mismos valores, así que un reintento nunca duplica nada.
 |---|---|
 | `lib/sheet-schema.ts` | **Mapeo de columnas del Sheet.** El único archivo a tocar si cambian los nombres de las columnas. |
 | `lib/sheet-tab.ts` | Elige la pestaña del mes en curso cuando hay una por mes. |
-| `lib/sheets.ts` | Lee y escribe en el Google Sheet. |
+| `lib/sheet-cells.ts` | Cómo se interpreta **una** celda (estados, importes, prioridades). |
+| `lib/sheets.ts` | Lee y escribe en el Google Sheet. Las facturas van a su propio documento (ver `GOOGLE_SHEET_ID_FACTURAS`). |
+| `lib/outbox.ts` | Cómo se ve en pantalla lo que aún no ha llegado al Sheet. |
 | `lib/routing.ts` | Geocoding y cálculo de la ruta óptima. |
 | `lib/manifest.ts` | Junta ambas cosas en el paquete que se descarga. |
 | `lib/db.ts` | Base de datos local (IndexedDB). |
 | `lib/sync.ts` | Motor de sincronización en las dos direcciones. |
 | `app/sw.ts` | Service worker: hace que la app arranque sin red. |
+
+---
+
+## Comprobaciones
+
+```bash
+npm test
+```
+
+No hay framework de tests: son scripts que se ejecutan con Node y usan
+`node:assert`. Cada uno cubre una pieza de lógica pura y **explica en el
+mensaje qué se rompe si falla**, que es lo que hace falta a los seis meses.
+
+| Comprobación | Qué protege |
+|---|---|
+| `check:dates` | Que las semanas y los meses del calendario cuadren. |
+| `check:format` | Fechas del Sheet (las cuatro formas en que llegan), distancias, tiempos y la geometría de la ruta. |
+| `check:cells` | Que una celda escrita a mano se lea como toca: "Entregat", "x", "Urgent"… |
+| `check:schema` | Qué columna es cuál y de qué pestaña se lee. |
+| `check:factura` | Los números de la factura, al céntimo, y a qué cliente va. |
+| `check:ajustes` | Que los datos guardados en el móvil sobrevivan a una versión nueva. |
+| `check:outbox` | Que lo que se hace sin cobertura se vea bien en pantalla. |
+| `check:pdf` | Que el PDF que se exporta sea un PDF válido. |
+
+Aparte está `npm run check` (`scripts/check-sheet.mts`), que sí habla con
+Google: comprueba contra la hoja de verdad que las columnas están y que se
+puede escribir.
 
 ---
 
@@ -98,6 +127,28 @@ Los nombres admiten variantes (mayúsculas, acentos, sinónimos, y las formas
 catalanas: `Data`, `Adreça`, `Població`, `Nº Comanda`, `Client`, `Telèfon`,
 `Prioritat`, `Estat de l'entrega`…). Si en tu hoja se llaman de otra forma,
 añádela a `lib/sheet-schema.ts`.
+
+#### El documento de facturas va aparte
+
+Las facturas emitidas se registran en una pestaña `Factures`, y va **en otro
+documento**: `GOOGLE_SHEET_ID_FACTURAS` es obligatoria para facturar.
+
+El motivo: el documento de repartos lo comparte la empresa —lo necesita, es
+su hoja de pedidos— y **Google Sheets no sabe ocultar una pestaña a quien
+tiene acceso al documento**. Esconderla es cosmético (Ver → Hojas ocultas) y
+la protección de hojas limita la edición, no la lectura. Lo que factura el
+transportista no es asunto de la empresa, así que la única separación real es
+otro archivo, compartido solo con la cuenta de servicio (Editor).
+
+Sin esa variable el resto de la app funciona igual, pero la pantalla de
+Factures dice que falta por configurar. Antes caían en el documento de
+repartos: un olvido al desplegar y la empresa se encontraba las facturas en
+su hoja, justo lo que esta separación evita.
+
+> **Al cambiarla con facturas ya emitidas:** la serie se calcula a partir de
+> la última factura que haya en *ese* documento. O copias la pestaña
+> `Factures` al nuevo, o pones en Ajustes → Facturació un «primer número» por
+> encima de la última emitida. Si no, se repetirían números.
 
 **Qué ve el transportista.** Todo lo que no esté marcado como entregado, sin
 filtrar por fecha. En esta hoja no hay ninguna columna que diga qué día toca

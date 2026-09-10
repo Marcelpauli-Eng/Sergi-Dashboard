@@ -7,7 +7,7 @@ import { isDemoMode, recordDemoDeliveries } from "@/lib/demo";
 const recordSchema = z.object({
   clientId: z.string().uuid(),
   orderId: z.string().min(1),
-  type: z.enum(["status", "date"]).optional().default("status"),
+  type: z.enum(["status", "date", "price"]).optional().default("status"),
   status: z.enum(["entregado", "incidencia"]).optional(),
   date: z.string().optional().nullable(),
   recordedAt: z.string().datetime(),

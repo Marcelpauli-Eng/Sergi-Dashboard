@@ -2,7 +2,7 @@ import {
   DATOS_POR_DEFECTO,
   type ClienteFacturacion,
   type DatosFacturacion,
-} from "./factura";
+} from "./factura.ts";
 
 /**
  * Los datos de emisor y cliente que salen en la factura.

@@ -10,7 +10,16 @@
  */
 
 import assert from "node:assert/strict";
-import { calcularTotales, euros, paginar, parseImporte, LINEAS_POR_PAGINA } from "../lib/factura.ts";
+import {
+  DATOS_POR_DEFECTO,
+  calcularTotales,
+  clientePara,
+  euros,
+  formatearNumero,
+  paginar,
+  parseImporte,
+  LINEAS_POR_PAGINA,
+} from "../lib/factura.ts";
 
 const linea = (comanda: string, importe: number) => ({ comanda, importe });
 
@@ -112,4 +121,36 @@ console.log("\x1b[32m✓\x1b[0m Los números de la factura cuadran");
   }
 }
 
-console.log("✓ lib/factura.ts — totales, páginas e importes tecleados");
+// ── El número de la serie ────────────────────────────────────────────────
+// Seis cifras con ceros delante, como lo imprime FactuSOL.
+{
+  assert.equal(formatearNumero(30), "000030");
+  assert.equal(formatearNumero(1), "000001");
+  assert.equal(formatearNumero(123456), "123456");
+}
+
+// ── A quién se le factura cada comanda ───────────────────────────────────
+{
+  const dos = {
+    ...DATOS_POR_DEFECTO,
+    clientes: [
+      { ...DATOS_POR_DEFECTO.clientes[0], nombre: "PRIMERO", codigo: "35" },
+      { ...DATOS_POR_DEFECTO.clientes[0], nombre: "SEGUNDO", codigo: "77" },
+    ],
+  };
+
+  // Sin código va al primero: es el caso de hoy, con la columna del full
+  // vacía en todas las comandas.
+  assert.equal(clientePara(dos, null).nombre, "PRIMERO");
+  assert.equal(clientePara(dos, "").nombre, "PRIMERO");
+
+  assert.equal(clientePara(dos, "77").nombre, "SEGUNDO");
+  // La celda la rellena una persona: espacios y mayúsculas no pueden mandar
+  // la factura al cliente equivocado.
+  assert.equal(clientePara(dos, " 77 ").nombre, "SEGUNDO");
+
+  // Un código que no está tampoco puede dejar la factura sin cliente.
+  assert.equal(clientePara(dos, "99").nombre, "PRIMERO");
+}
+
+console.log("✓ lib/factura.ts — totales, páginas, importes y clientes");

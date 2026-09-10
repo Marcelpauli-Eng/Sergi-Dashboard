@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { Check, Navigation, Phone, TriangleAlert, X } from "lucide-react";
+import { Check, Navigation, Pencil, Phone, TriangleAlert, X } from "lucide-react";
 import type { Stop } from "@/lib/types";
 import { formatDistance, formatDuration, telHref } from "@/lib/format";
 import { euros, parseImporte } from "@/lib/factura";
@@ -32,6 +32,15 @@ interface Props {
    * mismos: solo cambia cómo se reparte la información.
    */
   detall?: boolean;
+  /**
+   * Corrige el importe, tantas veces como haga falta y también después de
+   * entregar. Sin esto, un dedazo en el precio solo se arreglaba editando el
+   * Google Sheet a mano.
+   *
+   * Es un camino aparte de `onDelivered` a propósito: cambiar el importe no
+   * puede reescribir la hora de entrega.
+   */
+  onImporte?: (orderId: string, importe: number | null) => void;
 }
 
 /** Una fecha del Sheet, tal y como se lee: 01/07/2026. */
@@ -94,6 +103,105 @@ const CATEGORY_BADGE: Record<
  * El color se reserva para lo que informa: azul para lo pulsable, y el color
  * de cada categoría de estado (pendent/en curs/entregat/incidència).
  */
+/**
+ * El importe de la comanda, editable en el sitio.
+ *
+ * Se guarda al salir del campo o al pulsar Intro, sin botón de confirmar, y
+ * la marca de guardado aparece un segundo para que no quede duda. Vale igual
+ * para una entrega ya cerrada: corregir un precio no la reabre.
+ */
+function ImportEditable({
+  stop,
+  onImporte,
+  editant,
+  setEditant,
+  desat,
+  setDesat,
+}: {
+  stop: Stop;
+  onImporte?: (orderId: string, importe: number | null) => void;
+  editant: string | null;
+  setEditant: (v: string | null) => void;
+  desat: boolean;
+  setDesat: (v: boolean) => void;
+}) {
+  const actual = stop.price !== null ? `${euros(stop.price)} €` : null;
+
+  // Sin quien lo guarde, es un dato más.
+  if (!onImporte) return <Camp etiqueta="Import" valor={actual} />;
+
+  const desar = () => {
+    if (editant === null) return;
+    const valor = parseImporte(editant);
+    // Lo que no es un número se queda en el campo para poder corregirlo.
+    if (valor === undefined) return;
+    setEditant(null);
+    if (valor !== stop.price) {
+      onImporte(stop.id, valor);
+      setDesat(true);
+      setTimeout(() => setDesat(false), 1600);
+    }
+  };
+
+  const malament = editant !== null && editant.trim() !== "" && parseImporte(editant) === undefined;
+
+  return (
+    <div className="min-w-0">
+      <dt className="flex items-center gap-1 truncate text-[11px] font-medium uppercase tracking-wide text-tertiary-foreground">
+        Import
+        {desat && (
+          <span className="flex items-center gap-0.5 text-[color:var(--success)]">
+            <Check className="size-3" strokeWidth={3} />
+            desat
+          </span>
+        )}
+      </dt>
+      <dd>
+        {editant !== null ? (
+          <input
+            value={editant}
+            onChange={(e) => setEditant(e.target.value)}
+            onBlur={desar}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.currentTarget.blur();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setEditant(null);
+              }
+            }}
+            onFocus={(e) => e.currentTarget.select()}
+            autoFocus
+            type="text"
+            inputMode="decimal"
+            placeholder="0,00"
+            aria-label={`Import de la comanda ${stop.id}`}
+            aria-invalid={malament || undefined}
+            className={cn(
+              "-mx-1 w-full rounded px-1 py-0.5 text-sm tabular-nums outline-none ring-1",
+              malament
+                ? "bg-[color-mix(in_srgb,var(--destructive)_14%,transparent)] text-destructive ring-destructive"
+                : "bg-muted ring-ring/50",
+            )}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditant(stop.price !== null ? euros(stop.price) : "")}
+            className="-mx-1 flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-sm hover:bg-muted"
+          >
+            <span className={cn("truncate", !actual && "text-tertiary-foreground")}>
+              {actual ?? "—"}
+            </span>
+            <Pencil className="size-3 shrink-0 text-tertiary-foreground" aria-hidden />
+          </button>
+        )}
+      </dd>
+    </div>
+  );
+}
+
 export default function StopCard({
   stop,
   onDelivered,
@@ -105,12 +213,17 @@ export default function StopCard({
   isLast,
   onRemove,
   detall,
+  onImporte,
 }: Props) {
   const [showIncident, setShowIncident] = useState(false);
   const [showPrice, setShowPrice] = useState(false);
   const [showNav, setShowNav] = useState(false);
   const [note, setNote] = useState("");
   const [price, setPrice] = useState("");
+  /** El importe que se está corrigiendo. `null` = no se está tocando. */
+  const [editantImport, setEditantImport] = useState<string | null>(null);
+  /** Se enciende un momento al guardar, para que se vea que ha ido. */
+  const [desat, setDesat] = useState(false);
 
   // Coma o punto: en el móvil el teclado numérico da una u otro según el
   // idioma. La cuenta la hace `parseImporte`, la misma que la factura, para
@@ -258,9 +371,13 @@ export default function StopCard({
               <Camp etiqueta="Comanda" valor={stop.id} mono />
               <Camp etiqueta="Creada" valor={data(stop.creationDate)} />
               <Camp etiqueta="Repartiment" valor={data(stop.date)} />
-              <Camp
-                etiqueta="Import"
-                valor={stop.price !== null ? `${euros(stop.price)} €` : null}
+              <ImportEditable
+                stop={stop}
+                onImporte={onImporte}
+                editant={editantImport}
+                setEditant={setEditantImport}
+                desat={desat}
+                setDesat={setDesat}
               />
               <Camp etiqueta="Telèfon" valor={stop.phone} />
               <Camp etiqueta="Mides" valor={stop.measures} />

@@ -4,6 +4,14 @@ import { env } from "./env";
 import { parseSheetDate, formatSheetTimestamp, today } from "./dates";
 import { findMonthTab, findLatestTabUpTo, noTabFoundMessage } from "./sheet-tab";
 import {
+  columnLetter,
+  parseNumber,
+  parsePriority,
+  parseStatus,
+  parseStatusCategory,
+  text,
+} from "./sheet-cells.ts";
+import {
   mapHeaders,
   canonicalHeader,
   REQUIRED_COLUMNS,
@@ -13,24 +21,12 @@ import {
 } from "./sheet-schema";
 import type {
   DeliveryRecord,
-  DeliveryStatus,
   EstatFactura,
   FacturaEmitida,
   Order,
 } from "./types";
 
 const API = "https://sheets.googleapis.com/v4/spreadsheets";
-
-/** Índice de columna (0-based) a letra de columna: 0 → A, 26 → AA. */
-function columnLetter(index: number): string {
-  let letter = "";
-  let n = index;
-  while (n >= 0) {
-    letter = String.fromCharCode((n % 26) + 65) + letter;
-    n = Math.floor(n / 26) - 1;
-  }
-  return letter;
-}
 
 /** Rango A1 con el nombre de pestaña escapado (puede llevar espacios). */
 function range(a1: string, sheetTab?: string | null): string {
@@ -41,9 +37,20 @@ function range(a1: string, sheetTab?: string | null): string {
   return `'${tab.replace(/'/g, "''")}'!${a1}`;
 }
 
-async function sheetsFetch(path: string, init?: RequestInit): Promise<unknown> {
+/**
+ * Una llamada a la API de Sheets.
+ *
+ * `spreadsheetId` existe porque las facturas viven en OTRO documento que los
+ * repartos: el de repartos lo comparte la empresa y lo que factura el
+ * transportista no es asunto suyo. Ver `env.google.facturasSheetId`.
+ */
+async function sheetsFetch(
+  path: string,
+  init?: RequestInit,
+  spreadsheetId: string = env.google.sheetId,
+): Promise<unknown> {
   const token = await googleAccessToken();
-  const response = await fetch(`${API}/${env.google.sheetId}${path}`, {
+  const response = await fetch(`${API}/${spreadsheetId}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -67,9 +74,11 @@ async function sheetsFetch(path: string, init?: RequestInit): Promise<unknown> {
 /**
  * Devuelve los nombres de todas las pestañas (hojas) del Google Sheet.
  */
-export async function listSheetTabs(): Promise<string[]> {
+export async function listSheetTabs(spreadsheetId?: string): Promise<string[]> {
   const data = (await sheetsFetch(
     `?fields=sheets.properties.title`,
+    undefined,
+    spreadsheetId,
   )) as {
     sheets?: { properties?: { title?: string } }[];
   };
@@ -77,83 +86,6 @@ export async function listSheetTabs(): Promise<string[]> {
   return (data.sheets ?? [])
     .map((s) => s.properties?.title ?? "")
     .filter((title) => title.length > 0);
-}
-
-function parseStatus(raw: unknown): DeliveryStatus {
-  const text = String(raw ?? "")
-    .trim()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // diacríticos
-    .toLowerCase();
-  // Si la celda está vacía, el pedido está pendiente.
-  if (text === "") return "pendiente";
-  if (["entregado", "entregada", "entregat", "si", "sí", "ok", "x", "true", "1"].includes(text)) {
-    return "entregado";
-  }
-  if (["pendent", "pendiente", "pendent de recollir"].includes(text)) {
-    return "pendiente";
-  }
-  if (
-    [
-      "incidencia",
-      "incidència",
-      "ausente",
-      "rechazado",
-      "rebutjat",
-      "no entregado",
-      "no entregat",
-      "ko",
-    ].includes(text)
-  ) {
-    return "incidencia";
-  }
-  // Cualquier otro valor (ej: "Entregat -", "Recollir") se trata como pendiente.
-  return "pendiente";
-}
-
-function parseStatusCategory(raw: unknown): "pendent" | "en_curs" | "entregat" | "incidencia" {
-  const t = String(raw ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  if (t === "") return "pendent";
-  if (["entregado", "entregada", "entregat", "si", "ok", "x", "true", "1"].includes(t)) return "entregat";
-  if (["incidencia", "ausente", "rechazado", "rebutjat", "no entregado", "no entregat", "ko"].includes(t)) return "incidencia";
-  if (["en curs", "en curso", "en camino", "en ruta"].includes(t)) return "en_curs";
-  return "pendent";
-}
-
-function parseNumber(raw: unknown): number | null {
-  if (raw === null || raw === undefined || raw === "") return null;
-  const value = typeof raw === "number" ? raw : Number(String(raw).replace(",", "."));
-  return Number.isFinite(value) ? value : null;
-}
-
-/** Sin prioridad: al final de la ruta, pero antes de desbordar el número. */
-const NO_PRIORITY = Number.MAX_SAFE_INTEGER;
-
-/**
- * Prioridad como número, donde menor = antes.
- *
- * La hoja la escribe como texto ("Urgent", "Normal"), no como número, así
- * que se traduce. Se dejan huecos entre los valores para poder intercalar
- * niveles nuevos sin renumerar.
- */
-function parsePriority(raw: unknown): number {
-  const numeric = parseNumber(raw);
-  if (numeric !== null) return numeric;
-
-  const textStr = text(raw);
-  if (textStr === "") return NO_PRIORITY;
-  if (["urgent", "urgente", "alta", "alt", "prioritario", "alta prioridad"].includes(textStr)) {
-    return 10;
-  }
-  if (["normal", "media", "mitja", "estandar", "standard"].includes(textStr)) return 20;
-  if (["baja", "baixa", "baix", "bajo"].includes(textStr)) return 30;
-
-  // Un texto que no reconocemos no debe colarse por delante de nada.
-  return NO_PRIORITY;
-}
-
-function text(raw: unknown): string {
-  return String(raw ?? "").trim();
 }
 
 export interface SheetSnapshot {
@@ -276,7 +208,7 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
       driverId,
       creationDate,
       date: date ?? "",
-      priority: parseNumber(cell(row, "priority")) ?? Number.MAX_SAFE_INTEGER,
+      priority: parsePriority(cell(row, "priority")),
       customer: text(cell(row, "customer")),
       address,
       city,
@@ -475,6 +407,18 @@ export async function writeDeliveries(
         column: "date",
         value: record.date ? record.date : "",
       });
+    } else if (type === "price") {
+      // Solo el importe. Ni estado ni hora de entrega: corregir un precio no
+      // puede cambiar cuándo se entregó. Como en el deshacer, aquí un nulo
+      // sí vacía la celda, porque es lo que se ha pedido explícitamente.
+      updates.push({
+        rowNumber: order.rowNumber,
+        column: "price",
+        value:
+          record.price === null || record.price === undefined
+            ? ""
+            : record.price.toFixed(2).replace(".", ","),
+      });
     }
 
     applied.push(record.orderId);
@@ -511,13 +455,58 @@ export async function cacheCoordinates(
 /* ── Registro de facturas emitidas ──────────────────────────────────────── */
 
 /**
- * Las facturas emitidas viven en su propia pestaña del mismo documento.
+ * Las facturas emitidas viven en una pestaña con este nombre.
  *
- * En el Sheet y no en el móvil a propósito: es lo que permite que el número
- * correlativo no dependa del dispositivo, que la oficina las vea sin pedir
- * nada, y que un cambio de teléfono no se lleve por delante la serie.
+ * En un Sheet y no en el móvil a propósito: es lo que permite que el número
+ * correlativo no dependa del dispositivo y que un cambio de teléfono no se
+ * lleve por delante la serie. En cuál, lo decide `docFacturas()`.
  */
 export const TAB_FACTURAS = "Factures";
+
+/**
+ * Dónde vive el registro de facturas: un documento aparte, obligatorio.
+ *
+ * Google Sheets no sabe ocultar una pestaña a quien tiene acceso al
+ * documento, así que separar el archivo es la única manera de que la empresa
+ * no vea lo que factura el transportista. Sin la variable no se factura: el
+ * apaño de caer en el documento de repartos convertía un olvido de
+ * configuración en la fuga que esto viene a evitar.
+ */
+function docFacturas(): string {
+  const doc = env.google.facturasSheetId;
+  if (!doc) {
+    throw new Error(
+      "Falta la variable de entorno GOOGLE_SHEET_ID_FACTURAS. Las facturas " +
+        "necesitan un documento aparte: el de repartos lo ve la empresa " +
+        "entero. Crea uno, compártelo como Editor con la cuenta de servicio " +
+        "y pon aquí su ID (el trozo de la URL entre /d/ y /edit).",
+    );
+  }
+  return doc;
+}
+
+/**
+ * Las pestañas del documento de facturas.
+ *
+ * Traduce el error más probable de toda la puesta en marcha: crear el
+ * documento aparte y olvidarse de compartirlo con la cuenta de servicio.
+ * Google contesta un 403 que no dice qué hacer.
+ */
+async function tabsFacturas(doc: string): Promise<string[]> {
+  try {
+    return await listSheetTabs(doc);
+  } catch (error) {
+    const mensaje = String(error);
+    if (doc !== env.google.sheetId && /respondió (403|404)/.test(mensaje)) {
+      throw new Error(
+        `No se puede abrir el documento de facturas (GOOGLE_SHEET_ID_FACTURAS). ` +
+          `Compártelo con ${env.google.serviceAccountEmail} dándole permiso de Editor, ` +
+          `y comprueba que el ID es el trozo de la URL entre /d/ y /edit.`,
+      );
+    }
+    throw error;
+  }
+}
 
 const CABECERA_FACTURAS = [
   "Número",
@@ -569,18 +558,25 @@ function parseEstatFactura(valor: unknown): EstatFactura {
  * de las columnas viejas no cambian, solo se añaden detrás.
  */
 async function asegurarTabFacturas(): Promise<void> {
-  const tabs = await listSheetTabs();
+  const doc = docFacturas();
+  const tabs = await tabsFacturas(doc);
 
   if (!tabs.includes(TAB_FACTURAS)) {
-    await sheetsFetch(":batchUpdate", {
-      method: "POST",
-      body: JSON.stringify({
-        requests: [{ addSheet: { properties: { title: TAB_FACTURAS } } }],
-      }),
-    });
+    await sheetsFetch(
+      ":batchUpdate",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          requests: [{ addSheet: { properties: { title: TAB_FACTURAS } } }],
+        }),
+      },
+      doc,
+    );
   } else {
     const actual = (await sheetsFetch(
       `/values/${encodeURIComponent(range(`A1:${ULTIMA_COLUMNA_FACTURAS}1`, TAB_FACTURAS))}`,
+      undefined,
+      doc,
     )) as { values?: unknown[][] };
     const cabecera = (actual.values?.[0] ?? []).map((c) => text(c));
     // Ya está completa: no se toca nada.
@@ -591,6 +587,7 @@ async function asegurarTabFacturas(): Promise<void> {
     `/values/${encodeURIComponent(range(`A1:${ULTIMA_COLUMNA_FACTURAS}1`, TAB_FACTURAS))}` +
       `?valueInputOption=USER_ENTERED`,
     { method: "PUT", body: JSON.stringify({ values: [CABECERA_FACTURAS] }) },
+    doc,
   );
 }
 
@@ -624,12 +621,15 @@ function filaAFactura(fila: unknown[]): FacturaEmitida | null {
 
 /** Todas las facturas emitidas, de la más reciente a la más antigua. */
 export async function readFacturas(): Promise<FacturaEmitida[]> {
-  const tabs = await listSheetTabs();
+  const doc = docFacturas();
+  const tabs = await tabsFacturas(doc);
   if (!tabs.includes(TAB_FACTURAS)) return [];
 
   const data = (await sheetsFetch(
     `/values/${encodeURIComponent(range(`A2:${ULTIMA_COLUMNA_FACTURAS}`, TAB_FACTURAS))}` +
       `?valueRenderOption=UNFORMATTED_VALUE`,
+    undefined,
+    doc,
   )) as { values?: unknown[][] };
 
   return (data.values ?? [])
@@ -688,6 +688,7 @@ export async function emitirFactura(datos: {
     `/values/${encodeURIComponent(range(`A:${ULTIMA_COLUMNA_FACTURAS}`, TAB_FACTURAS))}:append` +
       `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     { method: "POST", body: JSON.stringify({ values: [fila] }) },
+    docFacturas(),
   );
 
   return { ...datos, client: datos.client ?? "", estat: "emesa", numero };
@@ -697,8 +698,8 @@ export async function emitirFactura(datos: {
  * Mueve una factura por los estados del cobro: emesa → enviada → cobrada.
  *
  * Se escribe en la hoja y no en el móvil a propósito, igual que la propia
- * factura: quien pregunta si algo está cobrado suele ser la oficina, y allí
- * lo ve sin tener que pedir nada.
+ * factura: así el estado del cobro sigue estando ahí desde cualquier
+ * dispositivo, y se puede repasar el mes entero de un vistazo.
  *
  * Busca la fila por el número de factura releyendo la pestaña, no por una
  * posición cacheada: la serie no cambia de orden, pero alguien puede haber
@@ -713,6 +714,8 @@ export async function actualizarEstadoFactura(
   const data = (await sheetsFetch(
     `/values/${encodeURIComponent(range("A2:A", TAB_FACTURAS))}` +
       `?valueRenderOption=UNFORMATTED_VALUE`,
+    undefined,
+    docFacturas(),
   )) as { values?: unknown[][] };
 
   const indice = (data.values ?? []).findIndex((fila) => parseNumber(fila[0]) === numero);
@@ -724,6 +727,7 @@ export async function actualizarEstadoFactura(
     `/values/${encodeURIComponent(range(`K${fila}`, TAB_FACTURAS))}` +
       `?valueInputOption=USER_ENTERED`,
     { method: "PUT", body: JSON.stringify({ values: [[ESTAT_FACTURA_SHEET[estat]]] }) },
+    docFacturas(),
   );
 
   const todas = await readFacturas();

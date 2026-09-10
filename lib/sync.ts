@@ -7,7 +7,12 @@ import {
   pendingOutbox,
   type OutboxItem,
 } from "./db";
-import type { DeliveryStatus, Manifest, Stop } from "./types";
+import { applyOutbox } from "./outbox.ts";
+import type { DeliveryStatus, Manifest } from "./types";
+
+// Se re-exporta porque el resto de la app la importa desde aquí desde
+// siempre; vive en `outbox.ts` para poder probarla sin arrancar Dexie.
+export { applyOutbox };
 
 /**
  * Motor de sincronización.
@@ -77,72 +82,6 @@ async function pruneOutbox(): Promise<void> {
 }
 
 /**
- * Aplica sobre un manifiesto las entregas que manda el móvil.
- *
- * Sin esto, cada sincronización devolvería los pedidos a "pendiente" y el
- * transportista vería reaparecer paradas que ya ha hecho.
- */
-/**
- * La categoría que le toca a un estado recién marcado.
- *
- * El dashboard reparte los pedidos por `statusCategory`, no por `status`.
- * Parchear solo el segundo dejaba la parada en la pestaña donde estaba: se
- * marcaba entregada, la hoja se actualizaba correctamente, y en la pantalla
- * seguía apareciendo en Avui hasta la siguiente descarga completa del
- * manifiesto. Y como este manifiesto parcheado se guarda en IndexedDB, el
- * estado incoherente sobrevivía a cerrar la app.
- */
-const CATEGORIA_DE: Record<DeliveryStatus, Stop["statusCategory"]> = {
-  entregado: "entregat",
-  incidencia: "incidencia",
-  // "pendiente" solo lo genera el deshacer, que devuelve la parada a la ruta.
-  pendiente: "pendent",
-};
-
-export function applyOutbox(manifest: Manifest, items: OutboxItem[]): Manifest {
-  if (items.length === 0) return manifest;
-
-  const byOrderId = new Map(items.map((item) => [item.orderId, item]));
-  const patchDay = (day: Manifest["today"]) => ({
-    ...day,
-    // El tipo de vuelta es explícito: sin él TypeScript ensancha `status` a
-    // `string` al unir las dos formas que devuelve el `map`.
-    stops: day.stops.map((stop): Stop => {
-      const pending = byOrderId.get(stop.id);
-      if (!pending) return stop;
-      const type = pending.type || "status";
-      if (type === "date") {
-        return { ...stop, date: pending.date ?? "" };
-      }
-      if (!pending.status) return stop;
-      if (pending.status === "pendiente") {
-        // Deshacer: la parada vuelve tal cual estaba, importe incluido. Aquí
-        // un importe nulo SÍ borra, al contrario que en una entrega normal.
-        return {
-          ...stop,
-          status: "pendiente",
-          statusCategory: "pendent",
-          rawStatus: "",
-          price: pending.price ?? null,
-        };
-      }
-      return {
-        ...stop,
-        status: pending.status,
-        statusCategory: CATEGORIA_DE[pending.status],
-        price: pending.price ?? stop.price,
-      };
-    }),
-  });
-
-  return {
-    ...manifest,
-    today: patchDay(manifest.today),
-    tomorrow: manifest.tomorrow ? patchDay(manifest.tomorrow) : null,
-  };
-}
-
-/**
  * Marca un pedido como entregado o con incidencia.
  *
  * El orden importa: primero se persiste en la cola local y se actualiza la
@@ -163,6 +102,43 @@ export async function recordDelivery(
     recordedAt: new Date().toISOString(),
     note,
     price,
+    syncedAt: null,
+    attempts: 0,
+    lastError: null,
+  };
+
+  await db.transaction("rw", db.outbox, db.manifest, async () => {
+    await db.outbox.put(item);
+
+    const stored = await loadManifest();
+    if (stored) {
+      await db.manifest.put({
+        ...stored,
+        data: applyOutbox(stored.data, [item]),
+      });
+    }
+  });
+
+  void flushOutbox().catch(() => {});
+}
+
+/**
+ * Corrige el importe de un pedido, sin tocar nada más.
+ *
+ * Se puede hacer las veces que haga falta: un importe mal tecleado se
+ * arregla escribiendo el bueno encima, y la entrega sigue registrada con su
+ * hora original.
+ */
+export async function recordPrice(
+  orderId: string,
+  price: number | null,
+): Promise<void> {
+  const item: OutboxItem = {
+    clientId: crypto.randomUUID(),
+    orderId,
+    type: "price",
+    price,
+    recordedAt: new Date().toISOString(),
     syncedAt: null,
     attempts: 0,
     lastError: null,

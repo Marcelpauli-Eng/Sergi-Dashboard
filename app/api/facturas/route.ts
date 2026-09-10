@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { isConfigError } from "@/lib/env";
 import { getSession } from "@/lib/session";
 import { actualizarEstadoFactura, emitirFactura, readFacturas } from "@/lib/sheets";
 import {
@@ -12,7 +13,9 @@ import {
 /**
  * Facturas emitidas.
  *
- * GET   → las que ya están registradas en la pestaña "Factures" del Sheet.
+ * GET   → las que ya están registradas en la pestaña "Factures" del
+ *         documento de facturas (ver GOOGLE_SHEET_ID_FACTURAS: es otro
+ *         archivo, el de repartos lo ve la empresa entero).
  * POST  → emite una nueva: le asigna el siguiente número de la serie y la
  *         registra.
  * PATCH → mueve el estado del cobro de una que ya está emitida.
@@ -21,6 +24,21 @@ import {
  * que la serie no tenga saltos ni repetidos. Por eso emitir necesita
  * cobertura, mientras que el resto de la app funciona sin ella.
  */
+
+/**
+ * Qué se le contesta al transportista cuando falla el Sheet.
+ *
+ * Si lo que falta es GOOGLE_SHEET_ID_FACTURAS, el mensaje concreto: es la
+ * única pieza de la puesta en marcha que solo se nota al facturar, y un
+ * "no se ha podido" genérico deja a quien instala la app buscando a ciegas.
+ * No revela ningún secreto, solo qué falta por configurar.
+ */
+function fallo(error: unknown, mensaje: string): NextResponse {
+  if (isConfigError(error)) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ error: mensaje }, { status: 502 });
+}
 
 const lineaSchema = z.object({
   comanda: z.string().min(1).max(64),
@@ -54,10 +72,7 @@ export async function GET() {
     return NextResponse.json({ facturas: await readFacturas() });
   } catch (error) {
     console.error("Error leyendo las facturas del Sheet:", error);
-    return NextResponse.json(
-      { error: "No se han podido leer las facturas" },
-      { status: 502 },
-    );
+    return fallo(error, "No se han podido leer las facturas");
   }
 }
 
@@ -86,10 +101,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ factura });
   } catch (error) {
     console.error("Error emitiendo la factura:", error);
-    return NextResponse.json(
-      { error: "No se ha podido registrar la factura en el Google Sheet" },
-      { status: 502 },
-    );
+    return fallo(error, "No se ha podido registrar la factura en el Google Sheet");
   }
 }
 
@@ -137,9 +149,6 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ factura });
   } catch (error) {
     console.error("Error actualizando el estado de la factura:", error);
-    return NextResponse.json(
-      { error: "No se ha podido actualizar el estado en el Google Sheet" },
-      { status: 502 },
-    );
+    return fallo(error, "No se ha podido actualizar el estado en el Google Sheet");
   }
 }

@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import {
   BarChart3,
   CalendarDays,
+  CalendarRange,
+  ChevronsUpDown,
   Clock,
   FileText,
   History,
@@ -142,24 +144,44 @@ export default function Sidebar({
           >
             Full
           </label>
-          <select
-            id="full-actiu"
-            value={full}
-            onChange={(e) => onFull(e.target.value)}
-            disabled={fulls.length === 0}
-            className="w-full rounded-xl bg-muted px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-60"
-          >
-            {full === "" && <option value="">Sense full</option>}
-            {/* El full en uso puede no estar en la lista (modo demo, o una
-                pestaña renombrada): sin esta opción el <select> mostraría
-                otro nombre distinto del que se está viendo de verdad. */}
-            {full !== "" && !fulls.includes(full) && <option value={full}>{full}</option>}
-            {fulls.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
+          {/* El icono y el galón son adorno encima del `select`: van con
+              `pointer-events-none` para que el clic siga llegando al
+              desplegable del navegador, que es quien abre la lista. */}
+          <div className="relative">
+            <CalendarRange
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary"
+              strokeWidth={1.8}
+              aria-hidden
+            />
+            <select
+              id="full-actiu"
+              value={full}
+              onChange={(e) => onFull(e.target.value)}
+              disabled={fulls.length === 0}
+              className="w-full cursor-pointer appearance-none truncate rounded-xl border border-border bg-muted py-2.5 pl-9 pr-9 text-[15px] font-medium outline-none hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-default disabled:opacity-60"
+            >
+              {full === "" && <option value="">Sense full</option>}
+              {/* El full en uso puede no estar en la lista (modo demo, o una
+                  pestaña renombrada): sin esta opción el <select> mostraría
+                  otro nombre distinto del que se está viendo de verdad. */}
+              {full !== "" && !fulls.includes(full) && <option value={full}>{full}</option>}
+              {fulls.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+            <ChevronsUpDown
+              className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-tertiary-foreground"
+              strokeWidth={1.8}
+              aria-hidden
+            />
+          </div>
+          <p className="mt-1.5 px-2 text-[11px] text-tertiary-foreground">
+            {fulls.length === 0
+              ? "Carregant fulls…"
+              : `${fulls.length} ${fulls.length === 1 ? "full" : "fulls"} disponibles`}
+          </p>
         </div>
 
         <button

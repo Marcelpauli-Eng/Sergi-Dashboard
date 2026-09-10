@@ -117,8 +117,16 @@ export interface DeliveryRecord {
   /** UUID generado en el cliente. Garantiza idempotencia si se reintenta. */
   clientId: string;
   orderId: string;
-  /** Tipo de actualización. Si no se especifica, por retrocompatibilidad se asume "status". */
-  type?: "status" | "date";
+  /**
+   * Tipo de actualización. Si no se especifica, por retrocompatibilidad se
+   * asume "status".
+   *
+   * "price" toca SOLO la celda del importe. Existe porque corregir un
+   * importe mal tecleado no puede reescribir la hora de entrega: esa hora es
+   * el registro de cuándo se entregó de verdad, y un dedazo en el precio no
+   * cambia cuándo pasó.
+   */
+  type?: "status" | "date" | "price";
   /**
    * "pendiente" es el deshacer: devuelve el pedido a como estaba antes de
    * marcarlo, vaciando estado, hora e incidencia en la hoja. Solo lo genera

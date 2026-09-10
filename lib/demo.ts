@@ -41,6 +41,13 @@ const demoDeliveries = new Map<string, DeliveryRecord>();
 
 export function recordDemoDeliveries(records: DeliveryRecord[]): void {
   for (const record of records) {
+    // Corregir el importe no cambia el estado ni la hora: solo el precio de
+    // lo que ya hubiera registrado.
+    if (record.type === "price") {
+      const previo = demoDeliveries.get(record.orderId);
+      if (previo) demoDeliveries.set(record.orderId, { ...previo, price: record.price });
+      continue;
+    }
     // Deshacer: la entrega desaparece del registro y la parada vuelve a
     // pendiente, que es exactamente lo que hace vaciar las celdas del Sheet.
     if (record.type !== "date" && record.status === "pendiente") {

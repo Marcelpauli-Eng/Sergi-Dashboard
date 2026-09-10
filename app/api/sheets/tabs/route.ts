@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { listSheetTabs } from "@/lib/sheets";
+import { listSheetTabs, TAB_FACTURAS } from "@/lib/sheets";
 
 /**
  * Devuelve la lista de pestañas (hojas) del Google Sheet.
@@ -13,7 +13,9 @@ export async function GET() {
   }
 
   try {
-    const allTabs = await listSheetTabs();
+    const allTabs = (await listSheetTabs()).filter((t) => t !== TAB_FACTURAS);
+    // El registro de facturas no es un mes de repartos: no pinta nada en el
+    // selector de full. Se ve sobre todo desde que la lista subió a doce.
     // Las últimas pestañas, que son los meses más recientes. Doce y no tres
     // porque Informes compara meses entre sí: con tres no hay comparativa
     // que valga. Sigue siendo un tope para que una hoja con años de historia

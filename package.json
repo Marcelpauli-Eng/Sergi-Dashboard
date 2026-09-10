@@ -11,7 +11,13 @@
     "env:json": "node --no-warnings scripts/env-from-json.mts",
     "check:factura": "node --no-warnings scripts/check-factura.mts",
     "check:dates": "node --no-warnings scripts/check-dates.mts",
-    "check:pdf": "node --no-warnings scripts/check-pdf.mts"
+    "check:pdf": "node --no-warnings scripts/check-pdf.mts",
+    "check:outbox": "node --no-warnings scripts/check-outbox.mts",
+    "check:cells": "node --no-warnings scripts/check-cells.mts",
+    "check:schema": "node --no-warnings scripts/check-schema.mts",
+    "check:format": "node --no-warnings scripts/check-format.mts",
+    "check:ajustes": "node --no-warnings scripts/check-ajustes.mts",
+    "test": "npm run check:dates --silent && npm run check:format --silent && npm run check:cells --silent && npm run check:schema --silent && npm run check:factura --silent && npm run check:ajustes --silent && npm run check:outbox --silent && npm run check:pdf --silent"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.3.3",
