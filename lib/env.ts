@@ -7,6 +7,7 @@
  */
 
 import "server-only";
+import { sheetIdFrom } from "./sheet-tab";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -127,8 +128,11 @@ const loaders: { [K in keyof Env]: () => Env[K] } = {
   google: () => ({
     serviceAccountEmail: required("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
     privateKey: parsePrivateKey(required("GOOGLE_PRIVATE_KEY")),
-    sheetId: required("GOOGLE_SHEET_ID"),
-    facturasSheetId: optionalOrNull("GOOGLE_SHEET_ID_FACTURAS"),
+    sheetId: sheetIdFrom(required("GOOGLE_SHEET_ID")),
+    facturasSheetId: (() => {
+      const crudo = optionalOrNull("GOOGLE_SHEET_ID_FACTURAS");
+      return crudo === null ? null : sheetIdFrom(crudo);
+    })(),
     sheetTab: optionalOrNull("GOOGLE_SHEET_TAB"),
     mapsApiKey: required("GOOGLE_MAPS_API_KEY"),
   }),

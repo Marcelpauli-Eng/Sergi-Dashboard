@@ -16,6 +16,32 @@
  * haga falta apuntar a una pestaña concreta.
  */
 
+/**
+ * El ID de una hoja de cálculo, venga como venga.
+ *
+ * El ID es el trozo de la URL entre `/d/` y `/edit`, pero lo que uno tiene
+ * en el portapapeles al configurar esto es la URL entera. Pegarla deja la
+ * app pidiéndole a Google un documento que no existe, y el 404 que devuelve
+ * no dice en ningún sitio que el problema sea ese.
+ *
+ * Se acepta la URL completa y se saca el ID. Si no parece una URL, se
+ * devuelve tal cual sin espacios: puede ser ya el ID, y no es cosa de esta
+ * función decidir si es válido — de eso se encarga Google.
+ */
+export function sheetIdFrom(raw: string): string {
+  const limpio = raw.trim();
+  /*
+    .../spreadsheets/d/<ID>/edit  —  el ID no lleva ni barras ni signos.
+
+    El `/u/0/` del medio lo mete Google cuando hay varias cuentas abiertas,
+    que es lo normal en un ordenador de trabajo: sin contemplarlo, la URL
+    más habitual de todas era justo la que no se reconocía.
+  */
+  const deUrl = limpio.match(/\/spreadsheets(?:\/u\/\d+)?\/d\/([A-Za-z0-9_-]+)/);
+  if (deUrl) return deUrl[1];
+  return limpio;
+}
+
 // Con extensión .ts a propósito: scripts/check-sheet.mts importa este módulo
 // y lo ejecuta Node directamente, que exige la extensión explícita. Ver la
 // nota de "allowImportingTsExtensions" en tsconfig.json.

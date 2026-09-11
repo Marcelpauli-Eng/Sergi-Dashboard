@@ -20,6 +20,7 @@ import {
   findLatestTabUpTo,
   findMonthTab,
   parseTabMonth,
+  sheetIdFrom,
 } from "../lib/sheet-tab.ts";
 
 // ── Normalización de cabeceras ───────────────────────────────────────────
@@ -168,4 +169,29 @@ import {
   assert.equal(findLatestTabUpTo(["Resum", "Factures"], "2026-08"), null);
 }
 
-console.log("✓ lib/sheet-schema.ts + lib/sheet-tab.ts — columnas y pestañas");
+// ── El ID de la hoja, venga como venga ───────────────────────────────────
+// Lo que uno tiene en el portapapeles al configurar esto es la URL entera,
+// no el trozo de en medio. Pegarla dejaba a la app pidiéndole a Google un
+// documento inexistente, y el 404 no dice en ningún sitio que sea por eso.
+{
+  const ID = "1YTUUDabc_XYZ-123taRw";
+
+  // Ya es el ID.
+  assert.equal(sheetIdFrom(ID), ID);
+  assert.equal(sheetIdFrom(`  ${ID}  `), ID, "los espacios de un copia-pega");
+
+  // La URL, tal y como sale del navegador.
+  assert.equal(sheetIdFrom(`https://docs.google.com/spreadsheets/d/${ID}/edit`), ID);
+  assert.equal(sheetIdFrom(`https://docs.google.com/spreadsheets/d/${ID}/edit#gid=0`), ID);
+  assert.equal(sheetIdFrom(`https://docs.google.com/spreadsheets/d/${ID}/edit?usp=sharing`), ID);
+  assert.equal(sheetIdFrom(`https://docs.google.com/spreadsheets/d/${ID}`), ID);
+  // Con el enlace "Compartir", que mete /u/0/ por el medio.
+  assert.equal(sheetIdFrom(`https://docs.google.com/spreadsheets/u/0/d/${ID}/edit`), ID);
+
+  // Lo que no parece una URL se devuelve tal cual: si no vale, que lo diga
+  // Google, que es quien sabe.
+  assert.equal(sheetIdFrom("esto-no-es-nada"), "esto-no-es-nada");
+  assert.equal(sheetIdFrom(""), "");
+}
+
+console.log("✓ lib/sheet-schema.ts + lib/sheet-tab.ts — columnas, pestañas e IDs");
