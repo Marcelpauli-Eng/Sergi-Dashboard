@@ -60,7 +60,14 @@ function data(valor: string | null | undefined): string | null {
 }
 
 /**
- * Un dato de la ficha.
+ * Un dato de la ficha: nombre a la izquierda, valor a la derecha.
+ *
+ * En fila y no en rejilla. Con la rejilla de dos columnas, una ficha de tres
+ * datos dejaba el tercero solo con medio hueco al lado, y los valores largos
+ * —el teléfono con el nombre de quien recoge delante, las medidas de cuatro
+ * bultos— partían por donde les tocaba. En fila cada dato ocupa lo que
+ * necesita, la ficha se lee de arriba abajo y queda como la fila del
+ * importe de abajo, que es una más.
  *
  * Lo que falta se enseña con una raya en vez de esconderse: en una comanda
  * que no se entrega, saber que NO hay teléfono es tan útil como el número.
@@ -69,25 +76,19 @@ function Camp({
   etiqueta,
   valor,
   mono,
-  envolta,
 }: {
   etiqueta: string;
   valor: string | null | undefined;
   mono?: boolean;
-  /** Deja que el valor ocupe varias líneas en vez de cortarlo. */
-  envolta?: boolean;
 }) {
   return (
-    <div className="min-w-0">
-      <dt className="truncate text-[11px] font-medium uppercase tracking-wide text-tertiary-foreground">
+    <div className="flex items-baseline justify-between gap-4 py-1.5">
+      <dt className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-tertiary-foreground">
         {etiqueta}
       </dt>
       <dd
         className={cn(
-          "text-sm",
-          // Las medidas de una comanda de cuatro bultos no caben en una
-          // línea, y cortadas no sirven de nada: es lo que hay que cargar.
-          envolta ? "break-words" : "truncate",
+          "min-w-0 break-words text-right text-sm",
           mono && "font-mono",
           valor ? "text-foreground" : "text-tertiary-foreground",
         )}
@@ -414,7 +415,7 @@ export default function StopCard({
             /* Todo lo que se sabe de la comanda, cada dato con su nombre. En
                la tarjeta de lista esto no cabe y por eso allí va apretado en
                una línea de letra pequeña. */
-            <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-border pt-4 sm:grid-cols-3 lg:grid-cols-4">
+            <dl className="mt-4 border-t border-border pt-2 sm:grid sm:grid-cols-2 sm:gap-x-10">
               <Camp etiqueta="Comanda" valor={stop.id} mono />
               {/*
                 El día solo cuando ya está hecha, y entonces es el día en que
@@ -431,18 +432,13 @@ export default function StopCard({
                   valor={[data(stop.date), stop.deliveredTime].filter(Boolean).join(" · ")}
                 />
               )}
-              {/* Sin cortar: la celda de la hoja lleva a veces el nombre de
-                  quien recoge delante —"Bilal Asbai 631104…"— y truncado se
-                  queda justo sin las últimas cifras, que es lo único que
-                  hace falta para llamar. */}
-              <Camp etiqueta="Telèfon" valor={stop.phone} envolta />
+              <Camp etiqueta="Telèfon" valor={stop.phone} />
               {/* Cuántos paquetes hay que cargar. Una comanda son varias
                   filas en la hoja, una por bulto, y hasta ahora solo se veía
                   la primera. Ver `bultos` en lib/types.ts. */}
               <Camp
                 etiqueta={stop.bultos > 1 ? `Mides · ${stop.bultos} bultos` : "Mides"}
                 valor={stop.measures}
-                envolta
               />
               {leg && isOpen && <Camp etiqueta="Des de l'anterior" valor={leg} />}
             </dl>
