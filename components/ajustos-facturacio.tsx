@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { guardarDatosFacturacion } from "@/lib/ajustes-factura";
+import {
+  guardarClientesAlDocument,
+  guardarDatosFacturacion,
+} from "@/lib/ajustes-factura";
 import type { ClienteFacturacion, DatosFacturacion } from "@/lib/factura";
 
 /**
@@ -78,6 +81,8 @@ export default function AjustosFacturacio({
   onTancar: () => void;
 }) {
   const [esborrany, setEsborrany] = useState<DatosFacturacion>(datos);
+  const [desant, setDesant] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const canviarClient = (
     indice: number,
@@ -103,8 +108,32 @@ export default function AjustosFacturacio({
     );
   };
 
-  const desar = () => {
+  /**
+   * Guarda: primero en el móvil, después en el documento.
+   *
+   * En ese orden porque lo local no puede fallar y es lo que hace que la
+   * factura se siga pudiendo componer sin cobertura. Los clientes además
+   * suben a la pestaña "Clients" del documento privado, que es la copia
+   * buena; si eso falla —sin red, o el documento sin configurar— se dice y
+   * no se cierra, porque lo que se acaba de teclear solo estaría en este
+   * teléfono y el de al lado seguiría con lo viejo.
+   */
+  const desar = async () => {
     guardarDatosFacturacion(esborrany);
+    setDesant(true);
+    setError(null);
+    try {
+      await guardarClientesAlDocument(esborrany.clientes);
+    } catch (e) {
+      setDesant(false);
+      setError(
+        `${e instanceof Error ? e.message : "No s'han pogut desar"}. ` +
+          "Els clients s'han desat en aquest mòbil, però no al document.",
+      );
+      onDesar(esborrany);
+      return;
+    }
+    setDesant(false);
     onDesar(esborrany);
     onTancar();
   };
@@ -231,8 +260,18 @@ export default function AjustosFacturacio({
 
       <div className="fixed inset-x-0 bottom-0 lg:left-64 border-t border-border bg-background/95 p-4 backdrop-blur">
         <div className="mx-auto max-w-lg">
-          <Button size="touch" className="w-full" onClick={desar}>
-            Desar
+          {error && (
+            <p className="mb-2 rounded-xl bg-warning-surface px-3 py-2 text-sm text-warning-foreground">
+              {error}
+            </p>
+          )}
+          <Button
+            size="touch"
+            className="w-full"
+            disabled={desant}
+            onClick={() => void desar()}
+          >
+            {desant ? "Desant…" : "Desar"}
           </Button>
         </div>
       </div>

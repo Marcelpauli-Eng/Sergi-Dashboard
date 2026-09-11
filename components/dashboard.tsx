@@ -37,7 +37,7 @@ import Desfer, { MARGE_DESFER_MS, type AccioDesfer } from "@/components/desfer";
 import Endarrerides from "@/components/endarrerides";
 import Ajustos from "@/components/ajustos";
 import Sidebar from "@/components/sidebar";
-import { leerDatosFacturacion } from "@/lib/ajustes-factura";
+import { leerDatosFacturacion, sincronizarClientes } from "@/lib/ajustes-factura";
 import { euros, type DatosFacturacion } from "@/lib/factura";
 import {
   recordDelivery,
@@ -174,6 +174,21 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   // desajuste al hidratar porque esto no se pinta hasta que se abre la
   // factura o los ajustes.
   const [datosFactura, setDatosFactura] = useState<DatosFacturacion>(leerDatosFacturacion);
+
+  /*
+    Los clientes se bajan del documento privado al arrancar.
+
+    Vivían solo en este móvil, así que cambiar de teléfono perdía el NIF y la
+    dirección de a quién se factura, y dos dispositivos podían tener datos
+    distintos sin que nadie lo notara. Ahora manda el documento; lo de aquí
+    es la copia para poder facturar sin cobertura, y si no hay red se sigue
+    con ella tal cual.
+  */
+  useEffect(() => {
+    void (async () => {
+      setDatosFactura(await sincronizarClientes(leerDatosFacturacion()));
+    })();
+  }, []);
   const theme = useSyncExternalStore(
     subscribeLocalPrefs,
     getThemePreference,
@@ -1684,7 +1699,7 @@ function DiaDetall({
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
-                      {stop.phone && <Trucar phone={stop.phone} />}
+                      <Trucar phone={stop.phone} />
                       <div className="text-right">
                       <p className="text-sm tabular-nums">
                         {stop.deliveredTime ?? "—"}
@@ -1739,7 +1754,7 @@ function DiaDetall({
                     {stop.city || stop.address || stop.id}
                   </p>
                 </div>
-                {stop.phone && <Trucar phone={stop.phone} />}
+                <Trucar phone={stop.phone} />
                 <Button variant="ghost" size="sm" onClick={() => onAssignDate(stop.id, null)}>
                   Treure
                 </Button>
@@ -1771,8 +1786,28 @@ function DiaDetall({
  * Antes había que salir del calendario y buscar la comanda en otra pantalla
  * para tener el teléfono a mano. Es un enlace `tel:` de toda la vida, así
  * que en el móvil abre el marcador y en el ordenador lo que tenga puesto.
+ *
+ * Sale en TODAS las comandas, tengan número o no: sin él se queda apagado
+ * en vez de desaparecer. Así la lista no baila según la fila, y se ve de un
+ * vistazo a quién le falta el teléfono en la hoja.
  */
-function Trucar({ phone }: { phone: string }) {
+function Trucar({ phone }: { phone: string | null }) {
+  if (!phone || phone.trim() === "") {
+    return (
+      <Button
+        variant="secondary"
+        size="sm"
+        className="shrink-0"
+        disabled
+        title="Aquesta comanda no té telèfon al full"
+        aria-label="Sense telèfon"
+      >
+        <Phone />
+        Trucar
+      </Button>
+    );
+  }
+
   return (
     <Button asChild variant="secondary" size="sm" className="shrink-0">
       <a href={telHref(phone)} onClick={(e) => e.stopPropagation()}>
@@ -1897,33 +1932,43 @@ function Bossa({
       ) : (
         <div className="grid min-h-0 grid-cols-2 gap-2 overflow-y-auto lg:grid-cols-1">
           {stops.map((stop) => (
-            <button
-              key={stop.id}
-              draggable
-              onDragStart={(e) => {
-                cancelPress();
-                e.dataTransfer.setData("text/plain", stop.id);
-                e.dataTransfer.effectAllowed = "move";
-              }}
-              onPointerDown={(e) => {
-                tipusRef.current = e.pointerType;
-                if (e.pointerType === "touch") startPress(stop);
-              }}
-              onPointerUp={(e) => {
-                if (e.pointerType === "touch") endPress(stop);
-              }}
-              onPointerLeave={cancelPress}
-              onPointerMove={cancelPress} // Si el dedo se mueve (scrolling), cancelamos
-              // El dedo ya se ha resuelto en `onPointerUp`; el click que iOS
-              // dispara después no debe contar dos veces.
-              onClick={() => {
-                if (tipusRef.current !== "touch") activar(stop);
-              }}
-              className="pressable soft-card flex touch-none select-none flex-col items-start gap-0.5 p-3 text-left lg:cursor-grab lg:active:cursor-grabbing"
-            >
-              <span className="w-full truncate text-sm font-semibold">{stop.customer || stop.id}</span>
-              <span className="w-full truncate text-xs text-muted-foreground">{stop.city || "Sense adreça"}</span>
-            </button>
+            /*
+              La tarjeta es el área de asignar —tocar, mantener pulsado o
+              arrastrar— y el botón de llamar va aparte, como hermano: un
+              botón dentro de otro no es HTML válido y el teléfono acabaría
+              asignando la comanda al día abierto.
+            */
+            <div key={stop.id} className="soft-card flex flex-col">
+              <button
+                draggable
+                onDragStart={(e) => {
+                  cancelPress();
+                  e.dataTransfer.setData("text/plain", stop.id);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onPointerDown={(e) => {
+                  tipusRef.current = e.pointerType;
+                  if (e.pointerType === "touch") startPress(stop);
+                }}
+                onPointerUp={(e) => {
+                  if (e.pointerType === "touch") endPress(stop);
+                }}
+                onPointerLeave={cancelPress}
+                onPointerMove={cancelPress} // Si el dedo se mueve (scrolling), cancelamos
+                // El dedo ya se ha resuelto en `onPointerUp`; el click que iOS
+                // dispara después no debe contar dos veces.
+                onClick={() => {
+                  if (tipusRef.current !== "touch") activar(stop);
+                }}
+                className="pressable flex flex-1 touch-none select-none flex-col items-start gap-0.5 p-3 text-left lg:cursor-grab lg:active:cursor-grabbing"
+              >
+                <span className="w-full truncate text-sm font-semibold">{stop.customer || stop.id}</span>
+                <span className="w-full truncate text-xs text-muted-foreground">{stop.city || "Sense adreça"}</span>
+              </button>
+              <div className="px-3 pb-3">
+                <Trucar phone={stop.phone} />
+              </div>
+            </div>
           ))}
         </div>
       )}

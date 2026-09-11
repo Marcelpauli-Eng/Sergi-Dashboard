@@ -5,6 +5,13 @@ import { parseSheetDate, parseSheetTime, formatSheetTimestamp, today } from "./d
 import { findMonthTab, findLatestTabUpTo, noTabFoundMessage } from "./sheet-tab";
 import { parseImportesFactura } from "./factura.ts";
 import {
+  CABECERA_CLIENTS,
+  TAB_CLIENTS,
+  clientAFila,
+  parseClients,
+} from "./clients.ts";
+import type { ClienteFacturacion } from "./factura.ts";
+import {
   CABECERA_IMPORTS,
   TAB_IMPORTS,
   parseImportes,
@@ -819,6 +826,95 @@ export async function emitirFactura(datos: {
   );
 
   return { ...datos, client: datos.client ?? "", estat: "emesa", numero };
+}
+
+/* ── A quién se le factura ──────────────────────────────────────────────── */
+
+/**
+ * Lee y escribe la pestaña de clientes del documento privado.
+ *
+ * Qué es cada columna lo decide `lib/clients.ts`; aquí solo está el viaje.
+ */
+
+/** Crea la pestaña con su cabecera, o se la pone si estaba vacía. */
+async function asegurarTabClients(): Promise<void> {
+  const doc = docFacturas();
+  const tabs = await tabsFacturas(doc);
+
+  if (tabs.includes(TAB_CLIENTS)) {
+    const actual = (await sheetsFetch(
+      `/values/${encodeURIComponent(range("A1:G1", TAB_CLIENTS))}`,
+      undefined,
+      doc,
+    )) as { values?: unknown[][] };
+    if ((actual.values?.[0] ?? []).some((c) => text(c) !== "")) return;
+  } else {
+    await sheetsFetch(
+      ":batchUpdate",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          requests: [{ addSheet: { properties: { title: TAB_CLIENTS } } }],
+        }),
+      },
+      doc,
+    );
+  }
+
+  await sheetsFetch(
+    `/values/${encodeURIComponent(range("A1:G1", TAB_CLIENTS))}?valueInputOption=USER_ENTERED`,
+    { method: "PUT", body: JSON.stringify({ values: [CABECERA_CLIENTS] }) },
+    doc,
+  );
+}
+
+/**
+ * Los clientes a los que se factura.
+ *
+ * Una instalación recién puesta en marcha todavía no tiene la pestaña, y eso
+ * no es un error: devuelve la lista vacía y quien llama decide con qué se
+ * queda. Como en los importes, se pide el rango directamente y el 400 de
+ * "esa pestaña no existe" se traduce a "no hay ninguno".
+ */
+export async function readClients(): Promise<ClienteFacturacion[]> {
+  const data = (await sheetsFetch(
+    `/values/${encodeURIComponent(range("A2:G", TAB_CLIENTS))}`,
+    undefined,
+    docFacturas(),
+  ).catch((error: unknown) => {
+    if (String(error).includes("respondió 400")) return { values: [] };
+    throw error;
+  })) as { values?: unknown[][] };
+
+  return parseClients(data.values ?? []);
+}
+
+/**
+ * Guarda la lista entera, tal cual queda.
+ *
+ * Se reescribe todo el bloque en vez de buscar qué ha cambiado: son cuatro
+ * clientes que casi nunca se tocan, y un plan de diferencias como el de los
+ * importes sería más código que el problema. Lo que sobra por debajo se
+ * borra, que si no un cliente eliminado se quedaría ahí abajo para siempre.
+ */
+export async function writeClients(clients: ClienteFacturacion[]): Promise<void> {
+  await asegurarTabClients();
+  const doc = docFacturas();
+
+  if (clients.length > 0) {
+    await sheetsFetch(
+      `/values/${encodeURIComponent(range(`A2:G${clients.length + 1}`, TAB_CLIENTS))}` +
+        `?valueInputOption=USER_ENTERED`,
+      { method: "PUT", body: JSON.stringify({ values: clients.map(clientAFila) }) },
+      doc,
+    );
+  }
+
+  await sheetsFetch(
+    `/values/${encodeURIComponent(range(`A${clients.length + 2}:G`, TAB_CLIENTS))}:clear`,
+    { method: "POST", body: "{}" },
+    doc,
+  );
 }
 
 /* ── Los importes de cada comanda ───────────────────────────────────────── */

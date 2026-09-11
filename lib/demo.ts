@@ -1,6 +1,7 @@
 import "server-only";
 import { today, addDays, formatSheetTimestamp } from "./dates";
 import { navUrlFor, fullRouteUrlFor } from "./routing";
+import { DATOS_POR_DEFECTO, type ClienteFacturacion } from "./factura";
 import type {
   EstatFactura,
   FacturaEmitida,
@@ -253,6 +254,22 @@ const facturasDemo: FacturaEmitida[] = [];
 
 export function demoFacturas(): FacturaEmitida[] {
   return [...facturasDemo].sort((a, b) => b.numero - a.numero);
+}
+
+/**
+ * Los clientes, en memoria: en demo no se toca ningún documento.
+ *
+ * Arranca con el de los datos de partida para que la pantalla de ajustes se
+ * comporte igual que en real, donde la pestaña "Clients" ya trae uno.
+ */
+let clientsDemo: ClienteFacturacion[] = [...DATOS_POR_DEFECTO.clientes];
+
+export function demoClients(): ClienteFacturacion[] {
+  return clientsDemo;
+}
+
+export function guardarDemoClients(clients: ClienteFacturacion[]): void {
+  clientsDemo = clients;
 }
 
 export function emitirFacturaDemo(

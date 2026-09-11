@@ -31,7 +31,25 @@ export function formatRelativeTime(iso: string): string {
   return days === 1 ? "ayer" : `hace ${days} días`;
 }
 
-/** Teléfono en formato marcable, quitando espacios y guiones. */
+/**
+ * Teléfono en formato marcable: el PRIMER número de la celda.
+ *
+ * En la hoja real una celda trae de todo: un nombre delante ("Javi 6…"),
+ * dos y hasta tres números ("93 322 11 00 / 666 555 444 / …") o quién es
+ * cada uno ("LLUIS 9… / SERGI 6…"). Quitarle sin más lo que no es un dígito
+ * pegaba los números uno detrás de otro y marcaba un número de 18 cifras
+ * que no es de nadie.
+ *
+ * Se parte por los separadores de verdad —la barra, la coma, el punto y
+ * coma y el guion SUELTO— y se coge el primer trozo que tenga números. El
+ * guion pegado no separa: "977-33-22-11" es un número, no dos.
+ */
 export function telHref(phone: string): string {
-  return `tel:${phone.replace(/[^\d+]/g, "")}`;
+  const marcable =
+    phone
+      .split(/[/;,]|\s+[-–—]\s+/)
+      .map((trozo) => trozo.replace(/[^\d+]/g, ""))
+      .find((trozo) => trozo.replace(/\D/g, "").length >= 6) ??
+    phone.replace(/[^\d+]/g, "");
+  return `tel:${marcable}`;
 }

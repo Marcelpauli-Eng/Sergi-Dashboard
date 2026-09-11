@@ -141,6 +141,18 @@ import { decodePolyline } from "../lib/polyline.ts";
   assert.equal(telHref("+34 932 91 90 00"), "tel:+34932919000");
   assert.equal(telHref("977-33-22-11"), "tel:977332211");
   assert.equal(telHref("(977) 33 22 11"), "tel:977332211");
+
+  // Casos de la hoja de verdad: nombre delante, dos y tres números, y quién
+  // es cada uno. Se marca el primero, no todos pegados.
+  assert.equal(telHref("Javi 666555444"), "tel:666555444");
+  assert.equal(telHref("932 91 90 00 / 666 55 54 44"), "tel:932919000");
+  assert.equal(telHref("932 91 90 00 / 666 55 54 44 / 977 33 22 11"), "tel:932919000");
+  assert.equal(telHref("932 91 90 00  -  666555444"), "tel:932919000");
+  assert.equal(telHref("LLUIS 932 91 90 00 / SERGI 666 55 54 44"), "tel:932919000");
+  assert.equal(telHref("666555444 (Javi)"), "tel:666555444");
+  assert.equal(telHref("Xavi Pare Duba: +34 932 91 90 00"), "tel:+34932919000");
+  // El nombre antes de un guion suelto no es un número: se salta al que sí.
+  assert.equal(telHref("· Montse - +34 932 91 90 00"), "tel:+34932919000");
 }
 
 // ── Geometría del recorrido ──────────────────────────────────────────────

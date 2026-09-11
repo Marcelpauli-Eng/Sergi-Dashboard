@@ -115,6 +115,12 @@ const CATEGORY_BADGE: Record<
  * Se guarda al salir del campo o al pulsar Intro, sin botón de confirmar, y
  * la marca de guardado aparece un segundo para que no quede duda. Vale igual
  * para una entrega ya cerrada: corregir un precio no la reabre.
+ *
+ * Va en su propia fila al pie de la tarjeta, fuera del bloque que se atenúa
+ * cuando la comanda ya está cerrada. En l'Historial casi todas lo están, así
+ * que el importe salía descolorido como el resto —y es justo lo único de esa
+ * tarjeta que se puede tocar—. Ahora es lo que más se ve: el número en
+ * grande, encuadrado como un campo y con el lápiz en el color de lo pulsable.
  */
 function ImportEditable({
   stop,
@@ -133,8 +139,34 @@ function ImportEditable({
 }) {
   const actual = stop.price !== null ? `${euros(stop.price)} €` : null;
 
+  const etiqueta = (
+    <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      Import
+      {desat && (
+        <span className="flex items-center gap-0.5 normal-case text-[color:var(--success)]">
+          <Check className="size-3" strokeWidth={3} />
+          desat
+        </span>
+      )}
+    </span>
+  );
+
   // Sin quien lo guarde, es un dato más.
-  if (!onImporte) return <Camp etiqueta="Import" valor={actual} />;
+  if (!onImporte) {
+    return (
+      <div className="flex items-center justify-between gap-3">
+        {etiqueta}
+        <span
+          className={cn(
+            "text-base font-semibold tabular-nums",
+            !actual && "font-normal text-tertiary-foreground",
+          )}
+        >
+          {actual ?? "—"}
+        </span>
+      </div>
+    );
+  }
 
   const desar = () => {
     if (editant === null) return;
@@ -152,58 +184,56 @@ function ImportEditable({
   const malament = editant !== null && editant.trim() !== "" && parseImporte(editant) === undefined;
 
   return (
-    <div className="min-w-0">
-      <dt className="flex items-center gap-1 truncate text-[11px] font-medium uppercase tracking-wide text-tertiary-foreground">
-        Import
-        {desat && (
-          <span className="flex items-center gap-0.5 text-[color:var(--success)]">
-            <Check className="size-3" strokeWidth={3} />
-            desat
-          </span>
-        )}
-      </dt>
-      <dd>
-        {editant !== null ? (
-          <input
-            value={editant}
-            onChange={(e) => setEditant(e.target.value)}
-            onBlur={desar}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                e.currentTarget.blur();
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                setEditant(null);
-              }
-            }}
-            onFocus={(e) => e.currentTarget.select()}
-            autoFocus
-            type="text"
-            inputMode="decimal"
-            placeholder="0,00"
-            aria-label={`Import de la comanda ${stop.id}`}
-            aria-invalid={malament || undefined}
+    <div className="flex items-center justify-between gap-3">
+      {etiqueta}
+      {editant !== null ? (
+        <input
+          value={editant}
+          onChange={(e) => setEditant(e.target.value)}
+          onBlur={desar}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.currentTarget.blur();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setEditant(null);
+            }
+          }}
+          onFocus={(e) => e.currentTarget.select()}
+          autoFocus
+          type="text"
+          inputMode="decimal"
+          placeholder="0,00"
+          aria-label={`Import de la comanda ${stop.id}`}
+          aria-invalid={malament || undefined}
+          className={cn(
+            "w-32 rounded-lg px-3 py-1.5 text-right text-base font-semibold tabular-nums outline-none ring-1",
+            malament
+              ? "bg-[color-mix(in_srgb,var(--destructive)_14%,transparent)] text-destructive ring-destructive"
+              : "bg-muted ring-ring/50",
+          )}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditant(stop.price !== null ? euros(stop.price) : "")}
+          /* Con marco y fondo: sin ellos, un número suelto a la derecha de la
+             tarjeta no se distingue de los otros datos y nadie prueba a
+             pulsarlo. */
+          className="pressable flex items-center gap-2 rounded-lg bg-muted px-3 py-1.5 ring-1 ring-border"
+        >
+          <span
             className={cn(
-              "-mx-1 w-full rounded px-1 py-0.5 text-sm tabular-nums outline-none ring-1",
-              malament
-                ? "bg-[color-mix(in_srgb,var(--destructive)_14%,transparent)] text-destructive ring-destructive"
-                : "bg-muted ring-ring/50",
+              "text-base font-semibold tabular-nums",
+              !actual && "text-primary",
             )}
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setEditant(stop.price !== null ? euros(stop.price) : "")}
-            className="-mx-1 flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-sm hover:bg-muted"
           >
-            <span className={cn("truncate", !actual && "text-tertiary-foreground")}>
-              {actual ?? "—"}
-            </span>
-            <Pencil className="size-3 shrink-0 text-tertiary-foreground" aria-hidden />
-          </button>
-        )}
-      </dd>
+            {actual ?? "Posar import"}
+          </span>
+          <Pencil className="size-3.5 shrink-0 text-primary" aria-hidden />
+        </button>
+      )}
     </div>
   );
 }
@@ -377,14 +407,6 @@ export default function StopCard({
               <Camp etiqueta="Comanda" valor={stop.id} mono />
               <Camp etiqueta="Creada" valor={data(stop.creationDate)} />
               <Camp etiqueta="Repartiment" valor={data(stop.date)} />
-              <ImportEditable
-                stop={stop}
-                onImporte={onImporte}
-                editant={editantImport}
-                setEditant={setEditantImport}
-                desat={desat}
-                setDesat={setDesat}
-              />
               <Camp etiqueta="Telèfon" valor={stop.phone} />
               {/* Cuántos paquetes hay que cargar. Una comanda son varias
                   filas en la hoja, una por bulto, y hasta ahora solo se veía
@@ -408,27 +430,6 @@ export default function StopCard({
                   </>
                 )}
               </div>
-
-              {/*
-                El importe, editable también aquí y no solo en la ficha.
-
-                En el móvil el historial son estas tarjetas —la tabla no cabe
-                en 375 px—, así que este era el único sitio desde donde no se
-                podía corregir un dedazo en un precio. Solo sale donde el
-                padre pasa `onImporte`: en la ruta del día estorbaría.
-              */}
-              {onImporte && (
-                <dl className="mt-2">
-                  <ImportEditable
-                    stop={stop}
-                    onImporte={onImporte}
-                    editant={editantImport}
-                    setEditant={setEditantImport}
-                    desat={desat}
-                    setDesat={setDesat}
-                  />
-                </dl>
-              )}
 
               {(stop.measures || stop.bultos > 1) && (
                 <p className="mt-1 text-xs text-tertiary-foreground">
@@ -532,6 +533,28 @@ export default function StopCard({
           </div>
         </div>
       </div>
+
+      {/*
+        El importe, en su propia fila y fuera del bloque de arriba.
+
+        Ahí dentro se atenúa todo cuando la comanda está cerrada, que en
+        l'Historial son casi todas, y el importe es lo único que se puede
+        tocar: tiene que verse más que el resto, no menos. Solo sale donde el
+        padre pasa `onImporte` —en la ruta del día estorbaría— o en la ficha,
+        donde es un dato más de la comanda.
+      */}
+      {(onImporte || detall) && (
+        <div className={cn("hairline px-4 py-3", detall && "sm:px-6")}>
+          <ImportEditable
+            stop={stop}
+            onImporte={onImporte}
+            editant={editantImport}
+            setEditant={setEditantImport}
+            desat={desat}
+            setDesat={setDesat}
+          />
+        </div>
+      )}
 
       {canClose && (
         <div className="hairline p-3.5">
