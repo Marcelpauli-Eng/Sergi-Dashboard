@@ -179,6 +179,34 @@ const api = async (path: string, doc: string = sheetId!) => {
   return { status: response.status, body: await response.text() };
 };
 
+/**
+ * ¿Se puede ESCRIBIR en ese documento?
+ *
+ * Leer y escribir son permisos distintos, y compartir como Lector en vez de
+ * como Editor es el descuido más fácil de cometer: todo parece bien hasta
+ * que marcas la primera entrega y sale "no se ha podido escribir".
+ *
+ * Escribe una celda con su propio valor, así que no cambia nada.
+ */
+const puedeEscribir = async (doc: string, rango: string) => {
+  const leido = await api(`/values/${encodeURIComponent(rango)}`, doc);
+  if (leido.status !== 200) return { ok: false, detalle: `al leer: ${leido.status}` };
+  const valores = (JSON.parse(leido.body) as { values?: unknown[][] }).values ?? [[""]];
+
+  const response = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${doc}/values/${encodeURIComponent(rango)}` +
+      `?valueInputOption=USER_ENTERED`,
+    {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ values: valores.length > 0 ? valores : [[""]] }),
+    },
+  );
+  if (response.ok) return { ok: true, detalle: "" };
+  const cuerpo = await response.text();
+  return { ok: false, detalle: `${response.status} ${cuerpo.slice(0, 160)}` };
+};
+
 // ── 3. Acceso al documento ────────────────────────────────────────────────
 
 const meta = await api("?fields=properties.title,sheets.properties.title");
@@ -412,7 +440,20 @@ if (!facturasId) {
     const titulo = (JSON.parse(metaFacturas.body) as { properties: { title: string } })
       .properties.title;
     ok(`Acceso al documento "${titulo}"`);
-    dim('Las pestañas "Factures" e "Imports" se crean solas al hacer falta.');
+
+    // Leer no basta: la app crea pestañas y añade filas ahí.
+    const escritura = await puedeEscribir(facturasId, "A1");
+    if (escritura.ok) {
+      ok("Permiso de escritura en el documento privado");
+      dim('Las pestañas "Factures" e "Imports" se crean solas al hacer falta.');
+    } else {
+      faltaPrivado = true;
+      bad(`No se puede escribir en el documento privado (${escritura.detalle})`);
+      dim("Compartido como Lector, seguramente. Ábrelo → Compartir → y");
+      dim(`ponle permiso de \x1b[1mEditor\x1b[0m a:\n\n    ${email}\n`);
+      dim("Sin escritura, la app lee los pedidos pero no puede guardar ni un");
+      dim("importe ni una factura.");
+    }
   }
 }
 

@@ -1,6 +1,6 @@
 import "server-only";
 import { googleAccessToken } from "./google-auth";
-import { env } from "./env";
+import { env, ErrorAccionable } from "./env";
 import { parseSheetDate, formatSheetTimestamp, today } from "./dates";
 import { findMonthTab, findLatestTabUpTo, noTabFoundMessage } from "./sheet-tab";
 import {
@@ -504,7 +504,7 @@ export const TAB_FACTURAS = "Factures";
 function docFacturas(): string {
   const doc = env.google.facturasSheetId;
   if (!doc) {
-    throw new Error(
+    throw new ErrorAccionable(
       "Falta la variable de entorno GOOGLE_SHEET_ID_FACTURAS. Las facturas " +
         "necesitan un documento aparte: el de repartos lo ve la empresa " +
         "entero. Crea uno, compártelo como Editor con la cuenta de servicio " +
@@ -527,7 +527,7 @@ async function tabsFacturas(doc: string): Promise<string[]> {
   } catch (error) {
     const mensaje = String(error);
     if (doc !== env.google.sheetId && /respondió (403|404)/.test(mensaje)) {
-      throw new Error(
+      throw new ErrorAccionable(
         `No se puede abrir el documento de facturas (GOOGLE_SHEET_ID_FACTURAS). ` +
           `Compártelo con ${env.google.serviceAccountEmail} dándole permiso de Editor, ` +
           `y comprueba que el ID es el trozo de la URL entre /d/ y /edit.`,

@@ -102,13 +102,22 @@ export async function recordDelivery(
   status: DeliveryStatus,
   note: string | null = null,
   price: number | null = null,
+  /**
+   * Cuándo se entregó de verdad. Por defecto, ahora.
+   *
+   * Se puede pasar porque una comanda de un día que ya pasó se cierra días
+   * después: la hora que tiene que quedar en la hoja es aquella, no la de
+   * cuando uno se acuerda. Es el mismo campo que `applyDeliveries` escribe
+   * en la columna de la hora de entrega.
+   */
+  recordedAt: string = new Date().toISOString(),
 ): Promise<void> {
   const item: OutboxItem = {
     clientId: crypto.randomUUID(),
     orderId,
     type: "status",
     status,
-    recordedAt: new Date().toISOString(),
+    recordedAt,
     note,
     price,
     syncedAt: null,

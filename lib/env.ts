@@ -174,6 +174,26 @@ export const env = new Proxy({} as Env, {
  * Permite responder al operador con el mensaje concreto en vez de un 500
  * mudo. No expone secretos: solo dice qué variable falta.
  */
+/**
+ * Un fallo que quien lo ve puede arreglar: falta una variable de entorno,
+ * falta compartir un documento, falta un permiso.
+ *
+ * Se distingue de un fallo cualquiera para poder enseñar el mensaje tal cual
+ * en vez de un "no se ha podido escribir" genérico. La diferencia, con el
+ * móvil en la mano en mitad del reparto, es entre saber que hay que tocar
+ * algo en Google y no saber nada.
+ */
+export class ErrorAccionable extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ErrorAccionable";
+  }
+}
+
 export function isConfigError(error: unknown): error is Error {
-  return error instanceof Error && error.message.includes("variable de entorno");
+  return (
+    error instanceof ErrorAccionable ||
+    // `required()` lanza un Error normal; se reconoce por el texto.
+    (error instanceof Error && error.message.includes("variable de entorno"))
+  );
 }

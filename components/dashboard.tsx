@@ -32,6 +32,7 @@ import Informes from "@/components/informes";
 import Cobraments from "@/components/cobraments";
 import Cercador from "@/components/cercador";
 import Desfer, { MARGE_DESFER_MS, type AccioDesfer } from "@/components/desfer";
+import Endarrerides from "@/components/endarrerides";
 import Ajustos from "@/components/ajustos";
 import Sidebar from "@/components/sidebar";
 import { leerDatosFacturacion } from "@/lib/ajustes-factura";
@@ -194,6 +195,15 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   // ── Desfer ────────────────────────────────────────────────────────────
   const [accioDesfer, setAccioDesfer] = useState<AccioDesfer | null>(null);
 
+  /**
+   * El aviso de comandas de días pasados se puede apartar.
+   *
+   * Una vez por sesión y no por comanda: si se aparta es porque ahora no
+   * toca, no porque una en concreto esté bien. Vuelve a salir a la próxima
+   * que se abra la app, y desaparece solo en cuanto no queda ninguna.
+   */
+  const [avisEndarreridesTancat, setAvisEndarreridesTancat] = useState(false);
+
   const fetchTabs = useCallback(async () => {
     if (tabs.length > 0) return;
     setLoadingTabs(true);
@@ -323,9 +333,18 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     unassignedStops,
     calendarStopsByDate,
     historyStops,
+    endarrerides,
   } = useMemo(() => {
     const todayStops: Stop[] = [];
     const unassignedStops: Stop[] = [];
+    /*
+      Las que se quedaron en un día que ya pasó sin cerrar.
+
+      No salían por ningún sitio: en Avui solo están las de hoy, y en la
+      bossa solo las que no tienen día. Se quedaban escondidas en su casilla
+      del calendario hasta que alguien se acordaba de mirar atrás.
+    */
+    const endarrerides: Stop[] = [];
     const historyStops: { entregat: Stop[]; incidencia: Stop[] } = {
       entregat: [],
       incidencia: [],
@@ -354,6 +373,8 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
         if (stop.date === todayDate) {
           todayStops.push(stop);
+        } else if (todayDate && stop.date < todayDate) {
+          endarrerides.push(stop);
         }
       }
     }
@@ -366,6 +387,9 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       unassignedStops,
       calendarStopsByDate,
       historyStops,
+      // De la más antigua a la más reciente: se cierran en el orden en que
+      // se quedaron atrás.
+      endarrerides: endarrerides.sort((a, b) => a.date.localeCompare(b.date)),
     };
   }, [allStops, customOrderIds, todayDate]);
 
@@ -453,9 +477,18 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     ? (allStops.find((s) => s.id === comandaObertaId) ?? null)
     : null;
 
-  const handleDelivered = (orderId: string, price: number | null = null) => {
+  /**
+   * @param quan - Cuándo se entregó de verdad, en ISO. Sin esto, ahora. Solo
+   *   lo pasa el aviso de comandas de días pasados: aquella entrega tiene su
+   *   hora, y es la que tiene que quedar en el full.
+   */
+  const handleDelivered = (
+    orderId: string,
+    price: number | null = null,
+    quan?: string,
+  ) => {
     const abans = allStops.find((s) => s.id === orderId);
-    void recordDelivery(orderId, "entregado", null, price);
+    void recordDelivery(orderId, "entregado", null, price, quan);
     // Poner un importe a una comanda ya entregada no es "entregarla": no
     // tiene nada que deshacer más allá del propio importe, y ofrecer Desfer
     // ahí solo confunde.
@@ -844,6 +877,15 @@ export default function Dashboard({ driverName }: { driverName: string }) {
             />
           </div>
         </div>
+      )}
+
+      {endarrerides.length > 0 && !avisEndarreridesTancat && (
+        <Endarrerides
+          stops={endarrerides}
+          onEntregada={(id, quan) => handleDelivered(id, null, quan)}
+          onTornarABossa={(id) => handleDateAssignment(id, null)}
+          onTancar={() => setAvisEndarreridesTancat(true)}
+        />
       )}
 
       <Desfer accio={accioDesfer} onTancar={() => setAccioDesfer(null)} />
