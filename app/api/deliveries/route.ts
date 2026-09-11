@@ -41,15 +41,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
-  const parsed = schema.safeParse(await request.json().catch(() => null));
+  const cuerpo = await request.json().catch(() => null);
+  const parsed = schema.safeParse(cuerpo);
   if (!parsed.success) {
     // Con el campo delante. "Petición inválida" a secas deja al transportista
     // mirando una pantalla que no dice nada y a quien lo mantiene leyendo
     // logs; el nombre del campo suele ser el arreglo entero.
     const [problema] = parsed.error.issues;
+    const donde = problema.path.join(".") || "cuerpo";
+
+    /*
+      Y lo que llegó de verdad, en el log del servidor.
+
+      Sin esto, un "records — Invalid input" no se puede depurar: dice que el
+      array entero está mal, pero no si llegó vacío, si no llegó, o si llegó
+      otra cosa. Y cuando pasa suele ser algo de en medio —un service worker
+      viejo de una build de producción que sigue interceptando /api/— que no
+      se reproduce a voluntad. Aquí no hay secretos: son comandas, notas e
+      importes. Se corta por si la cola era larga.
+    */
+    const visto =
+      cuerpo === null ? "(el cuerpo no era JSON)" : JSON.stringify(cuerpo).slice(0, 1000);
+    console.warn(
+      `Petición inválida a /api/deliveries en "${donde}": ${problema.message}\n` +
+        `  Recibido: ${visto}`,
+    );
+
     return NextResponse.json(
       {
-        error: `Petición inválida: ${problema.path.join(".") || "cuerpo"} — ${problema.message}`,
+        error: `Petición inválida: ${donde} — ${problema.message}`,
         detail: parsed.error.issues,
       },
       { status: 400 },

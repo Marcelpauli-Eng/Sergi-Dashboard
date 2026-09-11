@@ -69,6 +69,26 @@ export default function RootLayout({
         <Script id="theme-init" strategy="beforeInteractive">
           {'(function(){try{var t=localStorage.getItem("themePreference");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}})()'}
         </Script>
+
+        {/*
+          En desarrollo, fuera cualquier service worker que quede registrado.
+
+          `next.config.ts` desactiva el service worker en desarrollo, pero eso
+          solo impide registrar uno nuevo: el que quedara de haber ejecutado
+          alguna vez `npm run build && npm run start` en este mismo puerto
+          sigue vivo y sigue interceptando las peticiones, incluidas las de
+          `/api/`. Da fallos que no se reproducen y que no están en el código
+          que estás mirando — una petición que llega al servidor sin cuerpo,
+          una respuesta de ayer servida como si fuera de ahora.
+
+          En producción no se toca nada: ahí el service worker es justo lo que
+          hace que la app arranque sin cobertura.
+        */}
+        {process.env.NODE_ENV === "development" && (
+          <Script id="sw-fuera-en-dev" strategy="afterInteractive">
+            {'(function(){if(!("serviceWorker"in navigator))return;navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();console.warn("[dev] Service worker desregistrado: "+r.scope+". Recarga para que deje de interceptar.")})}).catch(function(){})})()'}
+          </Script>
+        )}
         <Splash />
         {children}
       </body>

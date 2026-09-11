@@ -360,10 +360,28 @@ export function applyCustomOrder<T extends { id: string }>(
 }
 
 /** Envía al servidor las entregas pendientes. Devuelve cuántas se subieron. */
+/**
+ * Cuántos registros caben en una subida.
+ *
+ * Tiene que ser el mismo tope que valida la API. Mandarlo todo de golpe
+ * funcionaba mientras la cola fuera corta, pero la cola crece sola cuando
+ * algo falla al escribir: basta con estar un rato sin cobertura, o con que
+ * el documento de importes no esté puesto, para pasar de cien. A partir de
+ * ahí el servidor rechazaba el lote entero por tamaño y la cola ya no podía
+ * vaciarse nunca — cada intento llevaba los mismos registros de más.
+ */
+const MAX_POR_ENVIO = 100;
+
 export async function flushOutbox(): Promise<number> {
-  const pending = await pendingOutbox();
-  if (pending.length === 0) return 0;
+  const todos = await pendingOutbox();
+  if (todos.length === 0) return 0;
   if (typeof navigator !== "undefined" && !navigator.onLine) return 0;
+
+  // Los más antiguos primero: es el orden en que pasaron las cosas, y la
+  // hoja tiene que acabar reflejando el último estado, no uno intermedio.
+  const pending = [...todos]
+    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt))
+    .slice(0, MAX_POR_ENVIO);
 
   const sheetTab = getSelectedTab();
 
@@ -429,6 +447,15 @@ export async function flushOutbox(): Promise<number> {
       });
     }
   });
+
+  /*
+    Si quedan más en la cola, se sigue en cuanto acabe esta tanda. Sin esto,
+    una cola de doscientos registros subía cien y se quedaba esperando al
+    siguiente arranque para los otros cien.
+  */
+  if (todos.length > pending.length) {
+    void flushOutbox().catch(() => {});
+  }
 
   return result.applied.length;
 }

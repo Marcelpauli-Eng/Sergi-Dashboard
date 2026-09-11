@@ -156,4 +156,46 @@ const resultado = (items: Parameters<typeof applyOutbox>[1], inicial = parada())
   assert.equal(s.price, null);
 }
 
-console.log("✓ lib/outbox.ts — la cola se aplica entera y en orden");
+// ── El troceado de la subida ─────────────────────────────────────────────
+// La API rechaza lotes de más de 100 registros. La cola crece sola cuando
+// algo falla al escribir —un rato sin cobertura, o el documento de importes
+// sin configurar—, así que pasar de cien no es raro. Si se mandara entera,
+// el servidor la rechazaría por tamaño y la cola no podría vaciarse NUNCA:
+// cada intento llevaría los mismos registros de más.
+{
+  const MAX = 100;
+  const cola = Array.from({ length: 250 }, (_, i) =>
+    item({
+      orderId: `ALB-${i}`,
+      type: "status",
+      status: "entregado",
+      // Al revés, para comprobar que se ordena por fecha y no por posición.
+      recordedAt: new Date(Date.UTC(2026, 7, 26, 10, 0, 250 - i)).toISOString(),
+    }),
+  );
+
+  const lote = [...cola]
+    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt))
+    .slice(0, MAX);
+
+  assert.equal(lote.length, MAX, "el lote tiene que caber en lo que acepta la API");
+  assert.equal(lote[0].orderId, "ALB-249", "no se está enviando lo más antiguo primero");
+
+  // Y en tandas sucesivas se acaba vaciando, sin repetir ni saltarse nada.
+  const vistos = new Set<string>();
+  let quedan = [...cola].sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
+  let tandas = 0;
+  while (quedan.length > 0) {
+    for (const i of quedan.slice(0, MAX)) {
+      assert.equal(vistos.has(i.orderId), false, `${i.orderId} se ha enviado dos veces`);
+      vistos.add(i.orderId);
+    }
+    quedan = quedan.slice(MAX);
+    tandas++;
+    assert.ok(tandas <= 10, "la cola no se vacía: se ha quedado dando vueltas");
+  }
+  assert.equal(vistos.size, cola.length, "se han quedado registros sin enviar");
+  assert.equal(tandas, 3);
+}
+
+console.log("✓ lib/outbox.ts — la cola se aplica entera, en orden y por tandas");
