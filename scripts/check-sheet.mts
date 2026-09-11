@@ -140,6 +140,34 @@ if (!privateKey.includes("BEGIN PRIVATE KEY")) {
   );
 }
 
+// ── 1 bis. Claves repetidas en .env.local ─────────────────────────────────
+/*
+  Una variable escrita dos veces no da error en ninguna parte: gana la
+  última y la primera se ignora en silencio. Con dos GOOGLE_PRIVATE_KEY
+  distintas eso significa estar usando una clave que no es la que crees, y
+  el fallo aparece mucho después y en otro sitio — un 403 al abrir un
+  documento que sí está compartido, por ejemplo.
+*/
+try {
+  const { readFileSync } = await import("node:fs");
+  const contenido = readFileSync(".env.local", "utf8");
+  const cuentas = new Map<string, number>();
+  for (const linea of contenido.split("\n")) {
+    const nombre = linea.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=/)?.[1];
+    if (nombre) cuentas.set(nombre, (cuentas.get(nombre) ?? 0) + 1);
+  }
+  const repetidas = [...cuentas].filter(([, n]) => n > 1);
+  if (repetidas.length > 0) {
+    for (const [nombre, n] of repetidas) {
+      warn(`${nombre} está ${n} veces en .env.local`);
+    }
+    dim("Gana la última y la primera se ignora sin avisar. Borra las que");
+    dim("sobren: si son valores distintos, estás usando uno que no esperas.");
+  }
+} catch {
+  // Sin .env.local (producción, o variables puestas a mano): nada que mirar.
+}
+
 // ── 2. Autenticación ──────────────────────────────────────────────────────
 
 const client = new JWT({

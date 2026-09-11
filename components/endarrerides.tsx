@@ -86,8 +86,9 @@ export default function Endarrerides({
                 : `${stops.length} comandes sense tancar`}
             </h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              Estaven assignades a un dia que ja ha passat i no s&apos;han marcat
-              com entregades.
+              {stops.length === 1
+                ? "Estava assignada a un dia que ja ha passat i no s'ha marcat com entregada."
+                : "Estaven assignades a dies que ja han passat i no s'han marcat com entregades."}
             </p>
           </div>
         </div>

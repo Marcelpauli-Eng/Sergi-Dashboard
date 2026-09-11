@@ -526,11 +526,28 @@ async function tabsFacturas(doc: string): Promise<string[]> {
     return await listSheetTabs(doc);
   } catch (error) {
     const mensaje = String(error);
-    if (doc !== env.google.sheetId && /respondió (403|404)/.test(mensaje)) {
+    const codigo = mensaje.match(/respondió (403|404)/)?.[1];
+    if (doc !== env.google.sheetId && codigo) {
+      /*
+        403 y 404 se arreglan de forma distinta y el mensaje de antes los
+        metía en el mismo saco: quien lo leía comprobaba que el documento
+        estaba compartido, veía que sí, y se quedaba sin saber qué mirar.
+
+        Va también el final del ID, que es lo que se compara de un vistazo
+        con la URL del documento que se tiene abierto. Entero no: acaba en
+        logs y da acceso a quien tenga las credenciales.
+      */
+      const cola = doc.slice(-6);
       throw new ErrorAccionable(
-        `No se puede abrir el documento de facturas (GOOGLE_SHEET_ID_FACTURAS). ` +
-          `Compártelo con ${env.google.serviceAccountEmail} dándole permiso de Editor, ` +
-          `y comprueba que el ID es el trozo de la URL entre /d/ y /edit.`,
+        codigo === "404"
+          ? `No existe ningún documento con ese GOOGLE_SHEET_ID_FACTURAS ` +
+            `(acaba en "…${cola}"). Tiene que ser SOLO el trozo de la URL entre ` +
+            `/d/ y /edit, sin "https://" y sin "/edit" detrás.`
+          : `El documento de facturas existe pero la cuenta de servicio no ` +
+            `puede entrar (acaba en "…${cola}"). Ábrelo → Compartir → y ponle ` +
+            `permiso de Editor a ${env.google.serviceAccountEmail}. Si ya ` +
+            `aparece ahí, comprueba que es ESE documento y no otro: el ID de ` +
+            `.env.local tiene que acabar igual que el de la URL.`,
       );
     }
     throw error;

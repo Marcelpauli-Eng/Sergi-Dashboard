@@ -39,6 +39,16 @@ export const DEMO_DRIVER = {
  */
 const demoDeliveries = new Map<string, DeliveryRecord>();
 
+/**
+ * A qué día se ha movido cada comanda durante la demo. `""` es la bossa.
+ *
+ * Aparte de las entregas porque son cosas distintas: cambiar de día no dice
+ * nada de si se entregó. Guardarlo todo en el mismo sitio hacía que mover
+ * una comanda —o sacarla del día para devolverla a la bossa— la enseñara
+ * como una incidencia, porque el registro que llegaba no traía estado.
+ */
+const demoDates = new Map<string, string>();
+
 export function recordDemoDeliveries(records: DeliveryRecord[]): void {
   for (const record of records) {
     // Corregir el importe no cambia el estado ni la hora: solo el precio de
@@ -48,9 +58,15 @@ export function recordDemoDeliveries(records: DeliveryRecord[]): void {
       if (previo) demoDeliveries.set(record.orderId, { ...previo, price: record.price });
       continue;
     }
+    // Cambiar de día solo cambia el día. Vacío es la bossa, igual que en la
+    // hoja de cálculo.
+    if (record.type === "date") {
+      demoDates.set(record.orderId, record.date ?? "");
+      continue;
+    }
     // Deshacer: la entrega desaparece del registro y la parada vuelve a
     // pendiente, que es exactamente lo que hace vaciar las celdas del Sheet.
-    if (record.type !== "date" && record.status === "pendiente") {
+    if (record.status === "pendiente") {
       demoDeliveries.delete(record.orderId);
       continue;
     }
@@ -60,6 +76,7 @@ export function recordDemoDeliveries(records: DeliveryRecord[]): void {
 
 export function resetDemoDeliveries(): void {
   demoDeliveries.clear();
+  demoDates.clear();
 }
 
 interface Sample {
@@ -161,7 +178,8 @@ function toStop(sample: Sample, date: string, sequence: number): Stop {
     id: sample.id,
     driverId: DEMO_DRIVER.id,
     creationDate: null,
-    date,
+    // El día que se le haya puesto durante la demo manda sobre el del lote.
+    date: demoDates.get(sample.id) ?? date,
     priority: sample.priority,
     customer: sample.customer,
     address: sample.address,
