@@ -319,6 +319,31 @@ export default function StopCard({
 
   const badgeInfo = CATEGORY_BADGE[stop.statusCategory ?? ""];
 
+  /** El círculo con el número de parada, o con el estado si ya está cerrada. */
+  const numero = (
+    <div
+      className={cn(
+        "flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white",
+        stop.statusCategory === "entregat"
+          ? "bg-success"
+          : stop.statusCategory === "incidencia"
+            ? "bg-warning"
+            : stop.statusCategory === "en_curs"
+              ? "bg-status-en-curs"
+              : "bg-primary",
+      )}
+      aria-hidden
+    >
+      {stop.statusCategory === "entregat" ? (
+        <Check className="size-4" strokeWidth={2.5} />
+      ) : stop.statusCategory === "incidencia" ? (
+        <TriangleAlert className="size-3.5" strokeWidth={2.5} />
+      ) : (
+        stop.sequence
+      )}
+    </div>
+  );
+
   return (
     // Un <div>, no un <li>: la tarjeta se usa dentro de listas, dentro de
     // bloques sueltos y dentro de un modal de vista previa. Siendo <li> los
@@ -349,31 +374,25 @@ export default function StopCard({
           </div>
         )}
 
-        {/* Número de parada */}
-        <div
-          className={cn(
-            "flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white",
-            stop.statusCategory === "entregat"
-              ? "bg-success"
-              : stop.statusCategory === "incidencia"
-                ? "bg-warning"
-                : stop.statusCategory === "en_curs"
-                  ? "bg-status-en-curs"
-                  : "bg-primary",
-          )}
-          aria-hidden
-        >
-          {stop.statusCategory === "entregat" ? (
-            <Check className="size-4" strokeWidth={2.5} />
-          ) : stop.statusCategory === "incidencia" ? (
-            <TriangleAlert className="size-3.5" strokeWidth={2.5} />
-          ) : (
-            stop.sequence
-          )}
-        </div>
+        {/*
+          El número de parada.
+
+          En la tarjeta de lista es una columna a la izquierda, que es lo que
+          deja el texto alineado de una parada a la siguiente. En la ficha va
+          EN LÍNEA con el nombre: con columna propia, todo lo de dentro
+          —Comanda, Telèfon, Mides— quedaba sangrado el ancho del círculo y
+          no cuadraba con la fila del importe, que ocupa la tarjeta entera.
+        */}
+        {!detall && numero}
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
+          <div
+            className={cn(
+              "flex justify-between gap-2",
+              detall ? "items-center gap-3" : "items-start",
+            )}
+          >
+            {detall && numero}
             <p
               className={cn(
                 "min-w-0 flex-1 truncate font-semibold",
