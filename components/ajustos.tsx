@@ -11,12 +11,14 @@ import {
   Moon,
   Palette,
   Smartphone,
+  Stethoscope,
   Sun,
   UserRound,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import AjustosFacturacio from "@/components/ajustos-facturacio";
+import Diagnostic from "@/components/diagnostic";
 import { setThemePreference, type ThemePreference } from "@/lib/sync";
 import type { DatosFacturacion } from "@/lib/factura";
 
@@ -29,7 +31,7 @@ import type { DatosFacturacion } from "@/lib/factura";
  * hasta no poder leerse.
  */
 
-type Apartado = "aparenca" | "facturacio" | "compte";
+type Apartado = "aparenca" | "facturacio" | "compte" | "diagnostic";
 
 export default function Ajustos({
   driverName,
@@ -47,6 +49,10 @@ export default function Ajustos({
   const [apartado, setApartado] = useState<Apartado | null>(null);
   const router = useRouter();
   const [sortint, setSortint] = useState(false);
+
+  if (apartado === "diagnostic") {
+    return <Diagnostic onTancar={() => setApartado(null)} />;
+  }
 
   // La de facturación ya es una pantalla entera por su cuenta.
   if (apartado === "facturacio") {
@@ -120,6 +126,20 @@ export default function Ajustos({
                 titol="Transportista"
                 detall={driverName}
                 onClick={() => setApartado("compte")}
+              />
+            </Grup>
+
+            {/*
+              Aquí y no escondido en un log: cuando algo de Google está mal
+              configurado, quien lo tiene que ver está mirando un móvil y no
+              el panel de Vercel.
+            */}
+            <Grup titol="Ajuda">
+              <Fila
+                icona={Stethoscope}
+                titol="Diagnòstic"
+                detall="Estat de la configuració"
+                onClick={() => setApartado("diagnostic")}
               />
             </Grup>
           </div>

@@ -336,6 +336,39 @@ async function writeCells(
   });
 }
 
+/** Cuál de los dos documentos. Solo para etiquetar comprobaciones. */
+export type SheetDoc = "repartos" | "privado";
+
+/**
+ * ¿Se puede ESCRIBIR en ese documento?
+ *
+ * Leer y escribir son permisos distintos, y compartir como Lector en vez de
+ * como Editor es el descuido más fácil de cometer: todo parece bien hasta
+ * que marcas la primera entrega. Escribe una celda con su propio valor, así
+ * que no cambia nada.
+ */
+export async function puedeEscribir(
+  spreadsheetId: string,
+): Promise<{ ok: true } | { ok: false; detalle: string }> {
+  try {
+    const leido = (await sheetsFetch(
+      `/values/${encodeURIComponent("A1")}`,
+      undefined,
+      spreadsheetId,
+    )) as { values?: unknown[][] };
+
+    await sheetsFetch(
+      `/values/${encodeURIComponent("A1")}?valueInputOption=USER_ENTERED`,
+      { method: "PUT", body: JSON.stringify({ values: leido.values ?? [[""]] }) },
+      spreadsheetId,
+    );
+    return { ok: true };
+  } catch (error) {
+    const mensaje = error instanceof Error ? error.message : String(error);
+    return { ok: false, detalle: mensaje.slice(0, 300) };
+  }
+}
+
 export interface WriteResult {
   /** IDs de pedido escritos correctamente. */
   applied: string[];
@@ -651,7 +684,9 @@ function filaAFactura(fila: unknown[]): FacturaEmitida | null {
 
   return {
     numero,
-    fecha: text(fila[1]),
+    // Las emitidas antes del apóstrofo están guardadas como fecha de verdad
+    // y vuelven como número de serie; `parseSheetDate` las devuelve a ISO.
+    fecha: parseSheetDate(fila[1]) ?? text(fila[1]),
     periodo: text(fila[2]),
     lineas: comandas.map((comanda, i) => ({ comanda, importe: importes[i] ?? 0 })),
     base: parseNumber(fila[5]) ?? 0,
@@ -716,10 +751,20 @@ export async function emitirFactura(datos: {
       ? Math.max(...emitidas.map((f) => f.numero)) + 1
       : datos.primerNumero;
 
+  /*
+    El apóstrofo delante fuerza que Sheets lo guarde como TEXTO.
+
+    `USER_ENTERED` interpreta lo que mandamos igual que si se tecleara en la
+    casilla, así que "2026-09-11" se convertía en una fecha y "JUL 26" en el
+    26 de julio. Al releerlas con UNFORMATTED_VALUE volvían como número de
+    serie —46276, 46229— y la lista de facturas enseñaba
+    "undefined/undefined/46276". El apóstrofo no forma parte del valor: ni se
+    ve en la casilla ni vuelve al leerla.
+  */
   const fila = [
     numero,
-    datos.fecha,
-    datos.periodo,
+    `'${datos.fecha}`,
+    `'${datos.periodo}`,
     datos.lineas.map((l) => l.comanda).join(", "),
     datos.lineas.map((l) => importeSheet(l.importe)).join(", "),
     importeSheet(datos.base),
@@ -868,7 +913,9 @@ export async function writeImportes(entradas: ImporteEntrada[]): Promise<void> {
       {
         method: "POST",
         body: JSON.stringify({
-          valueInputOption: "USER_ENTERED",
+          // RAW y no USER_ENTERED: sin esto Google interpreta el nombre del
+          // full —"JUL 26"— como una fecha y se pierde.
+          valueInputOption: "RAW",
           data: plan.actualizar.map(({ fila, valores }) => ({
             range: range(`A${fila}:D${fila}`, TAB_IMPORTS),
             values: [valores],
@@ -882,7 +929,7 @@ export async function writeImportes(entradas: ImporteEntrada[]): Promise<void> {
   if (plan.nuevas.length > 0) {
     await sheetsFetch(
       `/values/${encodeURIComponent(range("A:D", TAB_IMPORTS))}:append` +
-        `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+        `?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       { method: "POST", body: JSON.stringify({ values: plan.nuevas }) },
       doc,
     );

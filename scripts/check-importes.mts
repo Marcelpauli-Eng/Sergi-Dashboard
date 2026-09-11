@@ -95,9 +95,11 @@ const AHORA = "26/08/2026 14:32";
     AHORA,
   );
   assert.equal(plan.actualizar.length, 0);
+  // El importe como NÚMERO y el full como texto: la fila se escribe en
+  // crudo, sin dejar que Google interprete nada. Ver `FilaImporte`.
   assert.deepEqual(plan.nuevas, [
-    ["ALB-1042", "80,00", "AGO 26", AHORA],
-    ["ALB-1043", "70,50", "AGO 26", AHORA],
+    ["ALB-1042", 80, "AGO 26", AHORA],
+    ["ALB-1043", 70.5, "AGO 26", AHORA],
   ]);
 }
 
@@ -112,7 +114,7 @@ const AHORA = "26/08/2026 14:32";
   assert.equal(plan.actualizar.length, 1);
   // Fila 3: la cabecera es la 1 y ALB-1043 es el segundo de la lista.
   assert.equal(plan.actualizar[0].fila, 3, "se actualizaría la fila equivocada");
-  assert.deepEqual(plan.actualizar[0].valores, ["ALB-1043", "95,25", "AGO 26", AHORA]);
+  assert.deepEqual(plan.actualizar[0].valores, ["ALB-1043", 95.25, "AGO 26", AHORA]);
 }
 
 // ── Un lote con unos que están y otros que no ────────────────────────────
@@ -144,7 +146,7 @@ const AHORA = "26/08/2026 14:32";
     AHORA,
   );
   assert.equal(plan.nuevas.length, 1, `han salido ${plan.nuevas.length} filas para la misma comanda`);
-  assert.equal(plan.nuevas[0][1], "20,00", "no ha ganado la última");
+  assert.equal(plan.nuevas[0][1], 20, "no ha ganado la última");
 }
 
 {
@@ -159,7 +161,7 @@ const AHORA = "26/08/2026 14:32";
   );
   assert.equal(plan.nuevas.length, 0);
   assert.deepEqual(plan.actualizar.map((a) => a.fila), [2, 2]);
-  assert.equal(plan.actualizar.at(-1)?.valores[1], "20,00");
+  assert.equal(plan.actualizar.at(-1)?.valores[1], 20);
 }
 
 // ── Borrar un importe deja la celda vacía ────────────────────────────────
@@ -188,14 +190,25 @@ const AHORA = "26/08/2026 14:32";
     [],
     AHORA,
   );
-  assert.equal(plan.nuevas[0][1], "1234,50");
+  assert.equal(plan.nuevas[0][1], 1234.5);
   assert.equal(plan.nuevas[0][2], "", "un full nulo tiene que quedar en blanco");
-  assert.equal(plan.nuevas[1][1], "0,00", "cero euros SÍ es un importe");
+  assert.equal(plan.nuevas[1][1], 0, "cero euros SÍ es un importe");
 
   const leidos = parseImportes(plan.nuevas);
   assert.equal(leidos.get("A"), 1234.5);
   assert.equal(leidos.get("B"), 0, "un cero escrito tiene que leerse como cero");
   assert.equal(leidos.get("C"), 0.05);
+}
+
+// ── El nombre del full se guarda como nombre, no como fecha ─────────────
+// "JUL 26" escrito dejando que Google interprete se convertía en el 26 de
+// julio (un 46229) y el mes se perdía. La fila se escribe en crudo, así que
+// aquí tampoco puede colarse ningún apaño de escape.
+{
+  for (const full of ["JUL 26", "AGO 26", "MARÇ", "2026-08", "1/2"]) {
+    const plan = planImportes([{ orderId: "A", price: 1, sheetTab: full }], [], AHORA);
+    assert.equal(plan.nuevas[0][2], full, `el full "${full}" se ha guardado tocado`);
+  }
 }
 
 // ── Un lote vacío no propone nada ────────────────────────────────────────

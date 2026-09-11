@@ -97,6 +97,21 @@ function avisarUnaVez(error: unknown): void {
   console.warn(`No se han podido leer los importes: ${mensaje}`);
 }
 
+/**
+ * Las comandas que le tocan a un transportista.
+ *
+ * Si la hoja no tiene columna de transportista, hay uno solo y son todas.
+ * Exportado para que los informes cuenten EXACTAMENTE lo mismo que la ruta
+ * del día: dos filtros parecidos en dos sitios acaban divergiendo, y cuando
+ * lo hagan nadie va a entender por qué la comparativa no cuadra con lo que
+ * se ve en pantalla.
+ */
+export function comandasDelTransportista(orders: Order[], driverId: string): Order[] {
+  const hasDriverColumn = orders.some((o) => o.driverId !== "");
+  if (!hasDriverColumn) return orders;
+  return orders.filter((order) => order.driverId === driverId.toLowerCase());
+}
+
 export async function buildManifest(
   driverId: string,
   driverName: string,
@@ -128,17 +143,7 @@ export async function buildManifest(
   const todayDate = today(env.timezone);
   const normalizedDriver = driverId.toLowerCase();
 
-  const hasDriverColumn = snapshot.orders.some((o) => o.driverId !== "");
-
-  let mine: Order[];
-
-  if (hasDriverColumn) {
-    mine = snapshot.orders.filter(
-      (order) => order.driverId === normalizedDriver,
-    );
-  } else {
-    mine = snapshot.orders;
-  }
+  const mine = comandasDelTransportista(snapshot.orders, normalizedDriver);
 
   const sorted = [...mine].sort(
     (a, b) => a.priority - b.priority || a.id.localeCompare(b.id),

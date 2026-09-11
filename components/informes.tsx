@@ -1,10 +1,28 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Euro, Package, TriangleAlert } from "lucide-react";
-import type { Manifest, Stop } from "@/lib/types";
+import {
+  ArrowUpDown,
+  CalendarCheck,
+  CheckCircle2,
+  ChevronDown,
+  Euro,
+  ListChecks,
+  Package,
+  TrendingUp,
+  TriangleAlert,
+} from "lucide-react";
+import type { Stop } from "@/lib/types";
 import { euros } from "@/lib/factura";
+import {
+  resumirFull,
+  totalizar,
+  variacio,
+  type ResumFull,
+} from "@/lib/informes";
 import { cn } from "@/lib/utils";
+import { parseTabMonth } from "@/lib/sheet-tab";
+import { Button } from "@/components/ui/button";
 
 /**
  * Informes.
@@ -293,10 +311,6 @@ function ResumDelFull({ dades, mes }: { dades: Resum; mes: string }) {
 
 /* ── La comparativa entre meses ─────────────────────────────────────────── */
 
-interface Mes {
-  full: string;
-  resum: Resum;
-}
 
 /**
  * Compara los fulls entre sí.
@@ -313,6 +327,67 @@ interface Mes {
  * viejo hasta la siguiente descarga—. Los otros fulls sí, que no están
  * descargados, y por eso esto necesita cobertura.
  */
+/* ── La comparativa entre fulls ─────────────────────────────────────────── */
+
+/** Los fulls elegidos se recuerdan: nadie quiere volver a marcarlos cada vez. */
+const CLAVE_TRIATS = "reparto:fulls-comparativa";
+
+function llegirTriats(disponibles: string[]): string[] {
+  try {
+    const guardat = window.localStorage.getItem(CLAVE_TRIATS);
+    if (guardat) {
+      // Un full que ya no está en el documento se cae solo de la selección.
+      const triats = (JSON.parse(guardat) as string[]).filter((f) =>
+        disponibles.includes(f),
+      );
+      if (triats.length > 0) return triats;
+    }
+  } catch {
+    // localStorage lleno o JSON roto: se empieza de cero, que no es grave.
+  }
+  /*
+    Por defecto, los seis últimos QUE PAREZCAN UN MES.
+
+    En el documento real hay pestañas que no son meses —una "Hoja 21" vacía—
+    y colarlas en la selección de partida hacía que la primera comparativa
+    que ves salga con un error, que es la peor manera de estrenar una
+    pantalla. Seguen pudiendo elegirse a mano por si alguna guarda trabajo.
+  */
+  const mesos = disponibles.filter((f) => parseTabMonth(f) !== null);
+  return (mesos.length > 0 ? mesos : disponibles).slice(-6);
+}
+
+type Columna = {
+  clau: keyof ResumFull;
+  etiqueta: string;
+  /** Cómo se escribe el valor. */
+  format: (r: ResumFull) => string;
+  /** Los euros y las cuentas se alinean a la derecha. */
+  dreta?: boolean;
+  /** En pantalla estrecha solo caben las importantes. */
+  sempre?: boolean;
+};
+
+const COLUMNES: Columna[] = [
+  { clau: "full", etiqueta: "Full", format: (r) => r.full, sempre: true },
+  { clau: "facturat", etiqueta: "Facturat", format: (r) => `${euros(r.facturat)} €`, dreta: true, sempre: true },
+  { clau: "entregats", etiqueta: "Entregades", format: (r) => String(r.entregats), dreta: true, sempre: true },
+  { clau: "mitjana", etiqueta: "Mitjana", format: (r) => `${euros(r.mitjana)} €`, dreta: true, sempre: true },
+  { clau: "diesTreballats", etiqueta: "Dies", format: (r) => String(r.diesTreballats), dreta: true },
+  {
+    clau: "mitjanaPerDia",
+    etiqueta: "Per dia",
+    // Sin ningún día con entregas no hay media que valga: una raya dice la
+    // verdad y un "0,00 €" miente, sobre todo en un full que SÍ ha
+    // facturado. Pasa cuando la columna "Data entrega" está vacía.
+    format: (r) => (r.diesTreballats === 0 ? "—" : `${euros(r.mitjanaPerDia)} €`),
+    dreta: true,
+  },
+  { clau: "senseImport", etiqueta: "Sense import", format: (r) => String(r.senseImport), dreta: true },
+  { clau: "incidencies", etiqueta: "Incidències", format: (r) => String(r.incidencies), dreta: true },
+  { clau: "pendents", etiqueta: "Pendents", format: (r) => String(r.pendents), dreta: true },
+];
+
 function Comparativa({
   fulls,
   online,
@@ -325,41 +400,58 @@ function Comparativa({
   mes: string;
   stops: Stop[];
 }) {
-  const [altres, setAltres] = useState<Mes[] | null>(null);
+  const [triats, setTriats] = useState<string[]>(() =>
+    typeof window === "undefined" ? fulls.slice(-6) : llegirTriats(fulls),
+  );
+  const [obertElSelector, setObertElSelector] = useState(false);
+  const [delServidor, setDelServidor] = useState<ResumFull[] | null>(null);
+  const [errores, setErrores] = useState<{ full: string; motiu: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [carregant, setCarregant] = useState(false);
+  /** Ordenar por una columna, para ver enseguida el mejor mes o el peor. */
+  const [ordre, setOrdre] = useState<{ clau: keyof ResumFull; asc: boolean } | null>(null);
+
+  const alternar = (full: string) => {
+    setTriats((previs) => {
+      const seguents = previs.includes(full)
+        ? previs.filter((f) => f !== full)
+        : // Se guarda en el orden del documento, que es el cronológico.
+          fulls.filter((f) => f === full || previs.includes(f));
+      try {
+        window.localStorage.setItem(CLAVE_TRIATS, JSON.stringify(seguents));
+      } catch {
+        // Que no se pueda recordar la selección no impide usarla ahora.
+      }
+      return seguents;
+    });
+  };
+
+  /*
+    Al servidor solo se le piden los fulls que NO son el abierto: ese se
+    calcula aquí con lo que hay en IndexedDB, así que un importe que acabas
+    de corregir se ve en la comparativa en el acto y no a la siguiente
+    sincronización.
+  */
+  const aDemanar = useMemo(() => triats.filter((f) => f !== mes), [triats, mes]);
+  const clau = aDemanar.join(",");
+  const hiHaQueDemanar = online && aDemanar.length > 0;
 
   useEffect(() => {
-    if (!online || fulls.length === 0) return;
+    if (!hiHaQueDemanar) return;
     let cancelat = false;
 
     void (async () => {
+      // Dentro de la función asíncrona y no en el cuerpo del efecto: ahí
+      // encadenaría un render de más en cada montaje.
       setCarregant(true);
       setError(null);
-      const recollits: Mes[] = [];
       try {
-        for (const full of fulls) {
-          if (full === mes) continue;
-          const resposta = await fetch(`/api/manifest?tab=${encodeURIComponent(full)}`);
-          if (cancelat) return;
-          if (!resposta.ok) {
-            // Un full que no se deja leer no tumba la comparativa: se queda
-            // fuera y los demás se enseñan igual.
-            console.warn(`No s'ha pogut llegir el full "${full}"`);
-            continue;
-          }
-          const manifest = (await resposta.json()) as Manifest;
-          recollits.push({ full, resum: resumir(manifest.today?.stops ?? []) });
-        }
-        if (!cancelat) {
-          setAltres(recollits);
-          // Con el full abierto ya hay algo que enseñar: solo es un error
-          // cuando no se ha podido leer ninguno de los otros y encima el
-          // abierto no está en la lista.
-          if (recollits.length === 0 && !fulls.includes(mes)) {
-            setError("No s'ha pogut llegir cap full.");
-          }
-        }
+        const resposta = await fetch(`/api/informes?fulls=${encodeURIComponent(clau)}`);
+        const cos = await resposta.json().catch(() => null);
+        if (cancelat) return;
+        if (!resposta.ok) throw new Error(cos?.error ?? `El servidor respongué ${resposta.status}`);
+        setDelServidor(cos.mesos as ResumFull[]);
+        setErrores((cos.errores ?? []) as { full: string; motiu: string }[]);
       } catch (e) {
         if (!cancelat) setError(e instanceof Error ? e.message : "Error desconegut");
       } finally {
@@ -370,158 +462,323 @@ function Comparativa({
     return () => {
       cancelat = true;
     };
-  }, [fulls, online, mes]);
+  }, [clau, hiHaQueDemanar]);
 
-  // El full abierto se calcula aquí, no en el efecto: así cada cambio que se
-  // guarda se ve en la comparativa en el mismo momento.
   const mesos = useMemo(() => {
-    if (altres === null) return null;
-    return fulls
-      .map((full) =>
-        full === mes
-          ? { full, resum: resumir(stops) }
-          : (altres.find((m) => m.full === full) ?? null),
-      )
-      .filter((m): m is Mes => m !== null);
-  }, [fulls, mes, stops, altres]);
+    const delFullObert = triats.includes(mes) ? [resumirFull(mes, stops)] : [];
+    // Sin nada que pedir no hay nada del servidor, se haya quedado lo que se
+    // haya quedado de una selección anterior.
+    const tots = [...(hiHaQueDemanar ? (delServidor ?? []) : []), ...delFullObert];
+    // En el orden del documento, que es el cronológico: una comparativa que
+    // salta de mayo a enero y vuelve a marzo no se puede leer.
+    return fulls.filter((f) => tots.some((m) => m.full === f))
+      .map((f) => tots.find((m) => m.full === f)!);
+  }, [delServidor, hiHaQueDemanar, triats, mes, stops, fulls]);
 
-  if (!online) {
-    return (
-      <div className="soft-card px-6 py-12 text-center">
-        <p className="text-base font-medium">Necessites cobertura per comparar</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Els altres fulls no estan descarregats: cal anar a buscar-los.
-        </p>
-      </div>
-    );
-  }
+  const ordenats = useMemo(() => {
+    if (!ordre) return mesos;
+    const signe = ordre.asc ? 1 : -1;
+    return [...mesos].sort((a, b) => {
+      const va = a[ordre.clau];
+      const vb = b[ordre.clau];
+      if (typeof va === "number" && typeof vb === "number") return signe * (va - vb);
+      return signe * String(va).localeCompare(String(vb));
+    });
+  }, [mesos, ordre]);
 
-  if (carregant && altres === null) {
-    return (
-      <p className="py-16 text-center text-sm text-muted-foreground">
-        Llegint {fulls.length} {fulls.length === 1 ? "full" : "fulls"}…
-      </p>
-    );
-  }
-
-  if (error) {
-    return <p className="py-16 text-center text-sm text-status-incidencia">{error}</p>;
-  }
-
-  if (!mesos || mesos.length === 0) {
-    return (
-      <p className="py-16 text-center text-sm text-muted-foreground">
-        No hi ha fulls per comparar.
-      </p>
-    );
-  }
-
-  const maxFacturat = Math.max(1, ...mesos.map((m) => m.resum.facturat));
-  const totals = mesos.reduce(
-    (acc, m) => ({
-      entregats: acc.entregats + m.resum.entregats,
-      incidencies: acc.incidencies + m.resum.incidencies,
-      facturat: acc.facturat + m.resum.facturat,
-    }),
-    { entregats: 0, incidencies: 0, facturat: 0 },
+  const total = useMemo(() => totalizar(mesos), [mesos]);
+  const maxFacturat = Math.max(1, ...mesos.map((m) => m.facturat));
+  const millor = mesos.reduce<ResumFull | null>(
+    (a, m) => (a === null || m.facturat > a.facturat ? m : a),
+    null,
   );
+  const mitjanaMensual = mesos.length > 0 ? total.facturat / mesos.length : 0;
 
   return (
     <div className="space-y-6">
-      <section className="soft-card p-5">
-        <h3 className="text-base font-semibold">Facturable per full</h3>
-        <p className="mb-4 text-sm text-muted-foreground">
-          {mesos.length} {mesos.length === 1 ? "full llegit" : "fulls llegits"} · {euros(totals.facturat)} € en total
-        </p>
-        <div className="flex h-56 items-stretch gap-3 overflow-x-auto pb-1">
-          {mesos.map((m) => (
-            <div
-              key={m.full}
-              className="group flex h-full min-w-20 flex-1 flex-col items-center gap-1.5"
-              title={`${m.full} · ${m.resum.entregats} entregues · ${euros(m.resum.facturat)} €`}
-            >
-              <span className="text-xs font-semibold tabular-nums">
-                {euros(m.resum.facturat)} €
-              </span>
-              <div className="flex min-h-0 w-full flex-1 items-end">
-                <div
-                  className="w-full rounded-t-lg bg-primary/80 transition-colors group-hover:bg-primary"
-                  style={{ height: `${Math.max(2, (m.resum.facturat / maxFacturat) * 100)}%` }}
-                />
-              </div>
-              <span className="w-full truncate text-center text-[11px] text-muted-foreground">
-                {m.full}
-              </span>
+      {/* ── Qué fulls se comparan ───────────────────────────────────────── */}
+      <section className="soft-card overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setObertElSelector((v) => !v)}
+          aria-expanded={obertElSelector}
+          className="flex w-full items-center gap-3 px-4 py-3 text-left"
+        >
+          <ListChecks className="size-5 shrink-0 text-primary" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">Fulls a comparar</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {triats.length === 0
+                ? "Cap seleccionat"
+                : `${triats.length} de ${fulls.length} · ${triats.join(", ")}`}
+            </p>
+          </div>
+          <ChevronDown
+            className={cn("size-5 shrink-0 text-muted-foreground", obertElSelector && "rotate-180")}
+            aria-hidden
+          />
+        </button>
+
+        {obertElSelector && (
+          <div className="animate-fade-in border-t border-border p-4">
+            <div className="mb-3 flex flex-wrap gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setTriats(fulls)}>
+                Tots
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setTriats(fulls.slice(-6))}>
+                Últims 6
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={triats.length === 0}
+                onClick={() => setTriats([])}
+              >
+                Cap
+              </Button>
             </div>
-          ))}
-        </div>
+
+            <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+              {fulls.map((full) => (
+                <label
+                  key={full}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-muted"
+                >
+                  <input
+                    type="checkbox"
+                    checked={triats.includes(full)}
+                    onChange={() => alternar(full)}
+                    className="size-[18px] shrink-0 accent-[var(--primary)]"
+                  />
+                  <span className="truncate text-sm">{full}</span>
+                  {full === mes && (
+                    <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                      obert
+                    </span>
+                  )}
+                </label>
+              ))}
+            </div>
+
+            <p className="mt-3 text-xs text-tertiary-foreground">
+              Cada full és una lectura del full de càlcul. Amb menys fulls, més
+              ràpid.
+            </p>
+          </div>
+        )}
       </section>
 
-      <div className="overflow-x-auto soft-card">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border">
-              {["Full", "Comandes", "Entregades", "Incidències", "Pendents", "Facturable", "Mitjana"].map(
-                (etiqueta, i) => (
-                  <th
-                    key={etiqueta}
-                    className={cn(
-                      "px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
-                      i === 0 ? "text-left" : "text-right",
-                    )}
-                  >
-                    {etiqueta}
-                  </th>
-                ),
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {mesos.map((m) => (
-              <tr key={m.full} className="border-b border-border last:border-0">
-                <td className="px-4 py-2 font-medium">{m.full}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                  {m.resum.total}
-                </td>
-                <td className="px-4 py-2 text-right tabular-nums">{m.resum.entregats}</td>
-                <td className="px-4 py-2 text-right tabular-nums">
-                  {m.resum.incidencies > 0 ? (
-                    <span className="text-status-incidencia">{m.resum.incidencies}</span>
-                  ) : (
-                    <span className="text-tertiary-foreground">0</span>
-                  )}
-                </td>
-                <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                  {m.resum.pendents}
-                </td>
-                <td className="px-4 py-2 text-right font-semibold tabular-nums">
-                  {euros(m.resum.facturat)} €
-                </td>
-                <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                  {euros(m.resum.mitjana)} €
-                </td>
-              </tr>
+      {!online && (
+        <p className="rounded-xl bg-warning-surface px-4 py-2.5 text-sm text-warning-foreground">
+          Sense cobertura només es veu el full obert: la resta cal anar a buscar-los.
+        </p>
+      )}
+
+      {error && (
+        <p className="rounded-xl bg-[color-mix(in_srgb,var(--destructive)_12%,transparent)] px-4 py-2.5 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+
+      {hiHaQueDemanar && errores.length > 0 && (
+        <div className="rounded-xl bg-warning-surface px-4 py-2.5 text-sm text-warning-foreground">
+          <p className="font-medium">
+            {errores.length} {errores.length === 1 ? "full no s'ha pogut llegir" : "fulls no s'han pogut llegir"}:
+          </p>
+          <ul className="mt-1 list-inside list-disc text-xs">
+            {errores.map((e) => (
+              <li key={e.full}>
+                <strong>{e.full}</strong> — {e.motiu}
+              </li>
             ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t border-border">
-              <td className="px-4 py-2.5 text-xs text-muted-foreground">Total</td>
-              <td />
-              <td className="px-4 py-2.5 text-right font-semibold tabular-nums">
-                {totals.entregats}
-              </td>
-              <td className="px-4 py-2.5 text-right font-semibold tabular-nums">
-                {totals.incidencies}
-              </td>
-              <td />
-              <td className="px-4 py-2.5 text-right font-semibold tabular-nums">
-                {euros(totals.facturat)} €
-              </td>
-              <td />
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+          </ul>
+        </div>
+      )}
+
+      {carregant && mesos.length === 0 && (
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          Llegint {aDemanar.length} {aDemanar.length === 1 ? "full" : "fulls"}…
+        </p>
+      )}
+
+      {!carregant && mesos.length === 0 && !error && (
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          Tria algun full per comparar.
+        </p>
+      )}
+
+      {mesos.length > 0 && (
+        <>
+          {/* ── El resumen de todo lo elegido ──────────────────────────── */}
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <Xifra
+              icono={<Euro className="size-5" aria-hidden />}
+              tono="primary"
+              etiqueta={`Facturat · ${mesos.length} ${mesos.length === 1 ? "full" : "fulls"}`}
+              valor={`${euros(total.facturat)} €`}
+              peu={`${total.entregats} entregues`}
+            />
+            <Xifra
+              icono={<TrendingUp className="size-5" aria-hidden />}
+              tono="primary"
+              etiqueta="Mitjana per full"
+              valor={`${euros(mitjanaMensual)} €`}
+              peu={mesos.length === 1 ? "un sol full" : `entre ${mesos.length} fulls`}
+            />
+            <Xifra
+              icono={<Package className="size-5" aria-hidden />}
+              tono="success"
+              etiqueta="Mitjana per entrega"
+              valor={`${euros(total.mitjana)} €`}
+              peu={`${total.ambImport} amb import`}
+            />
+            <Xifra
+              icono={<CalendarCheck className="size-5" aria-hidden />}
+              tono="success"
+              etiqueta="Millor full"
+              valor={millor ? `${euros(millor.facturat)} €` : "—"}
+              peu={millor?.full ?? ""}
+            />
+          </div>
+
+          {/* ── Facturado por full ─────────────────────────────────────── */}
+          <section className="soft-card p-5">
+            <h3 className="text-base font-semibold">Facturat per full</h3>
+            <p className="mb-4 text-sm text-muted-foreground">
+              {total.diesTreballats > 0
+                ? `${total.diesTreballats} dies treballats · ${euros(total.mitjanaPerDia)} € per dia`
+                : "Cap entrega té dia assignat: la columna \"Data entrega\" del full està buida."}
+            </p>
+            <div className="flex h-56 items-stretch gap-3 overflow-x-auto pb-1">
+              {mesos.map((m, i) => {
+                const previ = i > 0 ? mesos[i - 1] : null;
+                const canvi = previ ? variacio(m.facturat, previ.facturat) : null;
+                return (
+                  <div
+                    key={m.full}
+                    className="group flex h-full min-w-20 flex-1 flex-col items-center gap-1.5"
+                    title={`${m.full} · ${m.entregats} entregues · ${euros(m.facturat)} €`}
+                  >
+                    {canvi !== null && (
+                      <span
+                        className={cn(
+                          "text-[11px] font-semibold tabular-nums",
+                          canvi >= 0 ? "text-[color:var(--success)]" : "text-destructive",
+                        )}
+                      >
+                        {canvi >= 0 ? "+" : ""}
+                        {String(canvi).replace(".", ",")}%
+                      </span>
+                    )}
+                    <span className="text-xs font-semibold tabular-nums">
+                      {euros(m.facturat)} €
+                    </span>
+                    <div className="flex min-h-0 w-full flex-1 items-end">
+                      <div
+                        className={cn(
+                          "w-full rounded-t-lg transition-colors",
+                          m.full === millor?.full ? "bg-primary" : "bg-primary/60 group-hover:bg-primary/80",
+                        )}
+                        style={{ height: `${Math.max(2, (m.facturat / maxFacturat) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="w-full truncate text-center text-[11px] text-muted-foreground">
+                      {m.full}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* ── La tabla, ordenable ────────────────────────────────────── */}
+          <div className="overflow-x-auto soft-card">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  {COLUMNES.map((col, i) => {
+                    const activa = ordre?.clau === col.clau;
+                    return (
+                      <th
+                        key={col.clau}
+                        className={cn(
+                          "px-4 py-2.5 text-xs font-semibold uppercase tracking-wide",
+                          !col.sempre && "hidden lg:table-cell",
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOrdre((previ) =>
+                              previ?.clau === col.clau
+                                ? { clau: col.clau, asc: !previ.asc }
+                                : { clau: col.clau, asc: false },
+                            )
+                          }
+                          aria-label={`Ordenar per ${col.etiqueta}`}
+                          className={cn(
+                            "flex w-full items-center gap-1",
+                            col.dreta && "justify-end",
+                            activa ? "text-primary" : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {i > 0 && col.dreta && <ArrowUpDown className={cn("size-3", !activa && "opacity-0")} aria-hidden />}
+                          {col.etiqueta}
+                          {(i === 0 || !col.dreta) && <ArrowUpDown className={cn("size-3", !activa && "opacity-0")} aria-hidden />}
+                        </button>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {ordenats.map((m) => (
+                  <tr key={m.full} className="border-b border-border last:border-0">
+                    {COLUMNES.map((col) => (
+                      <td
+                        key={col.clau}
+                        className={cn(
+                          "px-4 py-2 tabular-nums",
+                          col.dreta && "text-right",
+                          col.clau === "full" && "font-medium",
+                          col.clau === "incidencies" && m.incidencies > 0 && "text-status-incidencia",
+                          col.clau === "senseImport" && m.senseImport > 0 && "text-status-incidencia",
+                          col.clau === "facturat" && "font-semibold",
+                          !col.sempre && "hidden lg:table-cell",
+                        )}
+                      >
+                        {col.format(m)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-border">
+                  {COLUMNES.map((col) => (
+                    <td
+                      key={col.clau}
+                      className={cn(
+                        "px-4 py-2.5 font-semibold tabular-nums",
+                        col.dreta && "text-right",
+                        !col.sempre && "hidden lg:table-cell",
+                      )}
+                    >
+                      {col.clau === "full" ? "Total" : col.format(total)}
+                    </td>
+                  ))}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <p className="px-1 text-xs text-tertiary-foreground">
+            «Mitjana» és per entrega amb import; «Per dia», el facturat entre els
+            dies amb alguna entrega. Les entregues sense import no compten a cap
+            de les dues: encara no se sap què valen.
+          </p>
+        </>
+      )}
     </div>
   );
 }

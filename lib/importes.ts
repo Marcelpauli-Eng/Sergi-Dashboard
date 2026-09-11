@@ -31,11 +31,6 @@ export interface ImporteEntrada {
   sheetTab: string | null;
 }
 
-/** Número con coma decimal, como el resto de importes de la hoja. */
-function importeSheet(valor: number): string {
-  return valor.toFixed(2).replace(".", ",");
-}
-
 /**
  * Un importe leído de una celda.
  *
@@ -74,11 +69,25 @@ export function parseImportes(filas: unknown[][]): Map<string, number> {
   return importes;
 }
 
+/**
+ * Una fila de la pestaña: comanda, importe, full y cuándo se tocó.
+ *
+ * Se escribe en crudo (`RAW`), sin dejar que Google interprete nada, y por
+ * eso el importe va como NÚMERO y el resto como texto.
+ *
+ * Interpretando, un full llamado "JUL 26" se guardaba como la fecha 26 de
+ * julio —un 46229— y el nombre del mes se perdía. Y el importe escrito
+ * "80,00" dependía de la configuración regional de la hoja para acabar
+ * siendo un número o un texto. En crudo no hay nada que adivinar: el número
+ * es un número y se puede sumar con una fórmula, y el nombre es el nombre.
+ */
+export type FilaImporte = (string | number)[];
+
 export interface PlanImportes {
   /** Filas que ya existen: número de fila en la hoja y contenido nuevo. */
-  actualizar: { fila: number; valores: string[] }[];
+  actualizar: { fila: number; valores: FilaImporte }[];
   /** Filas que no existían y hay que añadir al final. */
-  nuevas: string[][];
+  nuevas: FilaImporte[];
 }
 
 /**
@@ -109,9 +118,11 @@ export function planImportes(
   const añadidas = new Map<string, number>();
 
   for (const entrada of entradas) {
-    const valores = [
+    const valores: FilaImporte = [
       entrada.orderId,
-      entrada.price === null ? "" : importeSheet(entrada.price),
+      // Vacío cuando no hay importe: "sin importe" y "cero euros" no son lo
+      // mismo a la hora de facturar.
+      entrada.price === null ? "" : entrada.price,
       entrada.sheetTab ?? "",
       ahora,
     ];

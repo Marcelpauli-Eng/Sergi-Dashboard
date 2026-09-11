@@ -779,8 +779,9 @@ export default function Dashboard({ driverName }: { driverName: string }) {
               <TabAvui
                 todayStops={todayStops}
                 sensAssignar={unassignedStops.length}
-                entregats={historyStops.entregat.length}
-                incidencies={historyStops.incidencia.length}
+                entregats={historyStops.entregat}
+                incidencies={historyStops.incidencia}
+                avui={todayDate}
                 onIr={anarA}
                 routeResult={routeResult}
                 generatingRoute={generatingRoute}
@@ -925,6 +926,7 @@ function TabAvui({
   sensAssignar,
   entregats,
   incidencies,
+  avui,
   onIr,
   routeResult,
   generatingRoute,
@@ -937,9 +939,12 @@ function TabAvui({
 }: {
   todayStops: Stop[];
   sensAssignar: number;
-  entregats: number;
-  incidencies: number;
-  onIr: (destino: "calendari" | "historial") => void;
+  /* Enteras y no contadas: el resumen separa lo de hoy del resto del full,
+     y para eso necesita la fecha y el importe de cada una. */
+  entregats: Stop[];
+  incidencies: Stop[];
+  avui: string;
+  onIr: (destino: "calendari" | "historial" | "factures") => void;
   routeResult: RouteResult | null;
   generatingRoute: boolean;
   online: boolean;
@@ -980,10 +985,10 @@ function TabAvui({
     <>
       <div className="mb-6 animate-rise-in">
         <HomeSummary
-          pendents={pendents.length}
-          enCurs={enCurs.length}
+          todayStops={todayStops}
           entregats={entregats}
           incidencies={incidencies}
+          avui={avui}
           sensAssignar={sensAssignar}
           totalDistanceMeters={routeResult?.totalDistanceMeters ?? null}
           totalDurationSeconds={routeResult?.totalDurationSeconds ?? null}
