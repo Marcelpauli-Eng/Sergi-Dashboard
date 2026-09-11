@@ -10,7 +10,6 @@ import {
   FileText,
   History,
   LogOut,
-  Phone,
   Search,
   Settings,
   Truck,
@@ -29,7 +28,6 @@ import { cn } from "@/lib/utils";
 
 export type Seccion =
   | "avui"
-  | "trucades"
   | "calendari"
   | "historial"
   | "factures"
@@ -41,7 +39,6 @@ const GRUPOS: { titol: string; items: { id: Seccion; label: string; icona: typeo
     titol: "Repartiment",
     items: [
       { id: "avui", label: "Avui", icona: Clock },
-      { id: "trucades", label: "Trucades", icona: Phone },
       { id: "calendari", label: "Calendari", icona: CalendarDays },
       { id: "historial", label: "Historial", icona: History },
     ],

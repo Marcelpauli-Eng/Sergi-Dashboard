@@ -1013,3 +1013,82 @@ export async function actualizarEstadoFactura(
   const todas = await readFacturas();
   return todas.find((f) => f.numero === numero) ?? null;
 }
+
+/**
+ * El identificador interno de una pestaña, que no es su nombre.
+ *
+ * Hace falta para borrar una fila: la API de valores sabe escribir y vaciar
+ * celdas, pero quitar la fila entera es una operación de estructura y esas
+ * van por `:batchUpdate`, que pide el `sheetId` —el número que sale en la
+ * URL como `#gid=`— y no el título.
+ */
+async function idPestanya(doc: string, titulo: string): Promise<number | null> {
+  const data = (await sheetsFetch(
+    "?fields=sheets.properties(sheetId,title)",
+    undefined,
+    doc,
+  )) as { sheets?: { properties?: { sheetId?: number; title?: string } }[] };
+
+  const pestanya = (data.sheets ?? []).find((s) => s.properties?.title === titulo);
+  return pestanya?.properties?.sheetId ?? null;
+}
+
+/**
+ * Borra una factura emitida. `false` si ese número ya no está en la hoja.
+ *
+ * Se quita la FILA entera en vez de vaciarla: una fila en blanco en medio de
+ * la serie se lee igual que una factura rota, y `actualizarEstadoFactura`
+ * cuenta filas para saber dónde escribir.
+ *
+ * Borrar la última deja su número libre —`emitirFactura` coge el mayor más
+ * uno—, que es justo lo que se quiere al haberse equivocado y querer
+ * rehacerla. Borrar una de en medio deja un hueco en la serie y eso ya no lo
+ * arregla la app: lo avisa antes de hacerlo (ver `components/factures.tsx`),
+ * pero la decisión es de quien factura.
+ */
+export async function esborrarFactura(numero: number): Promise<boolean> {
+  const doc = docFacturas();
+  const tabs = await tabsFacturas(doc);
+  if (!tabs.includes(TAB_FACTURAS)) return false;
+
+  const gid = await idPestanya(doc, TAB_FACTURAS);
+  if (gid === null) return false;
+
+  const data = (await sheetsFetch(
+    `/values/${encodeURIComponent(range("A2:A", TAB_FACTURAS))}` +
+      `?valueRenderOption=UNFORMATTED_VALUE`,
+    undefined,
+    doc,
+  )) as { values?: unknown[][] };
+
+  const indice = (data.values ?? []).findIndex((fila) => parseNumber(fila[0]) === numero);
+  if (indice === -1) return false;
+
+  // La API cuenta las filas desde 0 y sin cabecera: la fila 2 de la hoja es
+  // el índice 1. Se relee justo antes de borrar, como en todo lo demás,
+  // porque alguien puede haber tocado la hoja a mano mientras tanto.
+  const inicio = indice + 1;
+  await sheetsFetch(
+    ":batchUpdate",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        requests: [
+          {
+            deleteDimension: {
+              range: {
+                sheetId: gid,
+                dimension: "ROWS",
+                startIndex: inicio,
+                endIndex: inicio + 1,
+              },
+            },
+          },
+        ],
+      }),
+    },
+    doc,
+  );
+
+  return true;
+}

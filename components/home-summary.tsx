@@ -9,7 +9,6 @@ import {
   FileText,
   Inbox,
   MapPin,
-  Phone,
   Route,
   TriangleAlert,
 } from "lucide-react";
@@ -39,7 +38,6 @@ interface Props {
   avui: string;
   sensAssignar: number;
   /** Cuántas llamadas quedan del día que toca llamar (normalmente demà). */
-  trucadesPendents: number;
   /** Kilómetros y minutos de la ruta, si ya se ha calculado. */
   totalDistanceMeters: number | null;
   totalDurationSeconds: number | null;
@@ -47,7 +45,7 @@ interface Props {
   generandoRuta: boolean;
   online: boolean;
   onGenerarRuta: () => void;
-  onIr: (destino: "trucades" | "calendari" | "historial" | "factures") => void;
+  onIr: (destino: "calendari" | "historial" | "factures") => void;
 }
 
 export default function HomeSummary({
@@ -56,7 +54,6 @@ export default function HomeSummary({
   incidencies,
   avui,
   sensAssignar,
-  trucadesPendents,
   totalDistanceMeters,
   totalDurationSeconds,
   rutaCalculada,
@@ -342,14 +339,6 @@ export default function HomeSummary({
         {/* Dos por fila en el móvil y cuatro en pantalla grande: con tres
             columnas, el cuarto acceso se quedaba solo en una fila. */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {/* El primero porque es lo que se hace la víspera, con el día ya
-              cerrado: llamar a los clientes de mañana. */}
-          <Acceso
-            icono={<Phone className="size-6" aria-hidden />}
-            etiqueta="Trucades"
-            insignia={trucadesPendents}
-            onClick={() => onIr("trucades")}
-          />
           <Acceso
             icono={<Inbox className="size-6" aria-hidden />}
             etiqueta="Sense assignar"

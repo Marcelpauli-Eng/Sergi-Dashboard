@@ -2,11 +2,17 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isConfigError } from "@/lib/env";
 import { getSession } from "@/lib/session";
-import { actualizarEstadoFactura, emitirFactura, readFacturas } from "@/lib/sheets";
+import {
+  actualizarEstadoFactura,
+  emitirFactura,
+  esborrarFactura,
+  readFacturas,
+} from "@/lib/sheets";
 import {
   isDemoMode,
   demoFacturas,
   emitirFacturaDemo,
+  esborrarFacturaDemo,
   actualizarEstadoFacturaDemo,
 } from "@/lib/demo";
 
@@ -19,6 +25,7 @@ import {
  * POST  → emite una nueva: le asigna el siguiente número de la serie y la
  *         registra.
  * PATCH → mueve el estado del cobro de una que ya está emitida.
+ * DELETE → la quita de la hoja. No se puede deshacer.
  *
  * El número lo pone el servidor, nunca el móvil: es lo único que garantiza
  * que la serie no tenga saltos ni repetidos. Por eso emitir necesita
@@ -157,5 +164,58 @@ export async function PATCH(request: Request) {
   } catch (error) {
     console.error("Error actualizando el estado de la factura:", error);
     return fallo(error, "No se ha podido actualizar el estado en el Google Sheet");
+  }
+}
+
+const esborrarSchema = z.object({
+  numero: z.number().int().min(1).max(9_999_999),
+});
+
+/**
+ * Borra una factura emitida.
+ *
+ * Existe porque emitir es la única acción de la app que no se puede corregir
+ * escribiendo encima: el número es correlativo y sale del servidor, así que
+ * una factura mal emitida —el mes equivocado, una comanda de más— se
+ * arreglaba entrando en el Google Sheet a mano.
+ *
+ * No hay marcha atrás y el aviso lo da la pantalla antes de llamar aquí (ver
+ * `components/factures.tsx`): aquí solo se comprueba que la factura exista.
+ */
+export async function DELETE(request: Request) {
+  const driver = await getSession();
+  if (!driver) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+
+  const parsed = esborrarSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Petición inválida: falta el número de factura" },
+      { status: 400 },
+    );
+  }
+
+  if (isDemoMode()) {
+    return esborrarFacturaDemo(parsed.data.numero)
+      ? NextResponse.json({ esborrada: parsed.data.numero })
+      : NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
+  }
+
+  try {
+    const esborrada = await esborrarFactura(parsed.data.numero);
+    if (!esborrada) {
+      return NextResponse.json(
+        { error: "Esa factura ya no está en la hoja" },
+        { status: 404 },
+      );
+    }
+    console.warn(
+      `Factura ${parsed.data.numero} borrada de la hoja por ${driver.id}`,
+    );
+    return NextResponse.json({ esborrada: parsed.data.numero });
+  } catch (error) {
+    console.error("Error borrando la factura:", error);
+    return fallo(error, "No se ha podido borrar la factura del Google Sheet");
   }
 }

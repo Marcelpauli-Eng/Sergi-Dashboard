@@ -17,11 +17,10 @@
     "check:schema": "node --no-warnings scripts/check-schema.mts",
     "check:format": "node --no-warnings scripts/check-format.mts",
     "check:ajustes": "node --no-warnings scripts/check-ajustes.mts",
-    "test": "npm run check:dates --silent && npm run check:format --silent && npm run check:cells --silent && npm run check:schema --silent && npm run check:factura --silent && npm run check:ajustes --silent && npm run check:outbox --silent && npm run check:importes --silent && npm run check:informes --silent && npm run check:trucades --silent && npm run check:pdf --silent",
+    "test": "npm run check:dates --silent && npm run check:format --silent && npm run check:cells --silent && npm run check:schema --silent && npm run check:factura --silent && npm run check:ajustes --silent && npm run check:outbox --silent && npm run check:importes --silent && npm run check:informes --silent && npm run check:pdf --silent",
     "migrar:imports": "node --no-warnings --env-file=.env.local scripts/migrar-imports.mts",
     "check:importes": "node --no-warnings scripts/check-importes.mts",
-    "check:informes": "node --no-warnings scripts/check-informes.mts",
-    "check:trucades": "node --no-warnings scripts/check-trucades.mts"
+    "check:informes": "node --no-warnings scripts/check-informes.mts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.3.3",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, FileCheck, Printer } from "lucide-react";
+import { Download, FileCheck, Printer, Trash2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Factura, { Hoja } from "@/components/factura";
 import type { FacturaEmitida, Stop } from "@/lib/types";
@@ -42,6 +42,20 @@ function hojasDe(factura: FacturaEmitida, datos: DatosFacturacion) {
 }
 
 /**
+ * ¿Es la última de la serie?
+ *
+ * Cambia lo que pasa al borrarla: si lo es, su número vuelve a quedar libre
+ * —`emitirFactura` coge el mayor más uno— y no se nota nada. Si no lo es,
+ * queda un hueco para siempre, y eso hay que decirlo antes.
+ */
+function esUltimaEmesa(
+  factura: FacturaEmitida,
+  totes: FacturaEmitida[] | null,
+): boolean {
+  return (totes ?? []).every((f) => f.numero <= factura.numero);
+}
+
+/**
  * Las facturas ya emitidas.
  *
  * Salen de la pestaña "Factures" del mismo Google Sheet, que es donde las
@@ -72,6 +86,10 @@ export default function Factures({
   const [facturas, setFacturas] = useState<FacturaEmitida[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [aImprimir, setAImprimir] = useState<FacturaEmitida | null>(null);
+  /** La factura que se está a punto de borrar, mientras se confirma. */
+  const [aEsborrar, setAEsborrar] = useState<FacturaEmitida | null>(null);
+  const [esborrant, setEsborrant] = useState(false);
+  const [errorEsborrar, setErrorEsborrar] = useState<string | null>(null);
   const [facturant, setFacturant] = useState(false);
   // Cambia al emitir una factura: fuerza a releer el listado.
   const [recarrega, setRecarrega] = useState(0);
@@ -99,6 +117,42 @@ export default function Factures({
   }, [recarrega]);
 
   const paginas = aImprimir ? paginar(aImprimir.lineas) : [];
+
+  /**
+   * Borra la factura que se estaba confirmando.
+   *
+   * La lista se arregla aquí en vez de volver a pedirla: la respuesta ya dice
+   * que ha desaparecido de la hoja, y releer son otros dos segundos mirando
+   * una factura que ya no existe.
+   */
+  const esborrar = async () => {
+    if (!aEsborrar) return;
+    setEsborrant(true);
+    setErrorEsborrar(null);
+    try {
+      const respuesta = await fetch("/api/facturas", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ numero: aEsborrar.numero }),
+      });
+      if (!respuesta.ok) {
+        const cuerpo = await respuesta.json().catch(() => null);
+        throw new Error(cuerpo?.error ?? "No s'ha pogut esborrar");
+      }
+      setFacturas((previas) =>
+        (previas ?? []).filter((f) => f.numero !== aEsborrar.numero),
+      );
+      // La que se estuviera imprimiendo, si era esta, deja de existir.
+      setAImprimir((previa) =>
+        previa?.numero === aEsborrar.numero ? null : previa,
+      );
+      setAEsborrar(null);
+    } catch (e) {
+      setErrorEsborrar(e instanceof Error ? e.message : "Error desconegut");
+    } finally {
+      setEsborrant(false);
+    }
+  };
 
   return (
     <div className="space-y-6 lg:grid lg:grid-cols-[20rem_minmax(0,1fr)] lg:items-start lg:gap-6 lg:space-y-0">
@@ -231,12 +285,121 @@ export default function Factures({
                     <Printer />
                     <span className="sm:hidden">Imprimir</span>
                   </Button>
+                  {/* Sin etiqueta y sin crecer: es el que no se pulsa nunca
+                      por error, y al lado de los otros dos se distingue por
+                      el color, no por el tamaño. */}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="min-h-10 shrink-0 text-destructive sm:min-h-0"
+                    aria-label={`Esborrar la factura ${formatearNumero(factura.numero)}`}
+                    onClick={() => {
+                      setErrorEsborrar(null);
+                      setAEsborrar(factura);
+                    }}
+                  >
+                    <Trash2 />
+                  </Button>
                 </div>
               </li>
             ))}
           </ul>
         )}
       </div>
+
+      {/* ── Confirmación de borrado ───────────────────────────────────
+          Emitir es la única acción de la app que no se puede corregir
+          escribiendo encima, así que borrar una factura tampoco se hace de
+          un toque: hay que confirmarlo viendo de cuál se trata y qué pasa
+          con su número. */}
+      {aEsborrar && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="esborrar-titol"
+          className="fixed inset-0 z-[110] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+        >
+          <div className="soft-card w-full max-w-md">
+            <div className="flex items-start gap-3 p-5">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-destructive/15 text-destructive">
+                <Trash2 className="size-5" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <h2 id="esborrar-titol" className="text-lg font-semibold">
+                  Esborrar la factura {formatearNumero(aEsborrar.numero)}?
+                </h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {fechaCorta(aEsborrar.fecha)} · {aEsborrar.periodo} ·{" "}
+                  {aEsborrar.lineas.length}{" "}
+                  {aEsborrar.lineas.length === 1 ? "comanda" : "comandes"} ·{" "}
+                  <span className="font-semibold text-foreground">
+                    {euros(aEsborrar.total)} €
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2 border-t border-border px-5 py-4 text-sm">
+              <p>
+                Desapareix del teu document de factures i{" "}
+                <span className="font-semibold">no es pot desfer</span>.
+              </p>
+
+              {esUltimaEmesa(aEsborrar, facturas) ? (
+                <p className="text-muted-foreground">
+                  És l&apos;última de la sèrie: el número{" "}
+                  {formatearNumero(aEsborrar.numero)} tornarà a quedar lliure i
+                  el farà servir la pròxima que emetis.
+                </p>
+              ) : (
+                /* Un hueco en una serie de facturas no es un detalle: hay que
+                   poder explicarlo. La app no lo impide —la decisión es de
+                   quien factura— pero no deja que pase sin saberlo. */
+                <p className="flex gap-2 rounded-xl bg-warning-surface px-3 py-2 text-warning-foreground">
+                  <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+                  <span>
+                    No és l&apos;última: la sèrie quedarà amb un buit al número{" "}
+                    {formatearNumero(aEsborrar.numero)}. Les altres no es
+                    renumeren.
+                  </span>
+                </p>
+              )}
+
+              {!online && (
+                <p className="rounded-xl bg-warning-surface px-3 py-2 text-warning-foreground">
+                  Sense cobertura no es pot esborrar: les factures viuen al
+                  document de Google.
+                </p>
+              )}
+
+              {errorEsborrar && (
+                <p className="text-destructive">{errorEsborrar}</p>
+              )}
+            </div>
+
+            <div className="flex gap-2 border-t border-border p-3">
+              <Button
+                variant="ghost"
+                className="flex-1"
+                disabled={esborrant}
+                onClick={() => setAEsborrar(null)}
+              >
+                Cancel·lar
+              </Button>
+              <Button
+                /* El rojo del sistema oscurecido: en blanco sobre el rojo tal
+                   cual no hay contraste suficiente para leer un botón. */
+                className="flex-1 bg-[color-mix(in_srgb,var(--destructive)_80%,black)] font-semibold text-white"
+                disabled={esborrant || !online}
+                onClick={() => void esborrar()}
+              >
+                <Trash2 />
+                {esborrant ? "Esborrant…" : "Sí, esborrar"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Fuera de la pantalla; solo se ve al imprimir. */}
       {aImprimir && (

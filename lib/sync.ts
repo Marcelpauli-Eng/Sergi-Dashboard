@@ -341,61 +341,6 @@ export function setCustomOrder(orderIds: string[]): void {
   emitLocalPrefs();
 }
 
-/* ── Las llamadas de la víspera ──────────────────────────────────────── */
-
-const TRUCADES_KEY = "reparto:trucades";
-
-/**
- * A quién se ha llamado ya, y cuándo: comanda → ISO de la llamada.
- *
- * En el móvil y no en ninguna hoja, a propósito. Una llamada para confirmar
- * que mañana hay alguien en casa no es un dato del reparto: no le interesa a
- * la oficina, no hay que facturarla y no tiene que sobrevivir a nada. Y así
- * marcarla funciona igual sin cobertura, que es cuando se hacen.
- *
- * ponytail: es de este móvil. Si algún día se llama desde dos sitios, esto
- * tendría que irse al documento privado, como los importes.
- */
-const SENSE_TRUCADES: Readonly<Record<string, string>> = {};
-
-let trucadesCache: { raw: string | null; valor: Readonly<Record<string, string>> } = {
-  raw: null,
-  valor: SENSE_TRUCADES,
-};
-
-export function getTrucades(): Readonly<Record<string, string>> {
-  if (typeof window === "undefined") return SENSE_TRUCADES;
-
-  const raw = localStorage.getItem(TRUCADES_KEY);
-  if (raw === trucadesCache.raw) return trucadesCache.valor;
-
-  let valor: Readonly<Record<string, string>> = SENSE_TRUCADES;
-  try {
-    if (raw) valor = JSON.parse(raw) as Record<string, string>;
-  } catch {
-    valor = SENSE_TRUCADES;
-  }
-  trucadesCache = { raw, valor };
-  return valor;
-}
-
-/** Snapshot para el render de servidor: siempre la misma referencia. */
-export function getTrucadesServer(): Readonly<Record<string, string>> {
-  return SENSE_TRUCADES;
-}
-
-/** Marca (o desmarca) una comanda como llamada. */
-export function marcarTrucada(orderId: string, feta: boolean): void {
-  if (typeof window === "undefined") return;
-
-  const actual = { ...getTrucades() };
-  if (feta) actual[orderId] = new Date().toISOString();
-  else delete actual[orderId];
-
-  localStorage.setItem(TRUCADES_KEY, JSON.stringify(actual));
-  emitLocalPrefs();
-}
-
 /**
  * Aplica el orden personalizado a una lista de stops.
  * Los IDs conocidos mantienen su posición; los nuevos se añaden al final.

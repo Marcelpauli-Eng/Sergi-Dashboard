@@ -409,6 +409,27 @@ export default function StopCard({
                 )}
               </div>
 
+              {/*
+                El importe, editable también aquí y no solo en la ficha.
+
+                En el móvil el historial son estas tarjetas —la tabla no cabe
+                en 375 px—, así que este era el único sitio desde donde no se
+                podía corregir un dedazo en un precio. Solo sale donde el
+                padre pasa `onImporte`: en la ruta del día estorbaría.
+              */}
+              {onImporte && (
+                <dl className="mt-2">
+                  <ImportEditable
+                    stop={stop}
+                    onImporte={onImporte}
+                    editant={editantImport}
+                    setEditant={setEditantImport}
+                    desat={desat}
+                    setDesat={setDesat}
+                  />
+                </dl>
+              )}
+
               {(stop.measures || stop.bultos > 1) && (
                 <p className="mt-1 text-xs text-tertiary-foreground">
                   📦{" "}

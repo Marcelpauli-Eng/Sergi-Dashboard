@@ -267,6 +267,14 @@ export function emitirFacturaDemo(
   return factura;
 }
 
+/** Borra una factura de la demo. `false` si ese número no existe. */
+export function esborrarFacturaDemo(numero: number): boolean {
+  const i = facturasDemo.findIndex((f) => f.numero === numero);
+  if (i === -1) return false;
+  facturasDemo.splice(i, 1);
+  return true;
+}
+
 export function actualizarEstadoFacturaDemo(
   numero: number,
   estat: EstatFactura,

@@ -1,0 +1,10 @@
+import { JWT } from "google-auth-library";
+const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!;
+const key = (process.env.GOOGLE_PRIVATE_KEY ?? "").replace(/\\n/g, "\n");
+const raw = process.env.GOOGLE_SHEET_ID_FACTURAS ?? "";
+const id = raw.match(/\/d\/([A-Za-z0-9_-]+)/)?.[1] ?? raw;
+const jwt = new JWT({ email, key, scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"] });
+const token = (await jwt.getAccessToken()).token;
+const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent("'Factures'!A1:K100")}?valueRenderOption=UNFORMATTED_VALUE`, { headers: { Authorization: `Bearer ${token}` } });
+const j = await r.json() as { values?: unknown[][] };
+console.log(JSON.stringify(j.values ?? [], null, 1));

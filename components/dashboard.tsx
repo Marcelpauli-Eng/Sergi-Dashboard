@@ -17,6 +17,7 @@ import {
   History,
   Inbox,
   Menu,
+  Phone,
   Route,
   RotateCw,
   Search,
@@ -31,7 +32,6 @@ import HomeSummary from "@/components/home-summary";
 import Factures from "@/components/factures";
 import Informes from "@/components/informes";
 import Cobraments from "@/components/cobraments";
-import Trucades from "@/components/trucades";
 import Cercador from "@/components/cercador";
 import Desfer, { MARGE_DESFER_MS, type AccioDesfer } from "@/components/desfer";
 import Endarrerides from "@/components/endarrerides";
@@ -54,11 +54,8 @@ import {
   subscribeLocalPrefs,
   getThemePreference,
   getThemePreferenceServer,
-  getTrucades,
-  getTrucadesServer,
 } from "@/lib/sync";
-import { formatDistance, formatDuration } from "@/lib/format";
-import { diaPerDefecte, diesPerTrucar, resumTrucades } from "@/lib/trucades";
+import { formatDistance, formatDuration, telHref } from "@/lib/format";
 import { addDays, formatLongDate, getMonthGrid, getWeekGrid, getYearMonth } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { Stop } from "@/lib/types";
@@ -104,7 +101,6 @@ const MONTH_NAMES = ["Gener", "Febrer", "Març", "Abril", "Maig", "Juny", "Julio
 
 type TabValue =
   | "avui"
-  | "trucades"
   | "calendari"
   | "historial"
   | "factures"
@@ -127,10 +123,6 @@ const REFRESC_MS = 20_000;
 /** Encabezado de cada sección en ordenador e iPad. */
 const TITOLS: Record<TabValue, { titol: string; subtitol: string }> = {
   avui: { titol: "Avui", subtitol: "La ruta del dia i les parades pendents." },
-  trucades: {
-    titol: "Trucades",
-    subtitol: "Avisa als clients de les comandes de demà, o de qualsevol dia.",
-  },
   calendari: { titol: "Calendari", subtitol: "Assigna comandes als dies de repartiment." },
   historial: { titol: "Historial", subtitol: "Tot el que s'ha entregat i les incidències." },
   factures: { titol: "Factures", subtitol: "Factura el mes i consulta les emeses." },
@@ -450,25 +442,6 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       endarrerides: endarrerides.sort((a, b) => a.date.localeCompare(b.date)),
     };
   }, [allStops, customOrderIds, todayDate]);
-
-  /*
-    Cuántas llamadas quedan del día que toca llamar.
-
-    Solo para la insignia del acceso: lo demás lo calcula la propia pantalla
-    de Trucades. Aquí interesa que se vea desde Avui sin entrar, que es el
-    momento en que uno se acuerda —al cerrar el día.
-  */
-  const trucades = useSyncExternalStore(
-    subscribeLocalPrefs,
-    getTrucades,
-    getTrucadesServer,
-  );
-  const trucadesPendents = useMemo(() => {
-    const dies = diesPerTrucar(allStops);
-    const dia = diaPerDefecte(dies, todayDate);
-    const delDia = dies.find((d) => d.date === dia);
-    return delDia ? resumTrucades(delDia.comandas, trucades).perTrucar : 0;
-  }, [allStops, todayDate, trucades]);
 
   const generateRoute = useCallback(async () => {
     // Only generate route for "pendents" in today's active stops
@@ -856,7 +829,6 @@ export default function Dashboard({ driverName }: { driverName: string }) {
               <TabAvui
                 todayStops={todayStops}
                 sensAssignar={unassignedStops.length}
-                trucadesPendents={trucadesPendents}
                 entregats={historyStops.entregat}
                 incidencies={historyStops.incidencia}
                 avui={todayDate}
@@ -870,9 +842,6 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 setRouteResult={setRouteResult}
                 setIsManualOrder={setIsManualOrder}
               />
-            )}
-            {activeTab === "trucades" && (
-              <Trucades stops={allStops} avui={todayDate} />
             )}
             {activeTab === "calendari" && (
               <TabCalendari
@@ -1005,7 +974,6 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 function TabAvui({
   todayStops,
   sensAssignar,
-  trucadesPendents,
   entregats,
   incidencies,
   avui,
@@ -1021,13 +989,12 @@ function TabAvui({
 }: {
   todayStops: Stop[];
   sensAssignar: number;
-  trucadesPendents: number;
   /* Enteras y no contadas: el resumen separa lo de hoy del resto del full,
      y para eso necesita la fecha y el importe de cada una. */
   entregats: Stop[];
   incidencies: Stop[];
   avui: string;
-  onIr: (destino: "trucades" | "calendari" | "historial" | "factures") => void;
+  onIr: (destino: "calendari" | "historial" | "factures") => void;
   routeResult: RouteResult | null;
   generatingRoute: boolean;
   online: boolean;
@@ -1073,7 +1040,6 @@ function TabAvui({
           incidencies={incidencies}
           avui={avui}
           sensAssignar={sensAssignar}
-          trucadesPendents={trucadesPendents}
           totalDistanceMeters={routeResult?.totalDistanceMeters ?? null}
           totalDurationSeconds={routeResult?.totalDurationSeconds ?? null}
           rutaCalculada={routeResult !== null}
@@ -1717,7 +1683,9 @@ function DiaDetall({
                       )}
                     </div>
 
-                    <div className="shrink-0 text-right">
+                    <div className="flex shrink-0 items-center gap-2">
+                      {stop.phone && <Trucar phone={stop.phone} />}
+                      <div className="text-right">
                       <p className="text-sm tabular-nums">
                         {stop.deliveredTime ?? "—"}
                       </p>
@@ -1731,6 +1699,7 @@ function DiaDetall({
                           {stop.price ? `${euros(stop.price)} €` : "sense import"}
                         </p>
                       )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -1770,6 +1739,7 @@ function DiaDetall({
                     {stop.city || stop.address || stop.id}
                   </p>
                 </div>
+                {stop.phone && <Trucar phone={stop.phone} />}
                 <Button variant="ghost" size="sm" onClick={() => onAssignDate(stop.id, null)}>
                   Treure
                 </Button>
@@ -1792,6 +1762,24 @@ function DiaDetall({
         <Bossa stops={unassignedStops} onAssign={(id) => onAssignDate(id, date)} />
       )}
     </div>
+  );
+}
+
+/**
+ * Llamar al cliente desde el propio día.
+ *
+ * Antes había que salir del calendario y buscar la comanda en otra pantalla
+ * para tener el teléfono a mano. Es un enlace `tel:` de toda la vida, así
+ * que en el móvil abre el marcador y en el ordenador lo que tenga puesto.
+ */
+function Trucar({ phone }: { phone: string }) {
+  return (
+    <Button asChild variant="secondary" size="sm" className="shrink-0">
+      <a href={telHref(phone)} onClick={(e) => e.stopPropagation()}>
+        <Phone />
+        Trucar
+      </a>
+    </Button>
   );
 }
 
@@ -2251,7 +2239,12 @@ function TabHistorial({
                 <ul className="space-y-3">
                   {group.stops.map((stop) => (
                     <li key={stop.id}>
-                      <StopCard stop={stop} onDelivered={onDelivered} onIncident={onIncident} />
+                      <StopCard
+                        stop={stop}
+                        onDelivered={onDelivered}
+                        onIncident={onIncident}
+                        onImporte={onImporte}
+                      />
                     </li>
                   ))}
                 </ul>
