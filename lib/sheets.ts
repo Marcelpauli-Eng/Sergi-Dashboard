@@ -12,6 +12,13 @@ import {
 } from "./clients.ts";
 import type { ClienteFacturacion } from "./factura.ts";
 import {
+  CABECERA_EMISSOR,
+  TAB_EMISSOR,
+  emissorAFila,
+  filaAEmissor,
+  type Emissor,
+} from "./emissor.ts";
+import {
   CABECERA_IMPORTS,
   TAB_IMPORTS,
   parseImportes,
@@ -836,14 +843,22 @@ export async function emitirFactura(datos: {
  * Qué es cada columna lo decide `lib/clients.ts`; aquí solo está el viaje.
  */
 
-/** Crea la pestaña con su cabecera, o se la pone si estaba vacía. */
-async function asegurarTabClients(): Promise<void> {
+/**
+ * Crea una pestaña del documento privado con su cabecera, si hace falta.
+ *
+ * Que exista no basta: si alguien la crea a mano y se queda sin cabecera, la
+ * primera fila de datos iría a la 1 y a partir de ahí todo lo que cuenta
+ * desde la 2 apuntaría a la fila equivocada. Por eso la cabecera se escribe
+ * también cuando la pestaña ya estaba pero está vacía.
+ */
+async function asegurarTab(tab: string, cabecera: string[]): Promise<void> {
   const doc = docFacturas();
   const tabs = await tabsFacturas(doc);
+  const rangCabecera = range(`A1:${columnLetter(cabecera.length - 1)}1`, tab);
 
-  if (tabs.includes(TAB_CLIENTS)) {
+  if (tabs.includes(tab)) {
     const actual = (await sheetsFetch(
-      `/values/${encodeURIComponent(range("A1:G1", TAB_CLIENTS))}`,
+      `/values/${encodeURIComponent(rangCabecera)}`,
       undefined,
       doc,
     )) as { values?: unknown[][] };
@@ -854,7 +869,7 @@ async function asegurarTabClients(): Promise<void> {
       {
         method: "POST",
         body: JSON.stringify({
-          requests: [{ addSheet: { properties: { title: TAB_CLIENTS } } }],
+          requests: [{ addSheet: { properties: { title: tab } } }],
         }),
       },
       doc,
@@ -862,8 +877,8 @@ async function asegurarTabClients(): Promise<void> {
   }
 
   await sheetsFetch(
-    `/values/${encodeURIComponent(range("A1:G1", TAB_CLIENTS))}?valueInputOption=USER_ENTERED`,
-    { method: "PUT", body: JSON.stringify({ values: [CABECERA_CLIENTS] }) },
+    `/values/${encodeURIComponent(rangCabecera)}?valueInputOption=USER_ENTERED`,
+    { method: "PUT", body: JSON.stringify({ values: [cabecera] }) },
     doc,
   );
 }
@@ -898,7 +913,7 @@ export async function readClients(): Promise<ClienteFacturacion[]> {
  * borra, que si no un cliente eliminado se quedaría ahí abajo para siempre.
  */
 export async function writeClients(clients: ClienteFacturacion[]): Promise<void> {
-  await asegurarTabClients();
+  await asegurarTab(TAB_CLIENTS, CABECERA_CLIENTS);
   const doc = docFacturas();
 
   if (clients.length > 0) {
@@ -917,6 +932,39 @@ export async function writeClients(clients: ClienteFacturacion[]): Promise<void>
   );
 }
 
+/* ── Quién emite ────────────────────────────────────────────────────────── */
+
+/**
+ * El emisor guardado en el documento.
+ *
+ * `null` si la pestaña no existe todavía o está sin rellenar: eso no es un
+ * error, es una instalación que aún no ha guardado el suyo, y quien llama se
+ * queda con el que ya tenga.
+ */
+export async function readEmissor(): Promise<Emissor | null> {
+  const data = (await sheetsFetch(
+    `/values/${encodeURIComponent(range("A2:G2", TAB_EMISSOR))}`,
+    undefined,
+    docFacturas(),
+  ).catch((error: unknown) => {
+    if (String(error).includes("respondió 400")) return { values: [] };
+    throw error;
+  })) as { values?: unknown[][] };
+
+  return filaAEmissor(data.values?.[0]);
+}
+
+/** Guarda el emisor. Una sola fila: no hay más que uno. */
+export async function writeEmissor(emissor: Emissor): Promise<void> {
+  await asegurarTab(TAB_EMISSOR, CABECERA_EMISSOR);
+
+  await sheetsFetch(
+    `/values/${encodeURIComponent(range("A2:G2", TAB_EMISSOR))}?valueInputOption=USER_ENTERED`,
+    { method: "PUT", body: JSON.stringify({ values: [emissorAFila(emissor)] }) },
+    docFacturas(),
+  );
+}
+
 /* ── Los importes de cada comanda ───────────────────────────────────────── */
 
 /**
@@ -925,45 +973,6 @@ export async function writeClients(clients: ClienteFacturacion[]): Promise<void>
  * Aquí solo está el transporte: qué fila se actualiza y cuál se añade lo
  * decide `lib/importes.ts`, que no depende de la red y se puede comprobar.
  */
-
-/**
- * Crea la pestaña de importes la primera vez que hace falta, con su cabecera.
- *
- * Que exista no basta: si alguien la crea a mano y se queda sin cabecera, el
- * primer importe se escribiría en la fila 1 y a partir de ahí `planImportes`
- * —que cuenta desde la 2— actualizaría la fila equivocada. Por eso la
- * cabecera se escribe también cuando la pestaña ya estaba pero está vacía.
- */
-async function asegurarTabImports(): Promise<void> {
-  const doc = docFacturas();
-  const tabs = await tabsFacturas(doc);
-
-  if (tabs.includes(TAB_IMPORTS)) {
-    const actual = (await sheetsFetch(
-      `/values/${encodeURIComponent(range("A1:D1", TAB_IMPORTS))}`,
-      undefined,
-      doc,
-    )) as { values?: unknown[][] };
-    if ((actual.values?.[0] ?? []).some((c) => text(c) !== "")) return;
-  } else {
-    await sheetsFetch(
-      ":batchUpdate",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          requests: [{ addSheet: { properties: { title: TAB_IMPORTS } } }],
-        }),
-      },
-      doc,
-    );
-  }
-
-  await sheetsFetch(
-    `/values/${encodeURIComponent(range("A1:D1", TAB_IMPORTS))}?valueInputOption=USER_ENTERED`,
-    { method: "PUT", body: JSON.stringify({ values: [CABECERA_IMPORTS] }) },
-    doc,
-  );
-}
 
 /*
   La pestaña de importes es UNA para todos los fulls, así que el mapa vale
@@ -1024,7 +1033,7 @@ export async function readImportes(): Promise<Map<string, number>> {
  */
 export async function writeImportes(entradas: ImporteEntrada[]): Promise<void> {
   if (entradas.length === 0) return;
-  await asegurarTabImports();
+  await asegurarTab(TAB_IMPORTS, CABECERA_IMPORTS);
 
   const doc = docFacturas();
   const data = (await sheetsFetch(

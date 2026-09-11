@@ -1,7 +1,11 @@
 import "server-only";
 import { today, addDays, formatSheetTimestamp } from "./dates";
 import { navUrlFor, fullRouteUrlFor } from "./routing";
-import { DATOS_POR_DEFECTO, type ClienteFacturacion } from "./factura";
+import {
+  DATOS_POR_DEFECTO,
+  type ClienteFacturacion,
+  type DatosFacturacion,
+} from "./factura";
 import type {
   EstatFactura,
   FacturaEmitida,
@@ -270,6 +274,17 @@ export function demoClients(): ClienteFacturacion[] {
 
 export function guardarDemoClients(clients: ClienteFacturacion[]): void {
   clientsDemo = clients;
+}
+
+/** El emisor, también en memoria y arrancando por el de partida. */
+let emissorDemo: DatosFacturacion["emisor"] = { ...DATOS_POR_DEFECTO.emisor };
+
+export function demoEmissor(): DatosFacturacion["emisor"] {
+  return emissorDemo;
+}
+
+export function guardarDemoEmissor(emissor: DatosFacturacion["emisor"]): void {
+  emissorDemo = emissor;
 }
 
 export function emitirFacturaDemo(

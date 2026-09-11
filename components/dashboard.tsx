@@ -37,7 +37,7 @@ import Desfer, { MARGE_DESFER_MS, type AccioDesfer } from "@/components/desfer";
 import Endarrerides from "@/components/endarrerides";
 import Ajustos from "@/components/ajustos";
 import Sidebar from "@/components/sidebar";
-import { leerDatosFacturacion, sincronizarClientes } from "@/lib/ajustes-factura";
+import { leerDatosFacturacion, sincronizarFacturacio } from "@/lib/ajustes-factura";
 import { euros, type DatosFacturacion } from "@/lib/factura";
 import {
   recordDelivery,
@@ -176,17 +176,17 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   const [datosFactura, setDatosFactura] = useState<DatosFacturacion>(leerDatosFacturacion);
 
   /*
-    Los clientes se bajan del documento privado al arrancar.
+    El emisor y los clientes se bajan del documento privado al arrancar.
 
     Vivían solo en este móvil, así que cambiar de teléfono perdía el NIF y la
-    dirección de a quién se factura, y dos dispositivos podían tener datos
-    distintos sin que nadie lo notara. Ahora manda el documento; lo de aquí
-    es la copia para poder facturar sin cobertura, y si no hay red se sigue
-    con ella tal cual.
+    dirección —tanto de quien factura como de a quién—, y dos dispositivos
+    podían tener datos distintos sin que nadie lo notara. Ahora manda el
+    documento; lo de aquí es la copia para poder facturar sin cobertura, y si
+    no hay red se sigue con ella tal cual.
   */
   useEffect(() => {
     void (async () => {
-      setDatosFactura(await sincronizarClientes(leerDatosFacturacion()));
+      setDatosFactura(await sincronizarFacturacio(leerDatosFacturacion()));
     })();
   }, []);
   const theme = useSyncExternalStore(
@@ -1930,15 +1930,24 @@ function Bossa({
           No et queden comandes pendents d&apos;assignar.
         </p>
       ) : (
-        <div className="grid min-h-0 grid-cols-2 gap-2 overflow-y-auto lg:grid-cols-1">
+        /*
+          En filas, como "Per repartir", y no en dos columnas de tarjetas.
+
+          Con dos columnas en un móvil cabían veinte caracteres por línea: el
+          nombre del cliente salía cortado —"FERRETERIA TORCA…"— y la
+          población también, que son los dos únicos datos que hay ahí. Una
+          fila por comanda ocupa lo mismo a lo alto, deja el ancho entero
+          para el nombre y hace que las dos listas del día se lean igual.
+        */
+        <ul className="soft-card min-h-0 divide-y divide-border overflow-y-auto">
           {stops.map((stop) => (
             /*
-              La tarjeta es el área de asignar —tocar, mantener pulsado o
+              La fila es el área de asignar —tocar, mantener pulsado o
               arrastrar— y el botón de llamar va aparte, como hermano: un
               botón dentro de otro no es HTML válido y el teléfono acabaría
               asignando la comanda al día abierto.
             */
-            <div key={stop.id} className="soft-card flex flex-col">
+            <li key={stop.id} className="flex items-center gap-2 pr-3">
               <button
                 draggable
                 onDragStart={(e) => {
@@ -1960,17 +1969,15 @@ function Bossa({
                 onClick={() => {
                   if (tipusRef.current !== "touch") activar(stop);
                 }}
-                className="pressable flex flex-1 touch-none select-none flex-col items-start gap-0.5 p-3 text-left lg:cursor-grab lg:active:cursor-grabbing"
+                className="pressable flex min-w-0 flex-1 touch-none select-none flex-col items-start gap-0.5 py-2.5 pl-3 text-left lg:cursor-grab lg:active:cursor-grabbing"
               >
-                <span className="w-full truncate text-sm font-semibold">{stop.customer || stop.id}</span>
+                <span className="w-full truncate text-sm font-medium">{stop.customer || stop.id}</span>
                 <span className="w-full truncate text-xs text-muted-foreground">{stop.city || "Sense adreça"}</span>
               </button>
-              <div className="px-3 pb-3">
-                <Trucar phone={stop.phone} />
-              </div>
-            </div>
+              <Trucar phone={stop.phone} />
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
       {previewStop && (
@@ -1985,19 +1992,45 @@ function Bossa({
             >
               <X />
             </Button>
-            <StopCard detall stop={previewStop} onDelivered={() => {}} onIncident={() => {}} />
-            {onAssign && (
-              <Button
-                className="mt-4 w-full"
-                size="touch"
-                onClick={() => {
-                  onAssign(previewStop.id);
-                  setPreviewStop(null);
-                }}
-              >
-                Assignar comanda
-              </Button>
-            )}
+            {/* El scroll va en esta caja de dentro y no en la de fuera: la
+                cruz de cerrar vive por encima de la tarjeta y un contenedor
+                con scroll se la come. Con tope de alto porque una comanda con
+                observaciones largas se salía por abajo y el botón de
+                assignar quedaba fuera de alcance. */}
+            <div className="max-h-[85svh] overflow-y-auto overscroll-contain rounded-[var(--radius)]">
+            {/*
+              El botón va DENTRO de la tarjeta, en su pie.
+
+              Suelto debajo parecía de otra cosa —flotando sobre el fondo
+              gris— y encima convivía con "Entregat" e "Incidència", que aquí
+              no hacían nada: esta pantalla no los sabe guardar. Ahora el pie
+              es lo único que se puede hacer con la comanda desde aquí.
+            */}
+            <StopCard
+              detall
+              stop={previewStop}
+              onDelivered={() => {}}
+              onIncident={() => {}}
+              peu={
+                onAssign ? (
+                  <Button
+                    className="w-full"
+                    size="touch"
+                    onClick={() => {
+                      onAssign(previewStop.id);
+                      setPreviewStop(null);
+                    }}
+                  >
+                    Assignar comanda
+                  </Button>
+                ) : (
+                  <p className="text-center text-sm text-muted-foreground">
+                    Obre un dia del calendari per assignar-la.
+                  </p>
+                )
+              }
+            />
+            </div>
           </div>
         </div>
       )}

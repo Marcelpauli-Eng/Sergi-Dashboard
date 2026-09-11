@@ -64,27 +64,34 @@ export function guardarDatosFacturacion(datos: DatosFacturacion): void {
 }
 
 /**
- * Baja los clientes del documento privado y los deja guardados.
+ * Baja el emisor y los clientes del documento privado y los deja guardados.
  *
- * Devuelve los datos ya con ellos, o los de siempre si no se han podido
- * leer —sin cobertura, o con el documento todavía sin configurar—: quedarse
- * sin red no puede dejar la pantalla de facturar en blanco.
+ * Devuelve los datos ya con ellos, o los de siempre si no se han podido leer
+ * —sin cobertura, o con el documento todavía sin configurar—: quedarse sin
+ * red no puede dejar la pantalla de facturar en blanco.
  *
- * Una lista vacía se ignora a propósito. Significa que la pestaña aún no
- * existe o está sin rellenar, y pisar con eso los clientes buenos que ya
- * tiene el móvil sería cambiar un dato correcto por ninguno.
+ * Lo que llega vacío se ignora a propósito, campo por campo. Una pestaña que
+ * aún no existe o está sin rellenar devuelve nada, y pisar con eso unos
+ * datos correctos que ya tiene el móvil sería cambiarlos por ninguno.
  */
-export async function sincronizarClientes(
+export async function sincronizarFacturacio(
   datos: DatosFacturacion,
 ): Promise<DatosFacturacion> {
   try {
-    const respuesta = await fetch("/api/clients");
+    const respuesta = await fetch("/api/facturacio");
     if (!respuesta.ok) return datos;
-    const cuerpo = (await respuesta.json()) as { clients?: ClienteFacturacion[] };
-    const clientes = cuerpo.clients ?? [];
-    if (clientes.length === 0) return datos;
+    const cuerpo = (await respuesta.json()) as {
+      emissor?: DatosFacturacion["emisor"] | null;
+      clients?: ClienteFacturacion[];
+    };
 
-    const actualizados = { ...datos, clientes };
+    const clientes = cuerpo.clients ?? [];
+    const actualizados: DatosFacturacion = {
+      ...datos,
+      ...(cuerpo.emissor ? { emisor: cuerpo.emissor } : {}),
+      ...(clientes.length > 0 ? { clientes } : {}),
+    };
+
     guardarDatosFacturacion(actualizados);
     return actualizados;
   } catch {
@@ -93,18 +100,18 @@ export async function sincronizarClientes(
 }
 
 /**
- * Guarda los clientes en el documento privado.
+ * Guarda el emisor y los clientes en el documento privado.
  *
  * Lanza si no se han podido guardar: quien llama ya ha dejado la copia local
  * hecha, pero tiene que poder decir que en el documento no están.
  */
-export async function guardarClientesAlDocument(
-  clientes: ClienteFacturacion[],
+export async function guardarFacturacioAlDocument(
+  datos: DatosFacturacion,
 ): Promise<void> {
-  const respuesta = await fetch("/api/clients", {
+  const respuesta = await fetch("/api/facturacio", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ clients: clientes }),
+    body: JSON.stringify({ emissor: datos.emisor, clients: datos.clientes }),
   });
   if (!respuesta.ok) {
     const cuerpo = (await respuesta.json().catch(() => null)) as { error?: string } | null;

@@ -41,6 +41,16 @@ interface Props {
    * puede reescribir la hora de entrega.
    */
   onImporte?: (orderId: string, importe: number | null) => void;
+  /**
+   * Qué va al pie de la tarjeta EN LUGAR de los botones de entregar.
+   *
+   * Existe por la previsualización de la bossa: allí la comanda se enseña
+   * para decidir a qué día va, y "Entregat" e "Incidència" no hacían nada
+   * —se abrían y se quedaban ahí— porque quien la abre no pasa ningún
+   * manejador. Un botón que no hace nada es peor que no tener botón, así
+   * que el pie se cambia por lo que sí toca hacer allí: assignar-la.
+   */
+  peu?: React.ReactNode;
 }
 
 /** Una fecha del Sheet, tal y como se lee: 01/07/2026. */
@@ -250,6 +260,7 @@ export default function StopCard({
   onRemove,
   detall,
   onImporte,
+  peu,
 }: Props) {
   const [showIncident, setShowIncident] = useState(false);
   const [showPrice, setShowPrice] = useState(false);
@@ -407,7 +418,11 @@ export default function StopCard({
               <Camp etiqueta="Comanda" valor={stop.id} mono />
               <Camp etiqueta="Creada" valor={data(stop.creationDate)} />
               <Camp etiqueta="Repartiment" valor={data(stop.date)} />
-              <Camp etiqueta="Telèfon" valor={stop.phone} />
+              {/* Sin cortar: la celda de la hoja lleva a veces el nombre de
+                  quien recoge delante —"Bilal Asbai 631104…"— y truncado se
+                  queda justo sin las últimas cifras, que es lo único que
+                  hace falta para llamar. */}
+              <Camp etiqueta="Telèfon" valor={stop.phone} envolta />
               {/* Cuántos paquetes hay que cargar. Una comanda son varias
                   filas en la hoja, una por bulto, y hasta ahora solo se veía
                   la primera. Ver `bultos` en lib/types.ts. */}
@@ -556,7 +571,9 @@ export default function StopCard({
         </div>
       )}
 
-      {canClose && (
+      {peu !== undefined && <div className="hairline p-3.5">{peu}</div>}
+
+      {canClose && peu === undefined && (
         <div className="hairline p-3.5">
           {showPrice ? (
             /* Cuánto se cobra por esta entrega. Va aquí y no al final de mes

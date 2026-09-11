@@ -1,7 +1,7 @@
 /**
- * Que los clientes vayan y vuelvan del documento sin perder nada.
+ * Que el emisor y los clientes vayan y vuelvan del documento sin perder nada.
  *
- *   npm run check:clients
+ *   npm run check:facturacio
  *
  * Lo que se comprueba aquí es lo que no se ve hasta que sale mal en una
  * factura: un código postal que pierde el cero de delante, un cliente en
@@ -17,7 +17,13 @@ import {
   filaAClient,
   parseClients,
 } from "../lib/clients.ts";
-import type { ClienteFacturacion } from "../lib/factura.ts";
+import {
+  CABECERA_EMISSOR,
+  TAB_EMISSOR,
+  emissorAFila,
+  filaAEmissor,
+} from "../lib/emissor.ts";
+import { DATOS_POR_DEFECTO, type ClienteFacturacion } from "../lib/factura.ts";
 
 const CLIENT: ClienteFacturacion = {
   codigo: "35",
@@ -102,4 +108,47 @@ assert.deepEqual(CABECERA_CLIENTS, [
   assert.equal(client?.cp, "8940");
 }
 
-console.log("✓ lib/clients.ts — els clients van i tornen del document sense perdre res");
+/* ── L'emissor ───────────────────────────────────────────────────────────── */
+
+assert.equal(TAB_EMISSOR, "Emissor");
+assert.deepEqual(CABECERA_EMISSOR, [
+  "Nom",
+  "NIF",
+  "Adreça",
+  "CP",
+  "Població",
+  "Província",
+  "Telèfon",
+]);
+
+// ── Ida y vuelta ──────────────────────────────────────────────────────────
+{
+  const emissor = DATOS_POR_DEFECTO.emisor;
+  const fila = emissorAFila(emissor);
+  assert.equal(fila.length, CABECERA_EMISSOR.length, "la fila no cuadra con la cabecera");
+  assert.deepEqual(
+    filaAEmissor(fila.map((v) => v.replace(/^'/, ""))),
+    emissor,
+    "el emisor no vuelve igual",
+  );
+  // El caso por el que todo va como texto: el CP del emisor empieza por cero.
+  assert.equal(fila[CABECERA_EMISSOR.indexOf("CP")], `'${emissor.cp}`);
+  assert.ok(emissor.cp.startsWith("0"), "este CP ya no prueba nada: cámbialo por uno con cero");
+}
+
+// ── Sin nombre no hay emisor: la pestaña recién creada no lo tiene ────────
+{
+  assert.equal(filaAEmissor(undefined), null);
+  assert.equal(filaAEmissor([]), null);
+  assert.equal(filaAEmissor(["", "B1", "", "", "", "", ""]), null);
+}
+
+// ── El teléfono no se convierte en un número ─────────────────────────────
+{
+  const fila = emissorAFila({ ...DATOS_POR_DEFECTO.emisor, telefono: "938451529" });
+  assert.equal(fila[CABECERA_EMISSOR.indexOf("Telèfon")], "'938451529");
+}
+
+console.log(
+  "✓ lib/clients.ts + lib/emissor.ts — emissor i clients van i tornen del document sense perdre res",
+);
