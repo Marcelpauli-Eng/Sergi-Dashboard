@@ -47,9 +47,29 @@ export interface Order {
    */
   billingClient: string | null;
   phone: string | null;
-  /** Medidas del paquete. */
+  /** Medidas de los bultos, separadas por " · " cuando hay más de uno. */
   measures: string | null;
+  /**
+   * Cuántos bultos lleva la comanda.
+   *
+   * La oficina escribe un bulto por FILA, todas con el mismo nº de comanda y
+   * solo las medidas rellenas. Esas filas se fusionan aquí en una sola
+   * parada —es una única entrega, en una única dirección— pero hay que
+   * saber cuántos paquetes hay que cargar: en la hoja real hay comandas de
+   * cuatro. Antes esas filas se descartaban y el transportista salía del
+   * almacén con uno.
+   */
+  bultos: number;
   notes: string | null;
+  /**
+   * A qué hora se entregó, "HH:MM". `null` mientras no se haya entregado.
+   *
+   * Sale de la misma celda que `date`: al marcar la entrega se escribe ahí
+   * la fecha y la hora. Ver `parseSheetTime` en lib/dates.ts.
+   */
+  deliveredTime: string | null;
+  /** Qué pasó, cuando hubo incidencia. Lo escribe el transportista. */
+  incidentNote: string | null;
   status: DeliveryStatus;
   /** Valor original de la celda "Estat de l'entrega", sin transformar. Vacío si la celda no tiene valor. */
   rawStatus: string;
@@ -70,10 +90,19 @@ export interface Order {
    * puede insertar o borrar filas en cualquier momento.
    */
   rowNumber: number;
+  /**
+   * TODAS las filas de la comanda, una por bulto, incluida `rowNumber`.
+   *
+   * Al marcar la entrega se escribe en todas: si solo se marcara la primera,
+   * la oficina vería una comanda a medias —en la hoja real hay comandas con
+   * dos filas "Pendent" y una "Entregat"— y no hay forma de saber desde
+   * fuera que están entregadas del todo.
+   */
+  rowNumbers: number[];
 }
 
 /** Un pedido ya colocado en su posición dentro de la ruta del día. */
-export interface Stop extends Omit<Order, "rowNumber"> {
+export interface Stop extends Omit<Order, "rowNumber" | "rowNumbers"> {
   /** Posición en la ruta, empezando en 1. */
   sequence: number;
   /** Enlace que abre la navegación en Google Maps (app nativa si está instalada). */
@@ -149,6 +178,19 @@ export interface DeliveryRecord {
   recordedAt: string;
   /** Texto libre, solo para incidencias. */
   note?: string | null;
+  /**
+   * El full donde vive la comanda, tal y como estaba al marcarla.
+   *
+   * Viaja con el registro y no se decide al subir: entre que se marca una
+   * entrega y que sube puede pasar un rato —sin cobertura, o con la cola
+   * atascada— y en ese rato el transportista puede haber cambiado de full.
+   * Escribir en el que esté abierto en ese momento manda la entrega a una
+   * pestaña donde esa comanda no existe, y se pierde.
+   *
+   * Opcional porque los registros que quedaran en la cola de una versión
+   * anterior no lo llevan: esos se escriben en el full abierto, como antes.
+   */
+  sheetTab?: string | null;
   /** Importe cobrado, sin IVA. Solo en las entregas. */
   price?: number | null;
 }

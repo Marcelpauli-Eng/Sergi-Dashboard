@@ -232,3 +232,26 @@ export function paginar(lineas: LineaFactura[]): LineaFactura[][] {
   }
   return paginas;
 }
+
+/**
+ * Los importes de una factura ya emitida, que se guardan todos en UNA celda.
+ *
+ * Iban separados por ", " y con la coma decimal dentro —"1000,00, 1,00,
+ * 2000,00"—, así que partir por comas daba el doble de trozos y cada línea
+ * se quedaba con el de al lado: la factura 30 reimpresa enseñaba 1000, 0, 1,
+ * 0, 2000… y no sumaba su propio total, que vive en otra casilla y sí estaba
+ * bien.
+ *
+ * Desde ahora el separador es ";", pero aquí se leen las dos formas: una
+ * factura emitida no se reescribe nunca, así que las que ya están en la hoja
+ * hay que saber leerlas tal y como se guardaron.
+ */
+export function parseImportesFactura(cru: string): number[] {
+  const partes = cru.includes(";")
+    ? cru.split(";")
+    : // Sin punto y coma, los trozos hay que reconocerlos por su forma: un
+      // número, con sus miles si los lleva, y su coma decimal.
+      (cru.match(/\d[\d.]*(?:,\d+)?/g) ?? []);
+
+  return partes.map((parte) => parseImporte(parte) ?? 0);
+}

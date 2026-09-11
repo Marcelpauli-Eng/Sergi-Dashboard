@@ -135,6 +135,45 @@ export function formatSheetTimestamp(iso: string, timezone: string): string {
 }
 
 /**
+ * La hora que lleva dentro una celda de fecha: "13:50".
+ *
+ * No hace falta ninguna columna nueva: al entregar, la app escribe la fecha
+ * Y la hora en la misma celda del día de reparto (ver `deliveredAt` en
+ * lib/sheet-schema.ts). O sea que la hora a la que se entregó cada comanda
+ * lleva ahí desde siempre y solo había que sacarla.
+ *
+ * `null` si la celda solo trae el día, que es lo normal mientras la comanda
+ * está por repartir.
+ */
+export function parseSheetTime(value: unknown): string | null {
+  const hhmm = (h: number, m: number) =>
+    `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    /*
+      La parte decimal del serial es la fracción del día.
+
+      Se redondea al minuto en vez de truncar: Sheets guarda las 13:50 como
+      un binario que sale 13:49:59,99…, y truncando la hoja diría una cosa y
+      la app otra por un segundo.
+    */
+    const minutos = Math.round((value - Math.floor(value)) * 1440);
+    // Las 00:00 son una celda con solo el día: no hay hora que enseñar.
+    if (minutos <= 0 || minutos >= 1440) return null;
+    return hhmm(Math.floor(minutos / 60), minutos % 60);
+  }
+
+  // Texto: "8/08/2026 13:50", que es como queda cuando Sheets guarda la
+  // escritura como texto en vez de como fecha.
+  const encaix = String(value ?? "").match(/(\d{1,2}):(\d{2})/);
+  if (!encaix) return null;
+  const hores = Number(encaix[1]);
+  const minuts = Number(encaix[2]);
+  if (hores > 23 || minuts > 59) return null;
+  return hhmm(hores, minuts);
+}
+
+/**
  * Obtiene todos los días de un mes (con los padding del mes anterior y siguiente
  * para cuadrar con semanas que empiezan en lunes).
  */

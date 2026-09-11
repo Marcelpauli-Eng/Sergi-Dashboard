@@ -7,7 +7,7 @@ import {
   pendingOutbox,
   type OutboxItem,
 } from "./db";
-import { applyOutbox } from "./outbox.ts";
+import { applyOutbox, seleccionarTanda } from "./outbox.ts";
 import type { DeliveryStatus, Manifest } from "./types";
 
 // Se re-exporta porque el resto de la app la importa desde aquí desde
@@ -116,6 +116,8 @@ export async function recordDelivery(
     clientId: crypto.randomUUID(),
     orderId,
     type: "status",
+    // El full de AHORA, no el que haya al subir. Ver `sheetTab` en types.ts.
+    sheetTab: getSelectedTab(),
     status,
     recordedAt,
     note,
@@ -155,6 +157,8 @@ export async function recordPrice(
     clientId: crypto.randomUUID(),
     orderId,
     type: "price",
+    // El full de AHORA, no el que haya al subir. Ver `sheetTab` en types.ts.
+    sheetTab: getSelectedTab(),
     price,
     recordedAt: new Date().toISOString(),
     syncedAt: null,
@@ -188,6 +192,8 @@ export async function recordDateAssignment(
     clientId: crypto.randomUUID(),
     orderId,
     type: "date",
+    // El full de AHORA, no el que haya al subir. Ver `sheetTab` en types.ts.
+    sheetTab: getSelectedTab(),
     date: date,
     recordedAt: new Date().toISOString(),
     syncedAt: null,
@@ -368,43 +374,49 @@ export function applyCustomOrder<T extends { id: string }>(
   return ordered;
 }
 
-/** Envía al servidor las entregas pendientes. Devuelve cuántas se subieron. */
-/**
- * Cuántos registros caben en una subida.
- *
- * Tiene que ser el mismo tope que valida la API. Mandarlo todo de golpe
- * funcionaba mientras la cola fuera corta, pero la cola crece sola cuando
- * algo falla al escribir: basta con estar un rato sin cobertura, o con que
- * el documento de importes no esté puesto, para pasar de cien. A partir de
- * ahí el servidor rechazaba el lote entero por tamaño y la cola ya no podía
- * vaciarse nunca — cada intento llevaba los mismos registros de más.
- */
-const MAX_POR_ENVIO = 100;
+/** Lo que ha pasado al subir una tanda de la cola. */
+export interface ResultadoEnvio {
+  /** Cuántos registros ha escrito el servidor. */
+  subidas: number;
+  /**
+   * Comandas que el servidor no ha encontrado en la hoja.
+   *
+   * Se cierran igual —reintentar no las va a devolver—, pero hay que
+   * contarlas: antes se marcaban como subidas sin más y la barra decía "Al
+   * día" con una entrega que no se había escrito en ninguna parte.
+   */
+  perdidas: string[];
+}
 
-export async function flushOutbox(): Promise<number> {
+export async function flushOutbox(): Promise<ResultadoEnvio> {
   const todos = await pendingOutbox();
-  if (todos.length === 0) return 0;
-  if (typeof navigator !== "undefined" && !navigator.onLine) return 0;
+  if (todos.length === 0) return { subidas: 0, perdidas: [] };
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    return { subidas: 0, perdidas: [] };
+  }
 
-  // Los más antiguos primero: es el orden en que pasaron las cosas, y la
-  // hoja tiene que acabar reflejando el último estado, no uno intermedio.
-  const pending = [...todos]
-    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt))
-    .slice(0, MAX_POR_ENVIO);
-
-  const sheetTab = getSelectedTab();
+  // Una tanda es de un solo full, y los más antiguos primero. El porqué,
+  // en `seleccionarTanda`.
+  const { sheetTab, items: pending, quedan } = seleccionarTanda(todos, getSelectedTab());
 
   const response = await request("/api/deliveries", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       // El registro entero menos lo que solo importa aquí dentro (si ya se
-      // subió, cuántos intentos lleva, el último error). Enumerar campo a
-      // campo dejó el importe sin subir: se tecleaba, se veía en pantalla y
-      // no llegaba a ninguna hoja, porque nadie se acordó de añadirlo a esta
-      // lista al crear la columna de precios.
+      // subió, cuántos intentos lleva, el último error, y el full, que va
+      // una sola vez para toda la tanda). Enumerar campo a campo dejó el
+      // importe sin subir: se tecleaba, se veía en pantalla y no llegaba a
+      // ninguna hoja, porque nadie se acordó de añadirlo a esta lista al
+      // crear la columna de precios.
       records: pending.map(
-        ({ syncedAt: _syncedAt, attempts: _attempts, lastError: _lastError, ...record }) => ({
+        ({
+          syncedAt: _syncedAt,
+          attempts: _attempts,
+          lastError: _lastError,
+          sheetTab: _sheetTab,
+          ...record
+        }) => ({
           ...record,
           // Los registros que quedaran en la cola de una versión anterior no
           // llevan tipo.
@@ -442,16 +454,19 @@ export async function flushOutbox(): Promise<number> {
 
   const now = new Date().toISOString();
   const resolved = new Set([...result.applied, ...result.notFound]);
+  const perdidas = new Set<string>();
 
   await db.transaction("rw", db.outbox, async () => {
     for (const item of pending) {
       if (!resolved.has(item.orderId)) continue;
+      const noEsta = result.notFound.includes(item.orderId);
+      if (noEsta) perdidas.add(item.orderId);
       // Los `notFound` también se cierran: el pedido ya no está en el Sheet,
       // reintentar eternamente no lo va a devolver.
       await db.outbox.update(item.clientId, {
         syncedAt: now,
-        lastError: result.notFound.includes(item.orderId)
-          ? "El pedido ya no existe en el Google Sheet"
+        lastError: noEsta
+          ? `No está en el full ${sheetTab ?? "de la hoja"}: no se ha podido guardar`
           : null,
       });
     }
@@ -460,13 +475,14 @@ export async function flushOutbox(): Promise<number> {
   /*
     Si quedan más en la cola, se sigue en cuanto acabe esta tanda. Sin esto,
     una cola de doscientos registros subía cien y se quedaba esperando al
-    siguiente arranque para los otros cien.
+    siguiente arranque para los otros cien. Y ahora además hay tandas de
+    otros fulls esperando su turno.
   */
-  if (todos.length > pending.length) {
+  if (quedan > 0) {
     void flushOutbox().catch(() => {});
   }
 
-  return result.applied.length;
+  return { subidas: result.applied.length, perdidas: [...perdidas] };
 }
 
 /**
@@ -516,7 +532,20 @@ export async function syncNow(sheetTab?: string): Promise<SyncOutcome> {
   let error: string | null = null;
 
   try {
-    uploaded = await flushOutbox();
+    const envio = await flushOutbox();
+    uploaded = envio.subidas;
+    if (envio.perdidas.length > 0) {
+      /*
+        Que una comanda ya no esté en la hoja no es un error de red, así que
+        no lanza; pero callarlo es peor. Antes se marcaba como subida y la
+        barra decía "Al día" con una entrega que no se había escrito en
+        ningún sitio.
+      */
+      const cuantas = envio.perdidas.length;
+      error =
+        `${cuantas} ${cuantas === 1 ? "entrega no se ha guardado" : "entregas no se han guardado"}: ` +
+        `${envio.perdidas.join(", ")} ya no ${cuantas === 1 ? "está" : "están"} en el full.`;
+    }
   } catch (e) {
     if (e instanceof SessionExpiredError) throw e;
     error = e instanceof Error ? e.message : "Error subiendo entregas";

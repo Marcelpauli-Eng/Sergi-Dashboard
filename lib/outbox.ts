@@ -26,6 +26,14 @@ import type { DeliveryStatus, Manifest, Stop } from "./types.ts";
  * manifiesto. Y como este manifiesto parcheado se guarda en IndexedDB, el
  * estado incoherente sobrevivía a cerrar la app.
  */
+/** La hora local de un registro, "HH:MM", como se enseña en el informe del día. */
+function horaDe(iso: string): string | null {
+  const quan = new Date(iso);
+  if (Number.isNaN(quan.getTime())) return null;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(quan.getHours())}:${p(quan.getMinutes())}`;
+}
+
 const CATEGORIA_DE: Record<DeliveryStatus, Stop["statusCategory"]> = {
   entregado: "entregat",
   incidencia: "incidencia",
@@ -81,6 +89,8 @@ export function applyOutbox(manifest: Manifest, items: OutboxItem[]): Manifest {
         statusCategory: "pendent",
         rawStatus: "",
         price: pending.price ?? null,
+        deliveredTime: null,
+        incidentNote: null,
       };
     }
 
@@ -89,6 +99,11 @@ export function applyOutbox(manifest: Manifest, items: OutboxItem[]): Manifest {
       status: pending.status,
       statusCategory: CATEGORIA_DE[pending.status],
       price: pending.price ?? stop.price,
+      // La hora sale del propio registro, que es el mismo valor que acabará
+      // en la hoja. Sin esto, el informe del día no enseñaba la hora de lo
+      // que se acababa de marcar hasta la siguiente descarga.
+      deliveredTime: horaDe(pending.recordedAt),
+      incidentNote: pending.note ?? stop.incidentNote,
     };
   };
 
@@ -102,4 +117,57 @@ export function applyOutbox(manifest: Manifest, items: OutboxItem[]): Manifest {
     today: patchDay(manifest.today),
     tomorrow: manifest.tomorrow ? patchDay(manifest.tomorrow) : null,
   };
+}
+
+/**
+ * Cuántos registros caben en una subida.
+ *
+ * Tiene que ser el mismo tope que valida la API. Mandarlo todo de golpe
+ * funcionaba mientras la cola fuera corta, pero la cola crece sola cuando
+ * algo falla al escribir: basta con estar un rato sin cobertura para pasar
+ * de cien, y a partir de ahí el servidor rechazaba el lote entero por
+ * tamaño y la cola ya no podía vaciarse nunca.
+ */
+export const MAX_POR_ENVIO = 100;
+
+export interface Tanda<T> {
+  /** El full donde hay que escribir esta tanda. */
+  sheetTab: string | null;
+  /** Lo que se manda ahora. Todo del mismo full. */
+  items: T[];
+  /** Cuántos pendientes se quedan para la siguiente tanda. */
+  quedan: number;
+}
+
+/**
+ * Qué parte de la cola se sube ahora.
+ *
+ * Una tanda es de UN SOLO full, y ahí está todo el asunto. Antes se mandaba
+ * la cola entera con el full que estuviera abierto en ese momento, así que
+ * marcar una entrega en JUL 26, quedarse sin cobertura y cambiar de full
+ * antes de que subiera escribía en AGO 26: allí esa comanda no existe, el
+ * servidor contestaba "no encontrada" y la entrega se perdía para siempre
+ * sin que nadie se enterara.
+ *
+ * Los más antiguos primero, que es el orden en que pasaron las cosas: la
+ * hoja tiene que acabar reflejando el último estado, no uno intermedio.
+ *
+ * `fullActual` es para los registros que quedaran en la cola de una versión
+ * anterior, que no llevan full: se escriben donde se habrían escrito antes.
+ */
+export function seleccionarTanda<
+  T extends { recordedAt: string; sheetTab?: string | null },
+>(pendientes: T[], fullActual: string | null, max: number = MAX_POR_ENVIO): Tanda<T> {
+  const ordenados = [...pendientes].sort((a, b) =>
+    a.recordedAt.localeCompare(b.recordedAt),
+  );
+
+  const fullDe = (item: T) => item.sheetTab ?? fullActual;
+
+  if (ordenados.length === 0) return { sheetTab: fullActual, items: [], quedan: 0 };
+
+  const sheetTab = fullDe(ordenados[0]);
+  const items = ordenados.filter((item) => fullDe(item) === sheetTab).slice(0, max);
+
+  return { sheetTab, items, quedan: ordenados.length - items.length };
 }

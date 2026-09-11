@@ -11,7 +11,7 @@
  * hoja a mano y escribe "Entregat", "ENTREGADO", "x" o "Sí" según el día.
  */
 
-import type { DeliveryStatus } from "./types.ts";
+import type { DeliveryStatus, Order } from "./types.ts";
 
 /** Índice de columna (0-based) a letra de columna: 0 → A, 26 → AA. */
 export function columnLetter(index: number): string {
@@ -124,4 +124,46 @@ export function parseStatusCategory(
   if (INCIDENCIA.includes(k)) return "incidencia";
   if (EN_CURSO.includes(k)) return "en_curs";
   return "pendent";
+}
+
+/**
+ * Junta a una comanda otra fila suya: un bulto más.
+ *
+ * La oficina escribe un bulto por fila. Todas llevan el mismo nº de comanda
+ * y solo la primera trae dirección, cliente y teléfono; las demás solo las
+ * medidas. Son UNA entrega en UNA dirección, así que se fusionan en una
+ * parada sola.
+ *
+ * Antes se descartaban por "ID duplicado": en la hoja real eso son entre el
+ * 10 % y el 27 % de las filas de cada mes, y con ellas se perdían las
+ * medidas de los otros bultos —una comanda de cuatro paquetes enseñaba uno—
+ * y a veces el dato bueno, porque la fila que ganaba era la primera aunque
+ * fuera la más vacía.
+ *
+ * Manda siempre lo que ya tuviera la comanda; el bulto solo rellena huecos.
+ * El estado no se toca a propósito: si la primera fila dice "Pendent" y otra
+ * dice "Entregat", la parada sigue en la ruta. Salir de más es recuperable;
+ * que una entrega desaparezca de la pantalla, no.
+ */
+export function fusionarBulto(base: Order, bulto: Order): Order {
+  return {
+    ...base,
+    customer: base.customer || bulto.customer,
+    creationDate: base.creationDate ?? bulto.creationDate,
+    date: base.date || bulto.date,
+    // Un "Urgent" en cualquier bulto sube la comanda entera: es el mismo
+    // camión y el mismo viaje.
+    priority: Math.min(base.priority, bulto.priority),
+    city: base.city ?? bulto.city,
+    phone: base.phone ?? bulto.phone,
+    notes: base.notes ?? bulto.notes,
+    billingClient: base.billingClient ?? bulto.billingClient,
+    incidentNote: base.incidentNote ?? bulto.incidentNote,
+    deliveredTime: base.deliveredTime ?? bulto.deliveredTime,
+    lat: base.lat ?? bulto.lat,
+    lng: base.lng ?? bulto.lng,
+    measures: [base.measures, bulto.measures].filter(Boolean).join(" · ") || null,
+    bultos: base.bultos + bulto.bultos,
+    rowNumbers: [...base.rowNumbers, ...bulto.rowNumbers],
+  };
 }

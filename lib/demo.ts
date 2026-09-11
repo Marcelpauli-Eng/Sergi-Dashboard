@@ -1,5 +1,5 @@
 import "server-only";
-import { today, addDays } from "./dates";
+import { today, addDays, formatSheetTimestamp } from "./dates";
 import { navUrlFor, fullRouteUrlFor } from "./routing";
 import type {
   EstatFactura,
@@ -172,7 +172,7 @@ const TOMORROW_SAMPLES: Sample[] = [
 
 const DEMO_DEPOT = "Carrer de Mallorca 401, 08013 Barcelona";
 
-function toStop(sample: Sample, date: string, sequence: number): Stop {
+function toStop(sample: Sample, date: string, sequence: number, timezone: string): Stop {
   const recorded = demoDeliveries.get(sample.id);
   return {
     id: sample.id,
@@ -181,6 +181,7 @@ function toStop(sample: Sample, date: string, sequence: number): Stop {
     // El día que se le haya puesto durante la demo manda sobre el del lote.
     date: demoDates.get(sample.id) ?? date,
     priority: sample.priority,
+    bultos: 1,
     customer: sample.customer,
     address: sample.address,
     city: null,
@@ -188,6 +189,12 @@ function toStop(sample: Sample, date: string, sequence: number): Stop {
     phone: sample.phone ?? null,
     measures: null,
     notes: sample.notes ?? null,
+    // La hora sale del propio registro, igual que en la hoja de verdad: allí
+    // es la que se escribe en la celda del día al marcar la entrega.
+    deliveredTime: recorded
+      ? formatSheetTimestamp(recorded.recordedAt, timezone).slice(-5)
+      : null,
+    incidentNote: recorded?.note ?? null,
     status: recorded?.status ?? "pendiente",
     rawStatus: recorded ? (recorded.status === "entregado" ? "Entregat" : "Incidència") : "",
     statusCategory: recorded 
@@ -203,13 +210,13 @@ function toStop(sample: Sample, date: string, sequence: number): Stop {
   };
 }
 
-function buildDay(samples: Sample[], date: string): RouteDay {
+function buildDay(samples: Sample[], date: string, timezone: string): RouteDay {
   const pending = samples.filter((s) => !demoDeliveries.has(s.id));
   const done = samples.filter((s) => demoDeliveries.has(s.id));
 
   const stops = [
-    ...pending.map((sample, index) => toStop(sample, date, index + 1)),
-    ...done.map((sample) => toStop(sample, date, 0)),
+    ...pending.map((sample, index) => toStop(sample, date, index + 1, timezone)),
+    ...done.map((sample) => toStop(sample, date, 0, timezone)),
   ];
 
   return {
@@ -232,8 +239,8 @@ export function demoManifest(timezone: string): Manifest {
     generatedAt: new Date().toISOString(),
     demo: true,
     sheetTab: "Demo",
-    today: buildDay(TODAY_SAMPLES, todayDate),
-    tomorrow: buildDay(TOMORROW_SAMPLES, addDays(todayDate, 1)),
+    today: buildDay(TODAY_SAMPLES, todayDate, timezone),
+    tomorrow: buildDay(TOMORROW_SAMPLES, addDays(todayDate, 1), timezone),
   };
 }
 

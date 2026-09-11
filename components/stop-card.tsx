@@ -59,10 +59,13 @@ function Camp({
   etiqueta,
   valor,
   mono,
+  envolta,
 }: {
   etiqueta: string;
   valor: string | null | undefined;
   mono?: boolean;
+  /** Deja que el valor ocupe varias líneas en vez de cortarlo. */
+  envolta?: boolean;
 }) {
   return (
     <div className="min-w-0">
@@ -71,7 +74,10 @@ function Camp({
       </dt>
       <dd
         className={cn(
-          "truncate text-sm",
+          "text-sm",
+          // Las medidas de una comanda de cuatro bultos no caben en una
+          // línea, y cortadas no sirven de nada: es lo que hay que cargar.
+          envolta ? "break-words" : "truncate",
           mono && "font-mono",
           valor ? "text-foreground" : "text-tertiary-foreground",
         )}
@@ -380,7 +386,14 @@ export default function StopCard({
                 setDesat={setDesat}
               />
               <Camp etiqueta="Telèfon" valor={stop.phone} />
-              <Camp etiqueta="Mides" valor={stop.measures} />
+              {/* Cuántos paquetes hay que cargar. Una comanda son varias
+                  filas en la hoja, una por bulto, y hasta ahora solo se veía
+                  la primera. Ver `bultos` en lib/types.ts. */}
+              <Camp
+                etiqueta={stop.bultos > 1 ? `Mides · ${stop.bultos} bultos` : "Mides"}
+                valor={stop.measures}
+                envolta
+              />
               {leg && isOpen && <Camp etiqueta="Des de l'anterior" valor={leg} />}
             </dl>
           ) : (
@@ -396,8 +409,17 @@ export default function StopCard({
                 )}
               </div>
 
-              {stop.measures && (
-                <p className="mt-1 text-xs text-tertiary-foreground">📦 {stop.measures}</p>
+              {(stop.measures || stop.bultos > 1) && (
+                <p className="mt-1 text-xs text-tertiary-foreground">
+                  📦{" "}
+                  {stop.bultos > 1 && (
+                    <span className="font-semibold text-foreground">
+                      {stop.bultos} bultos
+                    </span>
+                  )}
+                  {stop.bultos > 1 && stop.measures && " · "}
+                  {stop.measures}
+                </p>
               )}
 
               {leg && isOpen && (

@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { getWeekGrid, getMonthGrid } from "../lib/dates.ts";
+import { getWeekGrid, getMonthGrid, parseSheetTime } from "../lib/dates.ts";
 
 // ── La semana va de lunes a domingo ──────────────────────────────────────
 {
@@ -68,4 +68,22 @@ import { getWeekGrid, getMonthGrid } from "../lib/dates.ts";
   }
 }
 
-console.log("✓ lib/dates.ts — semanas y meses cuadran");
+// ── La hora de entrega sale de la misma celda que el día ─────────────────
+{
+  // Serial de Sheets: la parte decimal es la fracción del día. 0,5763888… es
+  // 13:50, y truncando en vez de redondear saldría 13:49.
+  assert.equal(parseSheetTime(46252 + 0.5763888888), "13:50");
+  assert.equal(parseSheetTime(46252.5), "12:00");
+  // Un día sin hora es un serial entero: no hay hora que enseñar.
+  assert.equal(parseSheetTime(46252), null);
+  // Y lo mismo cuando la hoja lo guardó como texto.
+  assert.equal(parseSheetTime("8/08/2026 13:50"), "13:50");
+  assert.equal(parseSheetTime("08/08/2026 9:05"), "09:05");
+  assert.equal(parseSheetTime("2026-08-08"), null);
+  assert.equal(parseSheetTime(""), null);
+  assert.equal(parseSheetTime(null), null);
+  // Una hora imposible no se enseña como si fuera buena.
+  assert.equal(parseSheetTime("08/08/2026 25:70"), null);
+}
+
+console.log("✓ lib/dates.ts — semanas, meses y horas de entrega");

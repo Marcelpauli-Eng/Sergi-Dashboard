@@ -104,11 +104,27 @@ export default function Cobraments({
 
   return (
     <div className="animate-fade-in space-y-6">
+      {/* En el móvil la que importa ocupa la fila entera: es la respuesta a
+          la pregunta con la que se entra aquí, y en media columna le cabía
+          el número pero no la etiqueta. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Xifra etiqueta="Pendent de cobrar" valor={pendent} tono="var(--primary)" destacada />
+        <Xifra
+          etiqueta="Pendent de cobrar"
+          valor={pendent}
+          tono="var(--primary)"
+          destacada
+          className="col-span-2 lg:col-span-1"
+        />
         <Xifra etiqueta="Emeses" valor={totals.emesa} tono="var(--muted-foreground)" />
         <Xifra etiqueta="Enviades" valor={totals.enviada} tono="var(--primary)" />
-        <Xifra etiqueta="Cobrades" valor={totals.cobrada} tono="var(--success)" />
+        {/* También a lo ancho: deja las dos que están a medias juntas en una
+            fila y lo cobrado cerrando, en vez de un hueco suelto al final. */}
+        <Xifra
+          etiqueta="Cobrades"
+          valor={totals.cobrada}
+          tono="var(--success)"
+          className="col-span-2 lg:col-span-1"
+        />
       </div>
 
       {error && (
@@ -123,7 +139,7 @@ export default function Cobraments({
         </p>
       )}
 
-      <div className="flex items-center gap-1 rounded-full bg-muted p-0.5 lg:w-fit">
+      <div className="flex items-center gap-1 rounded-full bg-muted p-1 lg:w-fit">
         {(["totes", "emesa", "enviada", "cobrada"] as const).map((f) => (
           <button
             key={f}
@@ -131,7 +147,7 @@ export default function Cobraments({
             onClick={() => setFiltre(f)}
             aria-pressed={filtre === f}
             className={cn(
-              "pressable flex-1 rounded-full px-4 py-1.5 text-sm font-medium capitalize lg:flex-none",
+              "pressable min-h-11 flex-1 rounded-full px-3 text-sm font-medium capitalize lg:min-h-9 lg:flex-none lg:px-4",
               filtre === f ? "bg-card text-primary shadow-sm" : "text-muted-foreground",
             )}
           >
@@ -153,28 +169,44 @@ export default function Cobraments({
       )}
 
       {visibles.length > 0 && (
+        /*
+          En el móvil cada factura es una ficha de tres alturas —número e
+          importe, de quién y de cuándo, y el estado— en vez de una fila con
+          todo apretado de lado. Antes los tres botones de estado medían
+          34x22 px y se quedaban sin etiqueta por falta de sitio: había que
+          adivinar los iconos y apuntar con el dedo a un cuarto de la yema.
+
+          De `lg` en adelante vuelve a ser una fila, que ahí sí cabe y leer
+          veinte facturas seguidas es más rápido.
+        */
         <ul className="soft-card divide-y divide-border">
           {visibles.map((factura) => (
             <li
               key={factura.numero}
               className={cn(
-                "flex flex-wrap items-center gap-3 px-4 py-3",
+                "px-4 py-4 lg:flex lg:items-center lg:gap-4 lg:py-3",
                 desant === factura.numero && "opacity-60",
               )}
             >
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold tabular-nums">
-                  {formatearNumero(factura.numero)}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {fechaCorta(factura.fecha)} · {factura.periodo} ·{" "}
-                  {clientePara(datos, factura.client).nombre}
-                </p>
+              <div className="flex items-baseline justify-between gap-3 lg:flex-1 lg:items-center">
+                <div className="min-w-0">
+                  <p className="text-base font-semibold tabular-nums lg:text-sm">
+                    {formatearNumero(factura.numero)}
+                  </p>
+                  {/* Sin `truncate`: el nombre del cliente se cortaba por la
+                      mitad y es lo que dice de qué factura se trata. */}
+                  <p className="mt-0.5 text-xs leading-snug text-muted-foreground lg:truncate">
+                    {fechaCorta(factura.fecha)} · {factura.periodo}
+                    <span className="lg:inline"> · </span>
+                    {clientePara(datos, factura.client).nombre}
+                  </p>
+                </div>
+                <span className="shrink-0 text-base font-semibold tabular-nums lg:text-sm lg:font-medium">
+                  {euros(factura.total)} €
+                </span>
               </div>
-              <span className="tabular-nums text-sm font-medium">
-                {euros(factura.total)} €
-              </span>
-              <div className="flex items-center gap-1 rounded-full bg-muted p-0.5">
+
+              <div className="mt-3 flex items-center gap-1 rounded-full bg-muted p-1 lg:mt-0 lg:shrink-0 lg:p-0.5">
                 {ESTATS.map(({ id, etiqueta, icona: Icona, color }) => {
                   const activa = factura.estat === id;
                   return (
@@ -186,13 +218,13 @@ export default function Cobraments({
                       aria-pressed={activa}
                       title={etiqueta}
                       className={cn(
-                        "pressable flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium disabled:opacity-40",
+                        "pressable flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium disabled:opacity-40 lg:min-h-0 lg:flex-none lg:px-2.5 lg:py-1",
                         activa ? "bg-card shadow-sm" : "text-muted-foreground",
                       )}
                       style={activa ? { color } : undefined}
                     >
-                      <Icona className="size-3.5" aria-hidden />
-                      <span className="hidden sm:inline">{etiqueta}</span>
+                      <Icona className="size-3.5 shrink-0" aria-hidden />
+                      {etiqueta}
                     </button>
                   );
                 })}
@@ -210,20 +242,23 @@ function Xifra({
   valor,
   tono,
   destacada,
+  className,
 }: {
   etiqueta: string;
   valor: number;
   tono: string;
   destacada?: boolean;
+  className?: string;
 }) {
   return (
     <div
       className={cn(
         "soft-card p-4",
         destacada && "bg-[color-mix(in_srgb,var(--primary)_8%,var(--card))]",
+        className,
       )}
     >
-      <p className="truncate text-xs text-muted-foreground">{etiqueta}</p>
+      <p className="text-xs text-muted-foreground">{etiqueta}</p>
       <p
         className="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight"
         style={{ color: tono }}

@@ -21,6 +21,7 @@ import {
   RotateCw,
   Search,
   Settings,
+  TriangleAlert,
   Wallet,
   X,
 } from "lucide-react";
@@ -353,29 +354,33 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
     for (const stop of allStops) {
       const cat = (stop.statusCategory ?? "pendent") as StatusCategory;
+      const tancada = cat === "entregat" || cat === "incidencia";
 
-      // Historial
-      if (cat === "entregat") {
-        historyStops.entregat.push(stop);
-        continue;
-      }
-      if (cat === "incidencia") {
-        historyStops.incidencia.push(stop);
-        continue;
-      }
+      if (cat === "entregat") historyStops.entregat.push(stop);
+      if (cat === "incidencia") historyStops.incidencia.push(stop);
 
-      // Si no es historial, es pendiente o en_curs
+      /*
+        Al calendario va TODO lo que tiene día, entregado incluido.
+
+        Antes solo iban las pendientes y el día que acababas se quedaba en
+        blanco, como si no hubieras hecho nada. Lo que uno quiere ver al
+        mirar atrás es precisamente lo que hizo — y con la fecha que tiene
+        una comanda entregada, que es la del día en que se entregó.
+      */
       if (!stop.date) {
-        unassignedStops.push(stop);
-      } else {
-        if (!calendarStopsByDate[stop.date]) calendarStopsByDate[stop.date] = [];
-        calendarStopsByDate[stop.date].push(stop);
+        if (!tancada) unassignedStops.push(stop);
+        continue;
+      }
 
-        if (stop.date === todayDate) {
-          todayStops.push(stop);
-        } else if (todayDate && stop.date < todayDate) {
-          endarrerides.push(stop);
-        }
+      if (!calendarStopsByDate[stop.date]) calendarStopsByDate[stop.date] = [];
+      calendarStopsByDate[stop.date].push(stop);
+
+      if (tancada) continue;
+
+      if (stop.date === todayDate) {
+        todayStops.push(stop);
+      } else if (todayDate && stop.date < todayDate) {
+        endarrerides.push(stop);
       }
     }
 
@@ -1079,6 +1084,26 @@ function TabAvui({
 const CHIPS_PER_DIA = 3;
 
 /**
+ * El color de una comanda en el calendario, por cómo acabó.
+ *
+ * Un día pasado lleno de comandas grises no dice nada; lo que se quiere ver
+ * de un vistazo es qué se cerró y qué no. En un sitio solo porque el mes y
+ * la semana pintan lo mismo.
+ */
+function classeChip(cat: Stop["statusCategory"]): string {
+  if (cat === "entregat") {
+    return "bg-[color-mix(in_srgb,var(--status-entregat)_16%,transparent)] text-status-entregat";
+  }
+  if (cat === "incidencia") {
+    return "bg-[color-mix(in_srgb,var(--status-incidencia)_16%,transparent)] text-status-incidencia";
+  }
+  if (cat === "en_curs") {
+    return "bg-[color-mix(in_srgb,var(--status-en-curs)_16%,transparent)] text-status-en-curs";
+  }
+  return "bg-muted text-foreground";
+}
+
+/**
  * El calendario del mes.
  *
  * En el móvil es lo de siempre: casillas con un punto, y al tocar un día se
@@ -1163,7 +1188,6 @@ function TabCalendari({
   const esPassat = (date: string) => Boolean(todayDate) && date < todayDate;
 
   const assignades = selectedDate ? calendarStopsByDate[selectedDate] ?? [] : [];
-  const passat = selectedDate ? esPassat(selectedDate) : false;
 
   const soltar = (date: string) => (e: React.DragEvent) => {
     e.preventDefault();
@@ -1172,16 +1196,30 @@ function TabCalendari({
     if (id && !esPassat(date)) onAssignDate(id, date);
   };
 
+  /*
+    Tocar un día abre su informe, y ocupa la pantalla entera.
+
+    Antes se abría en una columna al lado del mes, que daba para una lista de
+    nombres y poco más. Un día es lo que de verdad se consulta —qué se
+    entregó, a qué hora, por cuánto, qué falló— y eso necesita sitio.
+  */
+  if (selectedDate) {
+    return (
+      <DiaDetall
+        date={selectedDate}
+        stops={assignades}
+        todayDate={todayDate}
+        unassignedStops={unassignedStops}
+        onAssignDate={onAssignDate}
+        onTancar={() => setSelectedDate(null)}
+      />
+    );
+  }
+
   return (
     <div className="animate-fade-in lg:grid lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-4">
       {/* ── El mes ─────────────────────────────────────────────────────── */}
-      <div
-        className={cn(
-          "soft-card flex flex-col p-4 lg:min-h-0",
-          // En el móvil el día abierto sustituye al mes; en ordenador conviven.
-          selectedDate && "hidden lg:flex",
-        )}
-      >
+      <div className="soft-card flex flex-col p-4 lg:min-h-0">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-0.5">
             <Button
@@ -1255,6 +1293,11 @@ function TabCalendari({
             const isCurrentMonth = dMonth === currentMonth.month;
             const dayNum = date.split("-")[2].replace(/^0/, "");
             const bloquejat = esPassat(date);
+            const fetesDelDia = delDia.filter(
+              (s) => s.statusCategory === "entregat" || s.statusCategory === "incidencia",
+            ).length;
+            /** El día está hecho: no queda ninguna por cerrar. */
+            const tancat = delDia.length > 0 && fetesDelDia === delDia.length;
 
             return (
               <button
@@ -1295,18 +1338,35 @@ function TabCalendari({
                     {dayNum}
                   </span>
                   {delDia.length > 0 && (
-                    <span className="hidden text-[11px] font-semibold tabular-nums text-muted-foreground lg:inline">
-                      {delDia.length}
+                    /*
+                      Cerradas y total. Las comandas escritas en la casilla no
+                      caben todas —y las cerradas son las últimas de la lista,
+                      así que son las primeras en quedar detrás del "+N més"—,
+                      con lo que este contador es lo único que dice cómo acabó
+                      un día lleno.
+                    */
+                    <span
+                      className={cn(
+                        "hidden text-[11px] font-semibold tabular-nums lg:inline",
+                        tancat ? "text-status-entregat" : "text-muted-foreground",
+                      )}
+                    >
+                      {fetesDelDia > 0 ? `${fetesDelDia}/${delDia.length}` : delDia.length}
                     </span>
                   )}
                 </span>
 
-                {/* Móvil: un punto. Es todo lo que cabe. */}
+                {/* Móvil: un punto. Es todo lo que cabe — pero dice si el día
+                    quedó cerrado, que es lo que se mira al repasar atrás. */}
                 {delDia.length > 0 && (
                   <span
                     className={cn(
                       "size-1.5 rounded-full lg:hidden",
-                      isToday ? "bg-primary" : "bg-muted-foreground",
+                      tancat
+                        ? "bg-[color:var(--status-entregat)]"
+                        : isToday
+                          ? "bg-primary"
+                          : "bg-muted-foreground",
                     )}
                     aria-hidden
                   />
@@ -1319,11 +1379,10 @@ function TabCalendari({
                       key={stop.id}
                       className={cn(
                         "truncate rounded-md px-1.5 py-0.5 text-[11px] leading-4",
-                        stop.statusCategory === "en_curs"
-                          ? "bg-[color-mix(in_srgb,var(--status-en-curs)_16%,transparent)] text-status-en-curs"
-                          : "bg-muted text-foreground",
+                        classeChip(stop.statusCategory),
                       )}
                     >
+                      {stop.statusCategory === "entregat" && "✓ "}
                       {stop.customer || stop.id}
                     </span>
                   ))}
@@ -1402,16 +1461,18 @@ function TabCalendari({
                       {delDia.map((stop) => (
                         <li
                           key={stop.id}
-                          draggable
+                          draggable={
+                            stop.statusCategory !== "entregat" &&
+                            stop.statusCategory !== "incidencia"
+                          }
                           onDragStart={(e) => e.dataTransfer.setData("text/plain", stop.id)}
                           title={`${stop.customer || stop.id}${stop.city ? ` · ${stop.city}` : ""}`}
                           className={cn(
                             "truncate rounded-md px-1.5 py-1 text-[11px] leading-4 lg:cursor-grab lg:active:cursor-grabbing",
-                            stop.statusCategory === "en_curs"
-                              ? "bg-[color-mix(in_srgb,var(--status-en-curs)_16%,transparent)] text-status-en-curs"
-                              : "bg-muted text-foreground",
+                            classeChip(stop.statusCategory),
                           )}
                         >
+                          {stop.statusCategory === "entregat" && "✓ "}
                           {stop.customer || stop.id}
                         </li>
                       ))}
@@ -1424,107 +1485,258 @@ function TabCalendari({
         )}
       </div>
 
-      {/* ── Columna de al lado: el día abierto, o la bolsa ─────────────── */}
-      <aside
-        className={cn(
-          "mt-6 flex flex-col gap-3 lg:mt-0 lg:min-h-0",
-          !selectedDate && "lg:pt-0",
-        )}
-      >
-        {selectedDate ? (
-          <>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSelectedDate(null)}
-                aria-label="Tancar el dia"
-                className="lg:hidden"
-              >
-                <ChevronLeft />
-              </Button>
-              <div className="min-w-0 flex-1">
-                <h2 className="truncate text-lg font-semibold">
-                  {selectedDate.split("-").reverse().join("/")}
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  {selectedDate === todayDate ? "Avui · " : passat ? "Ja ha passat · " : ""}
-                  {assignades.length}{" "}
-                  {assignades.length === 1 ? "comanda" : "comandes"}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSelectedDate(null)}
-                aria-label="Tancar el dia"
-                className="hidden lg:inline-flex"
-              >
-                <X />
-              </Button>
-            </div>
-
-            <div className="flex min-h-0 flex-1 flex-col gap-4 lg:overflow-y-auto">
-              <div className="space-y-2">
-                {assignades.length === 0 ? (
-                  <p className="soft-card px-4 py-6 text-center text-sm text-muted-foreground">
-                    Cap comanda assignada a aquest dia.
-                  </p>
-                ) : (
-                  <ul className="soft-card divide-y divide-border">
-                    {assignades.map((stop) => (
-                      <li
-                        key={stop.id}
-                        draggable
-                        onDragStart={(e) => e.dataTransfer.setData("text/plain", stop.id)}
-                        className="flex items-center gap-2 px-3 py-2.5 lg:cursor-grab lg:active:cursor-grabbing"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">
-                            {stop.customer || stop.id}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {stop.city || stop.address || stop.id}
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onAssignDate(stop.id, null)}
-                        >
-                          Treure
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              {passat ? (
-                <div className="hairline space-y-2 pt-4">
-                  <p className="text-sm text-muted-foreground">
-                    Aquest dia ja ha passat: no s&apos;hi poden afegir comandes.
-                  </p>
-                  {assignades.length > 0 && (
-                    <p className="text-xs text-tertiary-foreground">
-                      Si alguna es va quedar sense entregar, fes{" "}
-                      <strong className="text-foreground">Treure</strong> i assigna-la a un
-                      altre dia.
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <Bossa
-                  stops={unassignedStops}
-                  onAssign={(id) => onAssignDate(id, selectedDate)}
-                />
-              )}
-            </div>
-          </>
-        ) : (
-          <Bossa stops={unassignedStops} onAssign={null} />
-        )}
+      {/* ── Columna de al lado: la bolsa ───────────────────────────────── */}
+      <aside className="mt-6 flex flex-col gap-3 lg:mt-0 lg:min-h-0 lg:pt-0">
+        <Bossa stops={unassignedStops} onAssign={null} />
       </aside>
+    </div>
+  );
+}
+
+// ── El informe de un día ───────────────────────────────────────────────
+
+/**
+ * Cómo fue un día.
+ *
+ * Se abre al tocar una casilla del calendario y ocupa la pantalla entera, no
+ * una columna: lo que se quiere al mirar un día es lo que pasó, y eso son
+ * números y una lista, no un panel estrecho al lado del mes.
+ *
+ * Lo que se enseña es lo que ayuda al día siguiente: cuánto se entregó y por
+ * cuánto, a qué hora se empezó y se acabó, qué incidencias hubo y por qué, y
+ * —lo más fácil de olvidar— cuántas entregas se quedaron sin importe, que es
+ * dinero que no se va a facturar si nadie lo mira.
+ */
+function DiaDetall({
+  date,
+  stops,
+  todayDate,
+  unassignedStops,
+  onAssignDate,
+  onTancar,
+}: {
+  date: string;
+  /** Todas las comandas de ese día, cerradas incluidas. */
+  stops: Stop[];
+  todayDate: string;
+  unassignedStops: Stop[];
+  onAssignDate: (orderId: string, date: string | null) => void;
+  onTancar: () => void;
+}) {
+  const entregades = stops.filter((s) => s.statusCategory === "entregat");
+  const incidencies = stops.filter((s) => s.statusCategory === "incidencia");
+  const pendents = stops.filter(
+    (s) => s.statusCategory !== "entregat" && s.statusCategory !== "incidencia",
+  );
+
+  const facturat = entregades.reduce((total, s) => total + (s.price ?? 0), 0);
+  const senseImport = entregades.filter((s) => !s.price).length;
+
+  // Sin hora van al final: son las que se marcaron desde otra versión de la
+  // app o a mano en la hoja, y no se sabe cuándo.
+  const fetes = [...entregades, ...incidencies].sort((a, b) =>
+    (a.deliveredTime ?? "99:99").localeCompare(b.deliveredTime ?? "99:99"),
+  );
+  const hores = fetes.map((s) => s.deliveredTime).filter((h): h is string => Boolean(h));
+
+  const passat = Boolean(todayDate) && date < todayDate;
+  const esAvui = date === todayDate;
+  // Un día vacío no necesita cuatro ceros: con decir que no hubo nada basta.
+  const hiHaResum = stops.length > 0 && (fetes.length > 0 || passat);
+
+  return (
+    <div className="animate-fade-in space-y-4 pb-4 lg:h-full lg:overflow-y-auto">
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="icon" onClick={onTancar} aria-label="Tornar al calendari">
+          <ChevronLeft />
+        </Button>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-xl font-semibold first-letter:uppercase">
+            {formatLongDate(date)}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {esAvui ? "Avui · " : passat ? "Ja ha passat · " : ""}
+            {stops.length} {stops.length === 1 ? "comanda" : "comandes"}
+          </p>
+        </div>
+      </div>
+
+      {hiHaResum && (
+        <>
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <Xifra
+              etiqueta="Entregades"
+              valor={String(entregades.length)}
+              // Cerradas sobre el total, no un porcentaje: "2 de 5" se lee de
+              // un vistazo y no hay que dividir nada de cabeza.
+              peu={stops.length > 0 ? `${fetes.length} de ${stops.length} tancades` : undefined}
+            />
+            <Xifra
+              etiqueta="Facturable"
+              valor={`${euros(facturat)} €`}
+              peu={senseImport > 0 ? `${senseImport} sense import` : undefined}
+              avis={senseImport > 0}
+            />
+            <Xifra
+              etiqueta="Incidències"
+              valor={String(incidencies.length)}
+              peu={pendents.length > 0 ? `${pendents.length} sense tancar` : undefined}
+            />
+            <Xifra
+              etiqueta="Jornada"
+              // Con una sola entrega, un "17:50–17:50" es ruido.
+              valor={
+                hores.length === 0
+                  ? "—"
+                  : hores[0] === hores[hores.length - 1]
+                    ? hores[0]
+                    : `${hores[0]}–${hores[hores.length - 1]}`
+              }
+              peu={
+                hores.length > 1
+                  ? "primera i última"
+                  : hores.length === 1
+                    ? "una entrega"
+                    : "sense hores"
+              }
+            />
+          </div>
+
+          {fetes.length > 0 && (
+            <section className="soft-card divide-y divide-border">
+              {fetes.map((stop) => {
+                const incidencia = stop.statusCategory === "incidencia";
+                return (
+                  <div key={stop.id} className="flex items-start gap-3 px-4 py-3">
+                    <span
+                      className={cn(
+                        "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full",
+                        incidencia
+                          ? "bg-[color-mix(in_srgb,var(--status-incidencia)_16%,transparent)] text-status-incidencia"
+                          : "bg-[color-mix(in_srgb,var(--success)_16%,transparent)] text-[color:var(--success)]",
+                      )}
+                    >
+                      {incidencia ? (
+                        <TriangleAlert className="size-4" aria-hidden />
+                      ) : (
+                        <Check className="size-4" strokeWidth={3} aria-hidden />
+                      )}
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {stop.customer || stop.id}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {stop.id}
+                        {stop.city ? ` · ${stop.city}` : ""}
+                      </p>
+                      {incidencia && stop.incidentNote && (
+                        <p className="mt-1 text-xs text-status-incidencia">
+                          {stop.incidentNote}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm tabular-nums">
+                        {stop.deliveredTime ?? "—"}
+                      </p>
+                      {!incidencia && (
+                        <p
+                          className={cn(
+                            "text-xs tabular-nums",
+                            stop.price ? "text-muted-foreground" : "text-warning",
+                          )}
+                        >
+                          {stop.price ? `${euros(stop.price)} €` : "sense import"}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </section>
+          )}
+        </>
+      )}
+
+      {/* ── Lo que queda por hacer ────────────────────────────────────── */}
+      <section className="space-y-2">
+        {pendents.length > 0 && (
+          <h3 className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {passat ? "Van quedar sense tancar" : "Per repartir"}
+          </h3>
+        )}
+        {pendents.length === 0 ? (
+          <p className="soft-card px-4 py-6 text-center text-sm text-muted-foreground">
+            {fetes.length > 0
+              ? "Tot el dia tancat."
+              : passat
+                ? "Aquest dia no hi va haver cap comanda."
+                : "Cap comanda assignada a aquest dia."}
+          </p>
+        ) : (
+          <ul className="soft-card divide-y divide-border">
+            {pendents.map((stop) => (
+              <li
+                key={stop.id}
+                draggable
+                onDragStart={(e) => e.dataTransfer.setData("text/plain", stop.id)}
+                className="flex items-center gap-2 px-3 py-2.5 lg:cursor-grab lg:active:cursor-grabbing"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{stop.customer || stop.id}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {stop.city || stop.address || stop.id}
+                  </p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => onAssignDate(stop.id, null)}>
+                  Treure
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {passat ? (
+        pendents.length > 0 && (
+          <p className="hairline pt-4 text-xs text-tertiary-foreground">
+            Si es van entregar i ningú ho va marcar, tanca-les des de l&apos;avís que
+            surt en obrir l&apos;app. Si no, fes{" "}
+            <strong className="text-foreground">Treure</strong> i assigna-les a un
+            altre dia.
+          </p>
+        )
+      ) : (
+        <Bossa stops={unassignedStops} onAssign={(id) => onAssignDate(id, date)} />
+      )}
+    </div>
+  );
+}
+
+/** Una cifra del informe del día. */
+function Xifra({
+  etiqueta,
+  valor,
+  peu,
+  avis,
+}: {
+  etiqueta: string;
+  valor: string;
+  peu?: string;
+  avis?: boolean;
+}) {
+  return (
+    <div className="soft-card px-4 py-3">
+      <p className="truncate text-xs text-muted-foreground">{etiqueta}</p>
+      <p className="mt-0.5 truncate text-xl font-semibold tabular-nums">{valor}</p>
+      {peu && (
+        <p className={cn("truncate text-xs", avis ? "text-warning" : "text-tertiary-foreground")}>
+          {peu}
+        </p>
+      )}
     </div>
   );
 }

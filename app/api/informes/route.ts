@@ -64,30 +64,51 @@ export async function GET(request: NextRequest) {
   const errores: { full: string; motiu: string }[] = [];
 
   try {
-    // Una sola vez para todos los meses: la clave es el nº de comanda, así
-    // que el mismo mapa sirve para cualquier full.
-    const importes = await readImportes();
+    /*
+      Una sola vez para todos los meses: la clave es el nº de comanda, así
+      que el mismo mapa sirve para cualquier full.
 
-    for (const full of fulls) {
-      try {
-        const snapshot = await readSheet(full);
-        const mias = comandasDelTransportista(snapshot.orders, driver.id);
-        mesos.push(
-          resumirFull(
+      Y si no se pueden leer, se sigue sin ellos. Es lo mismo que hace la
+      ruta del día (ver `buildManifest`): sin el documento privado no hay
+      precios, pero las entregas, las incidencias y los pendientes de cada
+      mes se cuentan igual. Antes esto tumbaba la pantalla entera.
+    */
+    const importes = await readImportes().catch((error: unknown) => {
+      const motiu = error instanceof Error ? error.message : "Error desconegut";
+      console.warn(`Informes: no se han podido leer los importes: ${motiu}`);
+      errores.push({ full: "Imports", motiu: motiu.slice(0, 200) });
+      return new Map<string, number>();
+    });
+
+    /*
+      Los fulls, a la vez. Uno detrás de otro eran ocho segundos para once
+      meses —y son once lecturas independientes de documentos que no se
+      tocan entre sí—. Doce como mucho, que es lo que valida el esquema, así
+      que no hay ráfaga que pueda con la cuota de Sheets.
+    */
+    const leidos = await Promise.all(
+      fulls.map(async (full) => {
+        try {
+          const snapshot = await readSheet(full);
+          const mias = comandasDelTransportista(snapshot.orders, driver.id);
+          return resumirFull(
             full,
             mias.map((order) => ({
               statusCategory: order.statusCategory,
               price: importes.get(order.id) ?? null,
               date: order.date,
             })),
-          ),
-        );
-      } catch (error) {
-        const motiu = error instanceof Error ? error.message : "Error desconegut";
-        console.warn(`Informes: no se ha podido leer el full "${full}": ${motiu}`);
-        errores.push({ full, motiu: motiu.slice(0, 200) });
-      }
-    }
+          );
+        } catch (error) {
+          const motiu = error instanceof Error ? error.message : "Error desconegut";
+          console.warn(`Informes: no se ha podido leer el full "${full}": ${motiu}`);
+          errores.push({ full, motiu: motiu.slice(0, 200) });
+          return null;
+        }
+      }),
+    );
+    // En el orden en que los pidió la pantalla, que es el que espera ver.
+    mesos.push(...leidos.filter((m): m is ResumFull => m !== null));
 
     return NextResponse.json({ mesos, errores });
   } catch (error) {

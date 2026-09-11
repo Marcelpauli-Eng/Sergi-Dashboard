@@ -135,7 +135,7 @@ export default function Informes({
 
   return (
     <div className="animate-fade-in space-y-6 pb-4">
-      <div className="flex items-center gap-1 self-start rounded-full bg-muted p-0.5 lg:w-fit">
+      <div className="flex items-center gap-1 self-start rounded-full bg-muted p-1 lg:w-fit">
         {([
           ["full", "Aquest full"],
           ["comparativa", "Comparativa"],
@@ -146,7 +146,7 @@ export default function Informes({
             onClick={() => setVista(v)}
             aria-pressed={vista === v}
             className={cn(
-              "pressable flex-1 rounded-full px-4 py-1.5 text-sm font-medium lg:flex-none",
+              "pressable min-h-11 flex-1 rounded-full px-4 text-sm font-medium lg:min-h-9 lg:flex-none",
               vista === v ? "bg-card text-primary shadow-sm" : "text-muted-foreground",
             )}
           >
@@ -244,10 +244,10 @@ function ResumDelFull({ dades, mes }: { dades: Resum; mes: string }) {
               {dades.dies.map((d) => (
                 <div
                   key={d.date}
-                  className="group flex h-full min-w-[1.75rem] max-w-16 flex-1 flex-col items-center gap-1.5"
+                  className="group flex h-full min-w-[2.25rem] max-w-16 flex-1 flex-col items-center gap-1.5"
                   title={`${d.date} · ${d.entregues} entregues · ${euros(d.import)} €`}
                 >
-                  <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">
+                  <span className="text-xs font-semibold tabular-nums text-muted-foreground">
                     {d.entregues}
                   </span>
                   {/* El envoltorio `flex-1` es lo que le da alto definido a la
@@ -259,7 +259,7 @@ function ResumDelFull({ dades, mes }: { dades: Resum; mes: string }) {
                       style={{ height: `${Math.max(4, (d.entregues / maxDia) * 100)}%` }}
                     />
                   </div>
-                  <span className="text-[10px] tabular-nums text-tertiary-foreground">
+                  <span className="text-[11px] tabular-nums text-tertiary-foreground">
                     {d.date.slice(8)}
                   </span>
                 </div>
@@ -507,7 +507,10 @@ function Comparativa({
           <ListChecks className="size-5 shrink-0 text-primary" aria-hidden />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">Fulls a comparar</p>
-            <p className="truncate text-xs text-muted-foreground">
+            {/* Dos líneas y a cortar, en vez de una sola cortada siempre: en
+                el móvil "6 de 12 · FEB 26, MAR 26, ABR…" se quedaba sin
+                decir la mitad de los fulls que estás comparando. */}
+            <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">
               {triats.length === 0
                 ? "Cap seleccionat"
                 : `${triats.length} de ${fulls.length} · ${triats.join(", ")}`}
@@ -691,8 +694,41 @@ function Comparativa({
             </div>
           </section>
 
+          {/*
+            En el móvil, una ficha por full en vez de la tabla.
+
+            La tabla escondía cinco de las nueve columnas por debajo de `lg`
+            —`hidden lg:table-cell`—, así que en el teléfono la comparativa se
+            quedaba en dos números por mes: justo lo que no se puede comparar.
+            Aquí sale todo, con su nombre al lado, y el orden se elige con un
+            desplegable del sistema porque las cabeceras ya no están.
+          */}
+          <div className="space-y-3 lg:hidden">
+            <label className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+              Ordenar per
+              <select
+                value={ordre?.clau ?? "full"}
+                onChange={(e) =>
+                  setOrdre({ clau: e.target.value as keyof ResumFull, asc: false })
+                }
+                className="min-h-11 flex-1 rounded-lg border border-border bg-card px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                {COLUMNES.map((col) => (
+                  <option key={col.clau} value={col.clau}>
+                    {col.etiqueta}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {ordenats.map((m) => (
+              <FitxaFull key={m.full} mes={m} />
+            ))}
+            <FitxaFull mes={total} total />
+          </div>
+
           {/* ── La tabla, ordenable ────────────────────────────────────── */}
-          <div className="overflow-x-auto soft-card">
+          <div className="hidden overflow-x-auto soft-card lg:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
@@ -785,6 +821,59 @@ function Comparativa({
 
 /* ── Piezas ─────────────────────────────────────────────────────────────── */
 
+/**
+ * Un full de la comparativa, en móvil.
+ *
+ * Los números salen de `COLUMNES`, la misma lista que pinta la tabla: así
+ * una columna nueva aparece en los dos sitios y no hay dos verdades sobre
+ * qué se compara.
+ */
+function FitxaFull({ mes, total }: { mes: ResumFull; total?: boolean }) {
+  const detall = COLUMNES.filter(
+    (col) => col.clau !== "full" && col.clau !== "facturat",
+  );
+
+  return (
+    <section
+      className={cn(
+        "soft-card p-4",
+        total && "bg-[color-mix(in_srgb,var(--primary)_8%,var(--card))]",
+      )}
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <h4 className="min-w-0 truncate text-base font-semibold">
+          {total ? "Total" : mes.full}
+        </h4>
+        <p className="shrink-0 text-lg font-semibold tabular-nums">
+          {euros(mes.facturat)} €
+        </p>
+      </div>
+
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-border pt-3">
+        {detall.map((col) => {
+          const valor = col.format(mes);
+          const avis =
+            (col.clau === "incidencies" && mes.incidencies > 0) ||
+            (col.clau === "senseImport" && mes.senseImport > 0);
+          return (
+            <div key={col.clau} className="flex items-baseline justify-between gap-2">
+              <dt className="text-xs text-muted-foreground">{col.etiqueta}</dt>
+              <dd
+                className={cn(
+                  "text-sm font-medium tabular-nums",
+                  avis && "text-status-incidencia",
+                )}
+              >
+                {valor}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </section>
+  );
+}
+
 function Xifra({
   icono,
   tono,
@@ -811,10 +900,12 @@ function Xifra({
         >
           {icono}
         </span>
-        <p className="min-w-0 truncate text-xs text-muted-foreground">{etiqueta}</p>
+        {/* Sin `truncate`: "Mitjana per entrega" se quedaba en "Mitjana per
+            entre…" y la cifra dejaba de decir de qué era. */}
+        <p className="min-w-0 text-xs leading-snug text-muted-foreground">{etiqueta}</p>
       </div>
       <p className="mt-2.5 text-2xl font-semibold tabular-nums tracking-tight">{valor}</p>
-      <p className="mt-0.5 truncate text-xs text-tertiary-foreground">{peu}</p>
+      <p className="mt-0.5 text-xs leading-snug text-tertiary-foreground">{peu}</p>
     </div>
   );
 }

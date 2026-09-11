@@ -6,6 +6,7 @@ import {
   TAB_FACTURAS,
   listSheetTabs,
   puedeEscribir,
+  readSheet,
   type SheetDoc,
 } from "./sheets";
 import { TAB_IMPORTS } from "./importes";
@@ -168,6 +169,54 @@ export async function comprobarConfiguracion(timezone: string): Promise<Comproba
       );
     } catch {
       // El acceso ya se ha reportado arriba.
+    }
+
+    /*
+      Qué filas no se están leyendo.
+
+      Hasta ahora esto solo salía en un `console.warn` del servidor, que
+      nadie va a leer desde un móvil en mitad del reparto. Y no siempre es
+      inofensivo: una comanda escrita a mano con el mismo nombre que otra
+      —"RODES" en la hoja real— es una entrega entera que no aparece en
+      ninguna pantalla.
+    */
+    try {
+      const hoja = await readSheet();
+      const bultos = hoja.orders.filter((o) => o.bultos > 1);
+      const deMas = bultos.reduce((n, o) => n + o.bultos - 1, 0);
+      const resumenBultos =
+        bultos.length > 0
+          ? ` ${bultos.length} comandas llevan más de un bulto (${deMas} filas juntadas).`
+          : "";
+
+      salida.push(
+        hoja.skipped.length === 0
+          ? {
+              id: "filas",
+              titulo: `Filas de "${hoja.sheetTab}"`,
+              estado: "ok",
+              detalle: `Se leen las ${hoja.orders.length} comandas.${resumenBultos}`,
+            }
+          : {
+              id: "filas",
+              titulo: `Filas de "${hoja.sheetTab}"`,
+              estado: "aviso",
+              detalle:
+                `${hoja.orders.length} comandas leídas.${resumenBultos} ` +
+                `${hoja.skipped.length} filas no se pueden leer: ` +
+                hoja.skipped
+                  .slice(0, 12)
+                  .map((f) => `fila ${f.rowNumber} (${f.reason})`)
+                  .join("; ") +
+                (hoja.skipped.length > 12 ? "…" : "."),
+              arreglo:
+                "Son filas de la hoja de la oficina, no de la app. Cada una dice " +
+                "qué le falta: normalmente un nº de comanda repetido en dos " +
+                "entregas distintas, o una fila sin dirección.",
+            },
+      );
+    } catch {
+      // Igual: si la hoja no se puede leer, ya se ha dicho arriba.
     }
   }
 

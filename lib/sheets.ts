@@ -1,8 +1,9 @@
 import "server-only";
 import { googleAccessToken } from "./google-auth";
 import { env, ErrorAccionable } from "./env";
-import { parseSheetDate, formatSheetTimestamp, today } from "./dates";
+import { parseSheetDate, parseSheetTime, formatSheetTimestamp, today } from "./dates";
 import { findMonthTab, findLatestTabUpTo, noTabFoundMessage } from "./sheet-tab";
+import { parseImportesFactura } from "./factura.ts";
 import {
   CABECERA_IMPORTS,
   TAB_IMPORTS,
@@ -12,6 +13,7 @@ import {
 } from "./importes.ts";
 import {
   columnLetter,
+  fusionarBulto,
   parseNumber,
   parsePriority,
   parseStatus,
@@ -170,7 +172,8 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
 
   const orders: Order[] = [];
   const skipped: SheetSnapshot["skipped"] = [];
-  const seenIds = new Set<string>();
+  /** Dónde está cada comanda dentro de `orders`, para juntarle sus bultos. */
+  const porId = new Map<string, number>();
 
   // Comprobar si hay columna driverId y date
   const hasDriverId = headerMap["driverId"] !== undefined;
@@ -195,22 +198,11 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
       skipped.push({ rowNumber, reason: "sin ID de pedido (Nº Comanda)" });
       continue;
     }
-    if (seenIds.has(id)) {
-      skipped.push({ rowNumber, reason: `ID duplicado "${id}"` });
-      continue;
-    }
-    // Las órdenes sin fecha de reparto son totalmente válidas (se quedan en la bolsa de pendientes).
-    if (!address) {
-      skipped.push({ rowNumber, reason: "sin dirección" });
-      continue;
-    }
-
-    seenIds.add(id);
 
     // Construir dirección completa con la ciudad si existe
     const city = text(cell(row, "city")) || null;
 
-    orders.push({
+    const fila: Order = {
       id,
       driverId,
       creationDate,
@@ -223,6 +215,10 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
       phone: text(cell(row, "phone")) || null,
       measures: text(cell(row, "measures")) || null,
       notes: text(cell(row, "notes")) || null,
+      // La celda del día trae también la hora cuando la comanda se entregó:
+      // es la misma columna. Aquí solo se separa lo que ya hay escrito.
+      deliveredTime: hasDate ? parseSheetTime(cell(row, "date")) : null,
+      incidentNote: text(cell(row, "incidentNote")) || null,
       status: parseStatus(cell(row, "status")),
       rawStatus: text(cell(row, "status")),
       statusCategory: parseStatusCategory(cell(row, "status")),
@@ -243,8 +239,45 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
       price: null,
       lat: parseNumber(cell(row, "lat")),
       lng: parseNumber(cell(row, "lng")),
+      bultos: 1,
       rowNumber,
-    });
+      rowNumbers: [rowNumber],
+    };
+
+    const yaEsta = porId.get(id);
+    if (yaEsta !== undefined) {
+      /*
+        Otra fila con el mismo nº de comanda. Si no trae dirección es un
+        bulto más de la misma entrega —así escribe la oficina las comandas
+        de varios paquetes— y se fusiona. Ver `fusionarBulto`.
+
+        Si SÍ trae dirección son dos entregas distintas compartiendo número,
+        que es un error de la hoja y no hay forma de adivinar cuál vale: en
+        la hoja real pasa con las comandas escritas a mano, como "RODES".
+        Esa se descarta, pero diciendo dónde está la otra, que es lo que
+        hace falta para arreglarlo.
+      */
+      if (address) {
+        skipped.push({
+          rowNumber,
+          reason: `nº de comanda "${id}" repetido con otra dirección (ya está en la fila ${orders[yaEsta].rowNumber})`,
+        });
+        continue;
+      }
+      orders[yaEsta] = fusionarBulto(orders[yaEsta], fila);
+      continue;
+    }
+
+    // Las órdenes sin fecha de reparto son totalmente válidas (se quedan en
+    // la bolsa de pendientes). Sin dirección no: no se puede ir a ningún
+    // sitio, y si fuera un bulto ya lo habría cogido la rama de arriba.
+    if (!address) {
+      skipped.push({ rowNumber, reason: "sin dirección" });
+      continue;
+    }
+
+    porId.set(id, orders.length);
+    orders.push(fila);
   }
 
   return { orders, headerMap, skipped, sheetTab: tab };
@@ -410,6 +443,20 @@ export async function writeDeliveries(
 
     const type = record.type || "status";
 
+    /*
+      Lo mismo en TODAS las filas de la comanda, no solo en la primera.
+
+      Una comanda de cuatro bultos son cuatro filas en la hoja. Marcando solo
+      la primera, la oficina ve una comanda a medias —dos "Pendent" y una
+      "Entregat"—, que es exactamente lo que hay hoy en la hoja real y no hay
+      forma de saber desde fuera si está entregada o no. Ver `rowNumbers`.
+    */
+    const enTodasLasFilas = (column: ColumnKey, value: string | number) => {
+      for (const rowNumber of order.rowNumbers) {
+        updates.push({ rowNumber, column, value });
+      }
+    };
+
     if (type === "status" && record.status === "pendiente") {
       /*
         Deshacer.
@@ -420,32 +467,21 @@ export async function writeDeliveries(
         estaba antes de marcarla, y el importe se escribió en ese mismo
         momento. El valor anterior, si lo había, viaja en `record.price`.
       */
-      updates.push({ rowNumber: order.rowNumber, column: "status", value: "" });
-      updates.push({ rowNumber: order.rowNumber, column: "deliveredAt", value: "" });
-      updates.push({ rowNumber: order.rowNumber, column: "incidentNote", value: "" });
+      enTodasLasFilas("status", "");
+      enTodasLasFilas("deliveredAt", "");
+      enTodasLasFilas("incidentNote", "");
       importes.push({
         orderId: record.orderId,
         price: record.price ?? null,
         sheetTab: snapshot.sheetTab,
       });
     } else if (type === "status") {
-      updates.push({
-        rowNumber: order.rowNumber,
-        column: "status",
-        value: record.status === "entregado" ? "Entregat" : "Incidència",
-      });
-      updates.push({
-        rowNumber: order.rowNumber,
-        column: "deliveredAt",
-        value: formatSheetTimestamp(record.recordedAt, env.timezone),
-      });
-      if (record.note) {
-        updates.push({
-          rowNumber: order.rowNumber,
-          column: "incidentNote",
-          value: record.note,
-        });
-      }
+      enTodasLasFilas("status", record.status === "entregado" ? "Entregat" : "Incidència");
+      enTodasLasFilas(
+        "deliveredAt",
+        formatSheetTimestamp(record.recordedAt, env.timezone),
+      );
+      if (record.note) enTodasLasFilas("incidentNote", record.note);
       if (record.price !== null && record.price !== undefined) {
         importes.push({
           orderId: record.orderId,
@@ -454,11 +490,7 @@ export async function writeDeliveries(
         });
       }
     } else if (type === "date") {
-      updates.push({
-        rowNumber: order.rowNumber,
-        column: "date",
-        value: record.date ? record.date : "",
-      });
+      enTodasLasFilas("date", record.date ? record.date : "");
     } else if (type === "price") {
       // Solo el importe. Ni estado ni hora de entrega: corregir un precio no
       // puede cambiar cuándo se entregó. Aquí un nulo sí borra, porque es lo
@@ -680,7 +712,9 @@ function filaAFactura(fila: unknown[]): FacturaEmitida | null {
   if (numero === null) return null;
 
   const comandas = text(fila[3]).split(",").map((c) => c.trim()).filter(Boolean);
-  const importes = text(fila[4]).split(",").map((i) => parseNumber(i.trim()) ?? 0);
+  // NO vale partir por comas: la coma también es el separador decimal de
+  // cada importe. Ver `parseImportesFactura`.
+  const importes = parseImportesFactura(text(fila[4]));
 
   return {
     numero,
@@ -766,7 +800,9 @@ export async function emitirFactura(datos: {
     `'${datos.fecha}`,
     `'${datos.periodo}`,
     datos.lineas.map((l) => l.comanda).join(", "),
-    datos.lineas.map((l) => importeSheet(l.importe)).join(", "),
+    // Con ";" y no con ", ": el importe lleva coma decimal dentro y una
+    // lista separada por comas no se puede volver a partir.
+    datos.lineas.map((l) => importeSheet(l.importe)).join("; "),
     importeSheet(datos.base),
     importeSheet(datos.iva),
     importeSheet(datos.irpf),

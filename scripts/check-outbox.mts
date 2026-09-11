@@ -14,7 +14,7 @@
  */
 
 import assert from "node:assert/strict";
-import { applyOutbox } from "../lib/outbox.ts";
+import { applyOutbox, MAX_POR_ENVIO, seleccionarTanda } from "../lib/outbox.ts";
 import type { Manifest, Stop } from "../lib/types.ts";
 
 const parada = (extra: Partial<Stop> = {}): Stop => ({
@@ -23,6 +23,7 @@ const parada = (extra: Partial<Stop> = {}): Stop => ({
   creationDate: null,
   date: "2026-08-26",
   priority: 1,
+  bultos: 1,
   customer: "Farmàcia Sant Pau",
   address: "Carrer Gran 1",
   city: null,
@@ -30,6 +31,8 @@ const parada = (extra: Partial<Stop> = {}): Stop => ({
   phone: null,
   measures: null,
   notes: null,
+  deliveredTime: null,
+  incidentNote: null,
   status: "pendiente",
   rawStatus: "",
   statusCategory: "pendent",
@@ -163,39 +166,84 @@ const resultado = (items: Parameters<typeof applyOutbox>[1], inicial = parada())
 // el servidor la rechazaría por tamaño y la cola no podría vaciarse NUNCA:
 // cada intento llevaría los mismos registros de más.
 {
-  const MAX = 100;
   const cola = Array.from({ length: 250 }, (_, i) =>
     item({
       orderId: `ALB-${i}`,
       type: "status",
       status: "entregado",
+      sheetTab: "JUL 26",
       // Al revés, para comprobar que se ordena por fecha y no por posición.
       recordedAt: new Date(Date.UTC(2026, 7, 26, 10, 0, 250 - i)).toISOString(),
     }),
   );
 
-  const lote = [...cola]
-    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt))
-    .slice(0, MAX);
-
-  assert.equal(lote.length, MAX, "el lote tiene que caber en lo que acepta la API");
-  assert.equal(lote[0].orderId, "ALB-249", "no se está enviando lo más antiguo primero");
+  const tanda = seleccionarTanda(cola, "JUL 26");
+  assert.equal(tanda.items.length, MAX_POR_ENVIO, "el lote no cabe en lo que acepta la API");
+  assert.equal(tanda.items[0].orderId, "ALB-249", "no se envía lo más antiguo primero");
+  assert.equal(tanda.quedan, 150);
 
   // Y en tandas sucesivas se acaba vaciando, sin repetir ni saltarse nada.
   const vistos = new Set<string>();
-  let quedan = [...cola].sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
+  let quedan = [...cola];
   let tandas = 0;
   while (quedan.length > 0) {
-    for (const i of quedan.slice(0, MAX)) {
+    const t = seleccionarTanda(quedan, "JUL 26");
+    for (const i of t.items) {
       assert.equal(vistos.has(i.orderId), false, `${i.orderId} se ha enviado dos veces`);
       vistos.add(i.orderId);
     }
-    quedan = quedan.slice(MAX);
+    quedan = quedan.filter((i) => !vistos.has(i.orderId));
     tandas++;
     assert.ok(tandas <= 10, "la cola no se vacía: se ha quedado dando vueltas");
   }
   assert.equal(vistos.size, cola.length, "se han quedado registros sin enviar");
   assert.equal(tandas, 3);
+}
+
+// ── Cada tanda va al full donde se marcó, no al que esté abierto ─────────
+// Es lo que perdía entregas: marcar en JUL 26, quedarse sin cobertura,
+// cambiar de full y que la cola subiera a AGO 26 —donde esa comanda no
+// existe—. El servidor contestaba "no encontrada", la cola la daba por
+// cerrada y la entrega no quedaba escrita en ninguna parte.
+{
+  const cola = [
+    item({ orderId: "A", sheetTab: "JUL 26", recordedAt: "2026-08-26T10:00:00.000Z" }),
+    item({ orderId: "B", sheetTab: "AGO 26", recordedAt: "2026-08-26T10:01:00.000Z" }),
+    item({ orderId: "C", sheetTab: "JUL 26", recordedAt: "2026-08-26T10:02:00.000Z" }),
+  ];
+
+  // El full abierto es AGO 26, pero manda el de los registros más antiguos.
+  const primera = seleccionarTanda(cola, "AGO 26");
+  assert.equal(primera.sheetTab, "JUL 26", "la tanda se escribiría en el full equivocado");
+  assert.deepEqual(primera.items.map((i) => i.orderId), ["A", "C"]);
+  assert.equal(primera.quedan, 1, "lo de otro full tiene que esperar su turno");
+
+  const segunda = seleccionarTanda([cola[1]], "AGO 26");
+  assert.equal(segunda.sheetTab, "AGO 26");
+  assert.deepEqual(segunda.items.map((i) => i.orderId), ["B"]);
+  assert.equal(segunda.quedan, 0);
+}
+
+// ── Lo que quedara encolado de una versión anterior ──────────────────────
+// No lleva full. Se escribe donde se habría escrito antes: en el abierto.
+{
+  const viejo = item({ orderId: "A", recordedAt: "2026-08-26T10:00:00.000Z" });
+  delete (viejo as { sheetTab?: string | null }).sheetTab;
+
+  const tanda = seleccionarTanda([viejo], "JUL 26");
+  assert.equal(tanda.sheetTab, "JUL 26");
+  assert.equal(tanda.items.length, 1);
+
+  // Y sin ningún full elegido tampoco se atasca: el servidor tiene su
+  // propia pestaña por defecto.
+  assert.equal(seleccionarTanda([viejo], null).sheetTab, null);
+}
+
+// ── Una cola vacía no manda nada ─────────────────────────────────────────
+{
+  const tanda = seleccionarTanda([], "JUL 26");
+  assert.deepEqual(tanda.items, []);
+  assert.equal(tanda.quedan, 0);
 }
 
 console.log("✓ lib/outbox.ts — la cola se aplica entera, en orden y por tandas");

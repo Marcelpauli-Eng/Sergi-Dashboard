@@ -77,6 +77,9 @@ export default function Factures({
   const [recarrega, setRecarrega] = useState(0);
 
   const pendentsDeFacturar = entregats.filter((s) => s.price !== null && s.price > 0);
+  // Lo que se va a facturar, en euros. El recuento de comandas no dice si
+  // son cuatro portales o el mes entero, y es lo primero que se mira.
+  const aFacturar = pendentsDeFacturar.reduce((total, s) => total + (s.price ?? 0), 0);
 
   useEffect(() => {
     let cancelado = false;
@@ -103,18 +106,28 @@ export default function Factures({
           de hoja desde el menú, aquí se factura esa. */}
       <div className="soft-card space-y-3 p-4">
         <div>
-          <p className="text-xs font-semibold text-muted-foreground">Per facturar</p>
-          <p className="text-base font-medium">
-            {mes || "Cap full seleccionat"}
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Per facturar
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight">
+            {euros(aFacturar)}
+            <span className="ml-1 align-middle text-base font-medium text-muted-foreground">
+              €
+            </span>
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {mes || "Cap full seleccionat"} ·{" "}
             {pendentsDeFacturar.length}{" "}
             {pendentsDeFacturar.length === 1
               ? "entrega amb import"
               : "entregues amb import"}
-            {entregats.length > pendentsDeFacturar.length &&
-              ` · ${entregats.length - pendentsDeFacturar.length} sense`}
           </p>
+          {entregats.length > pendentsDeFacturar.length && (
+            <p className="mt-1.5 text-sm text-warning-foreground">
+              {entregats.length - pendentsDeFacturar.length} sense import: no hi
+              entraran.
+            </p>
+          )}
         </div>
         <Button
           size="touch"
@@ -162,47 +175,63 @@ export default function Factures({
 
         {facturas && facturas.length > 0 && (
           <ul className="soft-card divide-y divide-border">
+            {/*
+              En el móvil la factura es una ficha: arriba número e importe,
+              debajo de cuándo y de qué, y al final los dos botones con su
+              nombre. Todo en una fila dejaba el "3 comandes" cortado por la
+              mitad y dos iconos sin etiqueta de 44x32 px. De `sm` en
+              adelante vuelve a caber de lado.
+            */}
             {facturas.map((factura) => (
-              <li key={factura.numero} className="flex items-center gap-3 px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold tabular-nums">
-                    {formatearNumero(factura.numero)}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {fechaCorta(factura.fecha)} · {factura.periodo} ·{" "}
-                    {factura.lineas.length}{" "}
-                    {factura.lineas.length === 1 ? "comanda" : "comandes"}
-                  </p>
+              <li key={factura.numero} className="px-4 py-4 sm:flex sm:items-center sm:gap-3 sm:py-3">
+                <div className="flex items-baseline justify-between gap-3 sm:flex-1 sm:items-center">
+                  <div className="min-w-0">
+                    <p className="text-base font-semibold tabular-nums sm:text-sm">
+                      {formatearNumero(factura.numero)}
+                    </p>
+                    <p className="mt-0.5 text-xs leading-snug text-muted-foreground sm:truncate">
+                      {fechaCorta(factura.fecha)} · {factura.periodo} ·{" "}
+                      {factura.lineas.length}{" "}
+                      {factura.lineas.length === 1 ? "comanda" : "comandes"}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-base font-semibold tabular-nums sm:text-sm sm:font-medium">
+                    {euros(factura.total)} €
+                  </span>
                 </div>
-                <span className="tabular-nums text-sm font-medium">
-                  {euros(factura.total)} €
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label={`Descarregar en PDF la factura ${formatearNumero(factura.numero)}`}
-                  onClick={() =>
-                    descargarPdf(
-                      hojasDe(factura, datos),
-                      `factura-${formatearNumero(factura.numero)}`,
-                    )
-                  }
-                >
-                  <Download />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label={`Imprimir la factura ${formatearNumero(factura.numero)}`}
-                  onClick={() => {
-                    setAImprimir(factura);
-                    // Un respiro para que la hoja esté en el DOM antes de que
-                    // el navegador congele la página con el diálogo de imprimir.
-                    setTimeout(() => window.print(), 100);
-                  }}
-                >
-                  <Printer />
-                </Button>
+
+                <div className="mt-3 flex gap-2 sm:mt-0 sm:shrink-0">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
+                    aria-label={`Descarregar en PDF la factura ${formatearNumero(factura.numero)}`}
+                    onClick={() =>
+                      descargarPdf(
+                        hojasDe(factura, datos),
+                        `factura-${formatearNumero(factura.numero)}`,
+                      )
+                    }
+                  >
+                    <Download />
+                    <span className="sm:hidden">PDF</span>
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
+                    aria-label={`Imprimir la factura ${formatearNumero(factura.numero)}`}
+                    onClick={() => {
+                      setAImprimir(factura);
+                      // Un respiro para que la hoja esté en el DOM antes de que
+                      // el navegador congele la página con el diálogo de imprimir.
+                      setTimeout(() => window.print(), 100);
+                    }}
+                  >
+                    <Printer />
+                    <span className="sm:hidden">Imprimir</span>
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>

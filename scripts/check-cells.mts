@@ -13,12 +13,14 @@ import assert from "node:assert/strict";
 import {
   NO_PRIORITY,
   columnLetter,
+  fusionarBulto,
   parseNumber,
   parsePriority,
   parseStatus,
   parseStatusCategory,
   text,
 } from "../lib/sheet-cells.ts";
+import type { Order } from "../lib/types.ts";
 
 // ── Letra de columna ─────────────────────────────────────────────────────
 // Decide en qué celda se escribe. Equivocarse aquí es escribir el estado de
@@ -143,6 +145,92 @@ import {
       `"${v}" se lee distinto en la pantalla que en el Sheet`,
     );
   }
+}
+
+// ── Las comandas de varios bultos ────────────────────────────────────────
+// La oficina escribe un bulto por FILA: la primera lleva la dirección y el
+// cliente, y las demás solo las medidas, con el mismo nº de comanda. Son
+// una sola entrega. Antes se descartaban por "ID duplicado" y con ellas se
+// iban las medidas de los otros paquetes: en JUL 26 de la hoja real, la
+// comanda C260601098 ocupa cuatro filas y el transportista veía una.
+{
+  const comanda = (extra: Partial<Order>): Order => ({
+    id: "C260601098",
+    driverId: "",
+    creationDate: null,
+    date: "",
+    priority: NO_PRIORITY,
+    customer: "",
+    address: "",
+    city: null,
+    billingClient: null,
+    phone: null,
+    measures: null,
+    notes: null,
+    bultos: 1,
+    deliveredTime: null,
+    incidentNote: null,
+    status: "pendiente",
+    rawStatus: "",
+    statusCategory: "pendent",
+    price: null,
+    lat: null,
+    lng: null,
+    rowNumber: 58,
+    rowNumbers: [58],
+    ...extra,
+  });
+
+  const base = comanda({
+    customer: "PAU MANENT",
+    address: "AV. DE LA MARE DE DEU DE MONTSERRAT, 34",
+    city: "08024 BARCELONA",
+    phone: "615 99 68 92",
+    measures: "100 x 110 x 138 cm",
+    lat: 41.413,
+    lng: 2.162,
+  });
+
+  let junta = base;
+  for (const [i, mides] of ["100 x 80 x 133 cm", "150 x 110 x 190 cm", "220 x 80 x 200 cm"].entries()) {
+    junta = fusionarBulto(junta, comanda({ measures: mides, rowNumber: 59 + i, rowNumbers: [59 + i] }));
+  }
+
+  assert.equal(junta.bultos, 4, "el transportista no sabría cuántos paquetes carga");
+  assert.deepEqual(junta.rowNumbers, [58, 59, 60, 61], "no se marcarían todas las filas");
+  assert.equal(
+    junta.measures,
+    "100 x 110 x 138 cm · 100 x 80 x 133 cm · 150 x 110 x 190 cm · 220 x 80 x 200 cm",
+  );
+
+  // Lo de la comanda manda; el bulto solo rellena huecos.
+  assert.equal(junta.customer, "PAU MANENT");
+  assert.equal(junta.address, "AV. DE LA MARE DE DEU DE MONTSERRAT, 34");
+  assert.equal(junta.phone, "615 99 68 92");
+  assert.equal(junta.lat, 41.413);
+}
+
+// Un bulto que trae un dato que a la comanda le falta, lo rellena.
+{
+  const vacia = (extra: Partial<Order>): Order => ({
+    id: "C1", driverId: "", creationDate: null, date: "", priority: NO_PRIORITY,
+    customer: "", address: "A", city: null, billingClient: null, phone: null,
+    measures: null, notes: null, bultos: 1, deliveredTime: null, incidentNote: null,
+    status: "pendiente", rawStatus: "", statusCategory: "pendent", price: null,
+    lat: null, lng: null, rowNumber: 2, rowNumbers: [2], ...extra,
+  });
+
+  const junta = fusionarBulto(
+    vacia({ measures: "1 palet" }),
+    vacia({ customer: "TANCAL", phone: "674123106", priority: 10, date: "2026-07-14", rowNumber: 3, rowNumbers: [3] }),
+  );
+  assert.equal(junta.customer, "TANCAL", "un hueco tiene que rellenarse");
+  assert.equal(junta.phone, "674123106");
+  assert.equal(junta.date, "2026-07-14");
+  // Un "Urgent" en cualquier bulto sube la comanda entera: mismo viaje.
+  assert.equal(junta.priority, 10, "la prioridad más alta manda");
+  // Y el estado NO se toca: una fila pendiente deja la parada en la ruta.
+  assert.equal(junta.statusCategory, "pendent");
 }
 
 console.log("✓ lib/sheet-cells.ts — las celdas se leen como las escribe la oficina");

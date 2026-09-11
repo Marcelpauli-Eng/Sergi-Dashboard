@@ -18,6 +18,7 @@ import {
   formatearNumero,
   paginar,
   parseImporte,
+  parseImportesFactura,
   LINEAS_POR_PAGINA,
 } from "../lib/factura.ts";
 
@@ -151,6 +152,34 @@ console.log("\x1b[32m✓\x1b[0m Los números de la factura cuadran");
 
   // Un código que no está tampoco puede dejar la factura sin cliente.
   assert.equal(clientePara(dos, "99").nombre, "PRIMERO");
+}
+
+
+// ── Los importes de una factura ya emitida ───────────────────────────────
+// Van todos en UNA celda de la hoja, y cada uno lleva su coma decimal. Con
+// ", " de separador, partir por comas daba el doble de trozos y cada línea
+// cogía el del vecino: la factura 30 de la hoja real —"1000,00, 1,00,
+// 2000,00, 100,00, 3000,00, 1,00…"— se reimprimía como 1000, 0, 1, 0, 2000.
+{
+  const legado = "1000,00, 1,00, 2000,00, 100,00, 3000,00";
+  assert.deepEqual(
+    parseImportesFactura(legado),
+    [1000, 1, 2000, 100, 3000],
+    "una factura ya emitida se reimprime con otros importes",
+  );
+
+  // El formato nuevo, con punto y coma.
+  assert.deepEqual(parseImportesFactura("80,00; 70,50; 1.234,50"), [80, 70.5, 1234.5]);
+
+  // Una sola línea, y ninguna.
+  assert.deepEqual(parseImportesFactura("80,00"), [80]);
+  assert.deepEqual(parseImportesFactura(""), []);
+
+  // Y lo que escribe la app se vuelve a leer igual, que es lo único que
+  // tiene que cumplirse siempre.
+  const importes = [1000, 1, 2000.5, 100, 3000, 0.05];
+  const celda = importes.map((i) => i.toFixed(2).replace(".", ",")).join("; ");
+  assert.deepEqual(parseImportesFactura(celda), importes, "la ida y vuelta no cuadra");
 }
 
 console.log("✓ lib/factura.ts — totales, páginas, importes y clientes");
