@@ -416,8 +416,21 @@ export default function StopCard({
                una línea de letra pequeña. */
             <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-border pt-4 sm:grid-cols-3 lg:grid-cols-4">
               <Camp etiqueta="Comanda" valor={stop.id} mono />
-              <Camp etiqueta="Creada" valor={data(stop.creationDate)} />
-              <Camp etiqueta="Repartiment" valor={data(stop.date)} />
+              {/*
+                El día solo cuando ya está hecha, y entonces es el día en que
+                se hizo.
+
+                Mientras está por repartir no dice nada que no se sepa: en la
+                bossa está vacío por definición, y abierta desde un día del
+                calendario ese día es justo el que se está mirando. Donde sí
+                hace falta es en l'Historial, que es mirar atrás.
+              */}
+              {done && stop.date && (
+                <Camp
+                  etiqueta={stop.statusCategory === "incidencia" ? "Incidència el" : "Entregat el"}
+                  valor={[data(stop.date), stop.deliveredTime].filter(Boolean).join(" · ")}
+                />
+              )}
               {/* Sin cortar: la celda de la hoja lleva a veces el nombre de
                   quien recoge delante —"Bilal Asbai 631104…"— y truncado se
                   queda justo sin las últimas cifras, que es lo único que
@@ -435,16 +448,12 @@ export default function StopCard({
             </dl>
           ) : (
             <>
-              {/* Nº comanda y fecha de creación */}
-              <div className="mt-1 flex items-center gap-1.5 text-xs text-tertiary-foreground">
-                <p className="font-mono">{stop.id}</p>
-                {stop.creationDate && (
-                  <>
-                    <span aria-hidden>·</span>
-                    <p>Creat: {data(stop.creationDate)}</p>
-                  </>
-                )}
-              </div>
+              {/* El nº de comanda. La fecha en que la oficina la metió en la
+                  hoja no sale: no cambia nada de lo que hay que hacer con
+                  ella. Sigue sirviendo para ORDENAR la bossa —primero lo que
+                  lleva más tiempo esperando—, que es para lo único que se
+                  usa. */}
+              <p className="mt-1 font-mono text-xs text-tertiary-foreground">{stop.id}</p>
 
               {(stop.measures || stop.bultos > 1) && (
                 <p className="mt-1 text-xs text-tertiary-foreground">

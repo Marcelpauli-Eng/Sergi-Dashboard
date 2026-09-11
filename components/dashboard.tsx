@@ -865,6 +865,8 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 calendarStopsByDate={calendarStopsByDate}
                 onAssignDate={handleDateAssignment}
                 onImporte={handleImporte}
+                onDelivered={handleDelivered}
+                onIncident={handleIncident}
               />
             )}
             {activeTab === "historial" && (
@@ -1180,6 +1182,8 @@ function TabCalendari({
   calendarStopsByDate,
   onAssignDate,
   onImporte,
+  onDelivered,
+  onIncident,
 }: {
   todayDate: string;
   unassignedStops: Stop[];
@@ -1187,6 +1191,8 @@ function TabCalendari({
   onAssignDate: (orderId: string, date: string | null) => void;
   /** Poner o corregir el importe sin salir de la bossa. */
   onImporte: (orderId: string, importe: number | null) => void;
+  onDelivered: (orderId: string, price: number | null) => void;
+  onIncident: (orderId: string, note: string) => void;
 }) {
   const avui = todayDate || new Date().toISOString().slice(0, 10);
   const [currentMonth, setCurrentMonth] = useState(() => getYearMonth(avui));
@@ -1276,6 +1282,8 @@ function TabCalendari({
         unassignedStops={unassignedStops}
         onAssignDate={onAssignDate}
         onImporte={onImporte}
+        onDelivered={onDelivered}
+        onIncident={onIncident}
         onTancar={() => setSelectedDate(null)}
       />
     );
@@ -1579,6 +1587,8 @@ function DiaDetall({
   unassignedStops,
   onAssignDate,
   onImporte,
+  onDelivered,
+  onIncident,
   onTancar,
 }: {
   date: string;
@@ -1588,8 +1598,21 @@ function DiaDetall({
   unassignedStops: Stop[];
   onAssignDate: (orderId: string, date: string | null) => void;
   onImporte: (orderId: string, importe: number | null) => void;
+  onDelivered: (orderId: string, price: number | null) => void;
+  onIncident: (orderId: string, note: string) => void;
   onTancar: () => void;
 }) {
+  /**
+   * La comanda abierta desde una de las dos listas del día, por su id.
+   *
+   * Una comanda ya asignada a un día no se podía abrir: en el calendario
+   * solo salían el nombre y la población, y para ver el teléfono, las
+   * medidas o ponerle el importe había que buscarla en otra pantalla. Por
+   * el id y no el objeto, para que al corregir el importe la ficha enseñe
+   * el nuevo (ver la bossa).
+   */
+  const [obertId, setObertId] = useState<string | null>(null);
+  const obert = obertId ? (stops.find((s) => s.id === obertId) ?? null) : null;
   const entregades = stops.filter((s) => s.statusCategory === "entregat");
   const incidencies = stops.filter((s) => s.statusCategory === "incidencia");
   const pendents = stops.filter(
@@ -1690,7 +1713,14 @@ function DiaDetall({
                       )}
                     </span>
 
-                    <div className="min-w-0 flex-1">
+                    {/* Abre la ficha: el teléfono, les mides i l'import.
+                        El botón de llamar va aparte, como hermano, que un
+                        botón dentro de otro no es HTML válido. */}
+                    <button
+                      type="button"
+                      onClick={() => setObertId(stop.id)}
+                      className="pressable min-w-0 flex-1 text-left"
+                    >
                       <p className="truncate text-sm font-medium">
                         {stop.customer || stop.id}
                       </p>
@@ -1703,7 +1733,7 @@ function DiaDetall({
                           {stop.incidentNote}
                         </p>
                       )}
-                    </div>
+                    </button>
 
                     <div className="flex shrink-0 items-center gap-2">
                       <Trucar phone={stop.phone} />
@@ -1755,12 +1785,16 @@ function DiaDetall({
                 onDragStart={(e) => e.dataTransfer.setData("text/plain", stop.id)}
                 className="flex items-center gap-2 px-3 py-2.5 lg:cursor-grab lg:active:cursor-grabbing"
               >
-                <div className="min-w-0 flex-1">
+                <button
+                  type="button"
+                  onClick={() => setObertId(stop.id)}
+                  className="pressable min-w-0 flex-1 text-left"
+                >
                   <p className="truncate text-sm font-medium">{stop.customer || stop.id}</p>
                   <p className="truncate text-xs text-muted-foreground">
                     {stop.city || stop.address || stop.id}
                   </p>
-                </div>
+                </button>
                 <Trucar phone={stop.phone} />
                 <Button variant="ghost" size="sm" onClick={() => onAssignDate(stop.id, null)}>
                   Treure
@@ -1786,6 +1820,40 @@ function DiaDetall({
           onAssign={(id) => onAssignDate(id, date)}
           onImporte={onImporte}
         />
+      )}
+
+      {obert && (
+        <div
+          className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+          onClick={() => setObertId(null)}
+        >
+          <div className="relative w-full max-w-md sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="secondary"
+              size="icon"
+              className="absolute -top-12 right-0 rounded-full text-white"
+              onClick={() => setObertId(null)}
+              aria-label="Tancar"
+            >
+              <X />
+            </Button>
+            <div className="max-h-[85svh] overflow-y-auto overscroll-contain rounded-[var(--radius)]">
+              <StopCard
+                detall
+                stop={obert}
+                onImporte={onImporte}
+                onDelivered={(id, price) => {
+                  onDelivered(id, price);
+                  setObertId(null);
+                }}
+                onIncident={(id, note) => {
+                  onIncident(id, note);
+                  setObertId(null);
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1893,6 +1961,27 @@ function Bossa({
    */
   const [previewId, setPreviewId] = useState<string | null>(null);
   const previewStop = previewId ? (stops.find((s) => s.id === previewId) ?? null) : null;
+
+  /*
+    Por orden de llegada: primero la que la oficina apuntó antes.
+
+    Es lo único para lo que sirve la fecha de creación —en la ficha no sale,
+    porque cuándo la metieron en la hoja no cambia nada de lo que hay que
+    hacer con ella— y aquí sí: la bossa es una cola de espera, y lo que lleva
+    más tiempo esperando es lo primero que hay que colocar.
+
+    Las que no traen fecha van al final: no hay con qué ordenarlas, y
+    dejarlas arriba las pondría por delante de comandas de hace un mes.
+  */
+  const ordenades = useMemo(
+    () =>
+      [...stops].sort((a, b) => {
+        if (!a.creationDate) return b.creationDate ? 1 : 0;
+        if (!b.creationDate) return -1;
+        return a.creationDate.localeCompare(b.creationDate);
+      }),
+    [stops],
+  );
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const cancelRef = useRef(false);
   /**
@@ -1971,7 +2060,7 @@ function Bossa({
           para el nombre y hace que las dos listas del día se lean igual.
         */
         <ul className="soft-card min-h-0 divide-y divide-border overflow-y-auto">
-          {stops.map((stop) => (
+          {ordenades.map((stop) => (
             /*
               La fila es el área de asignar —tocar, mantener pulsado o
               arrastrar— y el botón de llamar va aparte, como hermano: un
