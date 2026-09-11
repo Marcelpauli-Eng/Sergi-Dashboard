@@ -864,6 +864,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 unassignedStops={unassignedStops}
                 calendarStopsByDate={calendarStopsByDate}
                 onAssignDate={handleDateAssignment}
+                onImporte={handleImporte}
               />
             )}
             {activeTab === "historial" && (
@@ -1178,11 +1179,14 @@ function TabCalendari({
   unassignedStops,
   calendarStopsByDate,
   onAssignDate,
+  onImporte,
 }: {
   todayDate: string;
   unassignedStops: Stop[];
   calendarStopsByDate: Record<string, Stop[]>;
   onAssignDate: (orderId: string, date: string | null) => void;
+  /** Poner o corregir el importe sin salir de la bossa. */
+  onImporte: (orderId: string, importe: number | null) => void;
 }) {
   const avui = todayDate || new Date().toISOString().slice(0, 10);
   const [currentMonth, setCurrentMonth] = useState(() => getYearMonth(avui));
@@ -1271,6 +1275,7 @@ function TabCalendari({
         todayDate={todayDate}
         unassignedStops={unassignedStops}
         onAssignDate={onAssignDate}
+        onImporte={onImporte}
         onTancar={() => setSelectedDate(null)}
       />
     );
@@ -1547,7 +1552,7 @@ function TabCalendari({
 
       {/* ── Columna de al lado: la bolsa ───────────────────────────────── */}
       <aside className="mt-6 flex flex-col gap-3 lg:mt-0 lg:min-h-0 lg:pt-0">
-        <Bossa stops={unassignedStops} onAssign={null} />
+        <Bossa stops={unassignedStops} onAssign={null} onImporte={onImporte} />
       </aside>
     </div>
   );
@@ -1573,6 +1578,7 @@ function DiaDetall({
   todayDate,
   unassignedStops,
   onAssignDate,
+  onImporte,
   onTancar,
 }: {
   date: string;
@@ -1581,6 +1587,7 @@ function DiaDetall({
   todayDate: string;
   unassignedStops: Stop[];
   onAssignDate: (orderId: string, date: string | null) => void;
+  onImporte: (orderId: string, importe: number | null) => void;
   onTancar: () => void;
 }) {
   const entregades = stops.filter((s) => s.statusCategory === "entregat");
@@ -1774,7 +1781,11 @@ function DiaDetall({
           </p>
         )
       ) : (
-        <Bossa stops={unassignedStops} onAssign={(id) => onAssignDate(id, date)} />
+        <Bossa
+          stops={unassignedStops}
+          onAssign={(id) => onAssignDate(id, date)}
+          onImporte={onImporte}
+        />
       )}
     </div>
   );
@@ -1856,12 +1867,32 @@ function Xifra({
 function Bossa({
   stops,
   onAssign,
+  onImporte,
 }: {
   stops: Stop[];
   /** `null` cuando no hay ningún día abierto: entonces tocar solo previsualiza. */
   onAssign: ((id: string) => void) | null;
+  /**
+   * Poner el importe desde la previsualización.
+   *
+   * El precio de un porte se sabe muchas veces antes de repartirlo —lo dice
+   * el albarán o es el de siempre para ese cliente— y hasta ahora solo se
+   * podía escribir al marcar la entrega o después, en l'Historial. Aquí es
+   * el mismo camino que allí: se guarda solo, sin tocar ni el estado ni la
+   * hora.
+   */
+  onImporte: (orderId: string, importe: number | null) => void;
 }) {
-  const [previewStop, setPreviewStop] = useState<Stop | null>(null);
+  /**
+   * La comanda que se está mirando, por su id.
+   *
+   * Por el id y no el objeto: al ponerle el importe desde aquí, la comanda
+   * se vuelve a construir con el precio nuevo, y una copia guardada se
+   * quedaría enseñando el de antes —que es justo el que se acaba de
+   * corregir—.
+   */
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const previewStop = previewId ? (stops.find((s) => s.id === previewId) ?? null) : null;
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const cancelRef = useRef(false);
   /**
@@ -1876,14 +1907,14 @@ function Bossa({
 
   const activar = (stop: Stop) => {
     if (onAssign) onAssign(stop.id);
-    else setPreviewStop(stop);
+    else setPreviewId(stop.id);
   };
 
   const startPress = (stop: Stop) => {
     cancelRef.current = false;
     timerRef.current = setTimeout(() => {
       if (!cancelRef.current) {
-        setPreviewStop(stop);
+        setPreviewId(stop.id);
       }
       timerRef.current = null;
     }, 500); // 500ms long press
@@ -1981,13 +2012,13 @@ function Bossa({
       )}
 
       {previewStop && (
-        <div className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => setPreviewStop(null)}>
+        <div className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => setPreviewId(null)}>
           <div className="relative w-full max-w-md sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
             <Button
               variant="secondary"
               size="icon"
               className="absolute -top-12 right-0 rounded-full text-white"
-              onClick={() => setPreviewStop(null)}
+              onClick={() => setPreviewId(null)}
               aria-label="Tancar"
             >
               <X />
@@ -2011,6 +2042,7 @@ function Bossa({
               stop={previewStop}
               onDelivered={() => {}}
               onIncident={() => {}}
+              onImporte={onImporte}
               peu={
                 onAssign ? (
                   <Button
@@ -2018,7 +2050,7 @@ function Bossa({
                     size="touch"
                     onClick={() => {
                       onAssign(previewStop.id);
-                      setPreviewStop(null);
+                      setPreviewId(null);
                     }}
                   >
                     Assignar comanda
