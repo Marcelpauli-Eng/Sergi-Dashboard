@@ -341,6 +341,61 @@ export function setCustomOrder(orderIds: string[]): void {
   emitLocalPrefs();
 }
 
+/* ── Las llamadas de la víspera ──────────────────────────────────────── */
+
+const TRUCADES_KEY = "reparto:trucades";
+
+/**
+ * A quién se ha llamado ya, y cuándo: comanda → ISO de la llamada.
+ *
+ * En el móvil y no en ninguna hoja, a propósito. Una llamada para confirmar
+ * que mañana hay alguien en casa no es un dato del reparto: no le interesa a
+ * la oficina, no hay que facturarla y no tiene que sobrevivir a nada. Y así
+ * marcarla funciona igual sin cobertura, que es cuando se hacen.
+ *
+ * ponytail: es de este móvil. Si algún día se llama desde dos sitios, esto
+ * tendría que irse al documento privado, como los importes.
+ */
+const SENSE_TRUCADES: Readonly<Record<string, string>> = {};
+
+let trucadesCache: { raw: string | null; valor: Readonly<Record<string, string>> } = {
+  raw: null,
+  valor: SENSE_TRUCADES,
+};
+
+export function getTrucades(): Readonly<Record<string, string>> {
+  if (typeof window === "undefined") return SENSE_TRUCADES;
+
+  const raw = localStorage.getItem(TRUCADES_KEY);
+  if (raw === trucadesCache.raw) return trucadesCache.valor;
+
+  let valor: Readonly<Record<string, string>> = SENSE_TRUCADES;
+  try {
+    if (raw) valor = JSON.parse(raw) as Record<string, string>;
+  } catch {
+    valor = SENSE_TRUCADES;
+  }
+  trucadesCache = { raw, valor };
+  return valor;
+}
+
+/** Snapshot para el render de servidor: siempre la misma referencia. */
+export function getTrucadesServer(): Readonly<Record<string, string>> {
+  return SENSE_TRUCADES;
+}
+
+/** Marca (o desmarca) una comanda como llamada. */
+export function marcarTrucada(orderId: string, feta: boolean): void {
+  if (typeof window === "undefined") return;
+
+  const actual = { ...getTrucades() };
+  if (feta) actual[orderId] = new Date().toISOString();
+  else delete actual[orderId];
+
+  localStorage.setItem(TRUCADES_KEY, JSON.stringify(actual));
+  emitLocalPrefs();
+}
+
 /**
  * Aplica el orden personalizado a una lista de stops.
  * Los IDs conocidos mantienen su posición; los nuevos se añaden al final.
@@ -434,10 +489,35 @@ export async function flushOutbox(): Promise<ResultadoEnvio> {
     // poner, típicamente—. Enseñar eso en vez de "respondió 500" es lo que
     // distingue "esto se arregla en Vercel en dos minutos" de ir a leer los
     // logs con el móvil en la mano, en mitad del reparto.
-    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    const body = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      invalids?: { clientId?: string; motiu: string }[];
+    };
     const message = body.error ?? `El servidor respondió ${response.status}`;
+
+    /*
+      Los que el servidor señala como inválidos se cierran aquí también.
+
+      Pasa cuando TODA la tanda es inasumible: entonces contesta 400 en vez
+      de escribir nada. Sin esto volvían a la cola, se reintentaban en cada
+      sincronización y el móvil no volvía a escribir en la hoja nunca más.
+      Un 400 no se arregla insistiendo.
+    */
+    const tancats = new Set(
+      (body.invalids ?? []).map((i) => i.clientId).filter((id): id is string => !!id),
+    );
+    const motius = new Map((body.invalids ?? []).map((i) => [i.clientId, i.motiu]));
+    const ara = new Date().toISOString();
+
     await db.transaction("rw", db.outbox, async () => {
       for (const item of pending) {
+        if (tancats.has(item.clientId)) {
+          await db.outbox.update(item.clientId, {
+            syncedAt: ara,
+            lastError: `El servidor no ha acceptat el registre: ${motius.get(item.clientId)}`,
+          });
+          continue;
+        }
         await db.outbox.update(item.clientId, {
           attempts: item.attempts + 1,
           lastError: message,
@@ -450,14 +530,35 @@ export async function flushOutbox(): Promise<ResultadoEnvio> {
   const result = (await response.json()) as {
     applied: string[];
     notFound: string[];
+    /** Los que el servidor no puede aceptar nunca. Ver /api/deliveries. */
+    invalids?: { clientId?: string; orderId?: string; motiu: string }[];
   };
 
   const now = new Date().toISOString();
   const resolved = new Set([...result.applied, ...result.notFound]);
   const perdidas = new Set<string>();
+  /*
+    Un registro que el servidor rechaza por inválido se cierra, no se
+    reintenta. Reintentarlo es volver a recibir el mismo "no" cada vez, y
+    mientras tanto tapona la cola entera: el móvil se queda sin poder
+    escribir en la hoja aunque todo lo demás esté bien.
+  */
+  const rebutjats = new Map<string, string>();
+  for (const invalid of result.invalids ?? []) {
+    if (invalid.clientId) rebutjats.set(invalid.clientId, invalid.motiu);
+    if (invalid.orderId) perdidas.add(invalid.orderId);
+  }
 
   await db.transaction("rw", db.outbox, async () => {
     for (const item of pending) {
+      const motiu = rebutjats.get(item.clientId);
+      if (motiu !== undefined) {
+        await db.outbox.update(item.clientId, {
+          syncedAt: now,
+          lastError: `El servidor no ha acceptat el registre: ${motiu}`,
+        });
+        continue;
+      }
       if (!resolved.has(item.orderId)) continue;
       const noEsta = result.notFound.includes(item.orderId);
       if (noEsta) perdidas.add(item.orderId);

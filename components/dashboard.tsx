@@ -31,6 +31,7 @@ import HomeSummary from "@/components/home-summary";
 import Factures from "@/components/factures";
 import Informes from "@/components/informes";
 import Cobraments from "@/components/cobraments";
+import Trucades from "@/components/trucades";
 import Cercador from "@/components/cercador";
 import Desfer, { MARGE_DESFER_MS, type AccioDesfer } from "@/components/desfer";
 import Endarrerides from "@/components/endarrerides";
@@ -53,8 +54,11 @@ import {
   subscribeLocalPrefs,
   getThemePreference,
   getThemePreferenceServer,
+  getTrucades,
+  getTrucadesServer,
 } from "@/lib/sync";
 import { formatDistance, formatDuration } from "@/lib/format";
+import { diaPerDefecte, diesPerTrucar, resumTrucades } from "@/lib/trucades";
 import { addDays, formatLongDate, getMonthGrid, getWeekGrid, getYearMonth } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { Stop } from "@/lib/types";
@@ -100,6 +104,7 @@ const MONTH_NAMES = ["Gener", "Febrer", "Març", "Abril", "Maig", "Juny", "Julio
 
 type TabValue =
   | "avui"
+  | "trucades"
   | "calendari"
   | "historial"
   | "factures"
@@ -109,9 +114,23 @@ type TabValue =
 /** Las pestañas que en pantalla grande ocupan el alto entero sin scroll. */
 const A_PANTALLA_SENCERA: TabValue[] = ["calendari"];
 
+/**
+ * Cada cuánto se vuelve a leer la hoja con la app delante.
+ *
+ * Veinte segundos es el equilibrio: lo que uno marca lo ve el otro casi al
+ * momento, y sale a tres lecturas por minuto y móvil —de las sesenta por
+ * minuto que da Google—, así que caben varios repartidores a la vez sin que
+ * salte la cuota. Bajarlo multiplica el gasto por todos los dispositivos.
+ */
+const REFRESC_MS = 20_000;
+
 /** Encabezado de cada sección en ordenador e iPad. */
 const TITOLS: Record<TabValue, { titol: string; subtitol: string }> = {
   avui: { titol: "Avui", subtitol: "La ruta del dia i les parades pendents." },
+  trucades: {
+    titol: "Trucades",
+    subtitol: "Avisa als clients de les comandes de demà, o de qualsevol dia.",
+  },
   calendari: { titol: "Calendari", subtitol: "Assigna comandes als dies de repartiment." },
   historial: { titol: "Historial", subtitol: "Tot el que s'ha entregat i les incidències." },
   factures: { titol: "Factures", subtitol: "Factura el mes i consulta les emeses." },
@@ -267,22 +286,32 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     [router],
   );
 
-  const sync = useCallback(async () => {
-    setSyncing(true);
-    setError(null);
-    try {
-      const outcome = await syncNow(selectedSheetTab ?? undefined);
-      setError(outcome.error);
-    } catch (e) {
-      if (e instanceof SessionExpiredError) {
-        router.replace("/login");
-        return;
+  /**
+   * Sube lo pendiente y vuelve a bajar la hoja.
+   *
+   * `silenciós` es para el refresco de fondo: hace lo mismo pero sin
+   * encender el "Sincronizando…" de la barra. Un parpadeo cada veinte
+   * segundos acaba leyéndose como que algo va mal.
+   */
+  const sync = useCallback(
+    async (silenciós = false) => {
+      if (!silenciós) setSyncing(true);
+      setError(null);
+      try {
+        const outcome = await syncNow(selectedSheetTab ?? undefined);
+        setError(outcome.error);
+      } catch (e) {
+        if (e instanceof SessionExpiredError) {
+          router.replace("/login");
+          return;
+        }
+        setError(e instanceof Error ? e.message : "Error de sincronización");
+      } finally {
+        if (!silenciós) setSyncing(false);
       }
-      setError(e instanceof Error ? e.message : "Error de sincronización");
-    } finally {
-      setSyncing(false);
-    }
-  }, [router, selectedSheetTab]);
+    },
+    [router, selectedSheetTab],
+  );
 
   useEffect(() => {
     const initial = setTimeout(() => void sync(), 0);
@@ -290,10 +319,34 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     const onVisible = () => {
       if (document.visibilityState === "visible" && navigator.onLine) void sync();
     };
+
+    /*
+      Con la app delante, se vuelve a preguntar cada poco.
+
+      Dos móviles sobre la misma hoja —el del transportista y el de la
+      oficina, o dos repartidores— tienen que ver lo que hace el otro sin que
+      nadie le dé a Actualizar. Google no avisa de que una casilla ha
+      cambiado: la única manera de enterarse es volver a leer.
+
+      Solo con la pantalla visible y con red. En segundo plano no hay nadie
+      mirando, y cada vuelta cuesta una lectura de la cuota de Sheets.
+
+      ponytail: sondeo, no empuje. Para que un cambio salte en el acto haría
+      falta que el servidor mantuviera la conexión abierta (SSE) y un sitio
+      donde anotar los cambios, que hoy no existe: la verdad está en el
+      Sheet. Si medio minuto de retraso llega a molestar, ese es el camino.
+    */
+    const refresc = setInterval(() => {
+      if (document.visibilityState === "visible" && navigator.onLine) {
+        void sync(true);
+      }
+    }, REFRESC_MS);
+
     window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       clearTimeout(initial);
+      clearInterval(refresc);
       window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisible);
     };
@@ -397,6 +450,25 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       endarrerides: endarrerides.sort((a, b) => a.date.localeCompare(b.date)),
     };
   }, [allStops, customOrderIds, todayDate]);
+
+  /*
+    Cuántas llamadas quedan del día que toca llamar.
+
+    Solo para la insignia del acceso: lo demás lo calcula la propia pantalla
+    de Trucades. Aquí interesa que se vea desde Avui sin entrar, que es el
+    momento en que uno se acuerda —al cerrar el día.
+  */
+  const trucades = useSyncExternalStore(
+    subscribeLocalPrefs,
+    getTrucades,
+    getTrucadesServer,
+  );
+  const trucadesPendents = useMemo(() => {
+    const dies = diesPerTrucar(allStops);
+    const dia = diaPerDefecte(dies, todayDate);
+    const delDia = dies.find((d) => d.date === dia);
+    return delDia ? resumTrucades(delDia.comandas, trucades).perTrucar : 0;
+  }, [allStops, todayDate, trucades]);
 
   const generateRoute = useCallback(async () => {
     // Only generate route for "pendents" in today's active stops
@@ -784,6 +856,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
               <TabAvui
                 todayStops={todayStops}
                 sensAssignar={unassignedStops.length}
+                trucadesPendents={trucadesPendents}
                 entregats={historyStops.entregat}
                 incidencies={historyStops.incidencia}
                 avui={todayDate}
@@ -797,6 +870,9 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 setRouteResult={setRouteResult}
                 setIsManualOrder={setIsManualOrder}
               />
+            )}
+            {activeTab === "trucades" && (
+              <Trucades stops={allStops} avui={todayDate} />
             )}
             {activeTab === "calendari" && (
               <TabCalendari
@@ -929,6 +1005,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 function TabAvui({
   todayStops,
   sensAssignar,
+  trucadesPendents,
   entregats,
   incidencies,
   avui,
@@ -944,12 +1021,13 @@ function TabAvui({
 }: {
   todayStops: Stop[];
   sensAssignar: number;
+  trucadesPendents: number;
   /* Enteras y no contadas: el resumen separa lo de hoy del resto del full,
      y para eso necesita la fecha y el importe de cada una. */
   entregats: Stop[];
   incidencies: Stop[];
   avui: string;
-  onIr: (destino: "calendari" | "historial" | "factures") => void;
+  onIr: (destino: "trucades" | "calendari" | "historial" | "factures") => void;
   routeResult: RouteResult | null;
   generatingRoute: boolean;
   online: boolean;
@@ -995,6 +1073,7 @@ function TabAvui({
           incidencies={incidencies}
           avui={avui}
           sensAssignar={sensAssignar}
+          trucadesPendents={trucadesPendents}
           totalDistanceMeters={routeResult?.totalDistanceMeters ?? null}
           totalDurationSeconds={routeResult?.totalDurationSeconds ?? null}
           rutaCalculada={routeResult !== null}

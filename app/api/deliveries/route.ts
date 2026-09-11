@@ -19,11 +19,29 @@ const recordSchema = z.object({
   price: z.number().min(0).max(1_000_000).nullable().optional(),
 });
 
+/**
+ * El sobre se valida aparte de lo que lleva dentro.
+ *
+ * Cada registro se mira uno a uno más abajo, y no con un
+ * `z.array(recordSchema)`, porque un solo registro malo hacía fallar el lote
+ * entero con un 400. Y como la cola sube las tandas de más antiguo a más
+ * nuevo, ese registro volvía en cada intento y bloqueaba TODO lo que tuviera
+ * detrás: un móvil que dejaba de escribir en la hoja para siempre mientras
+ * los demás iban bien. Los buenos se escriben; el malo se devuelve para que
+ * la cola lo cierre en vez de reintentarlo hasta el fin de los tiempos.
+ */
 const schema = z.object({
-  records: z.array(recordSchema).min(1).max(100),
+  records: z.array(z.unknown()).min(1).max(100),
   /** Pestaña del Sheet donde escribir. Si no se pasa, usa la de env. */
   sheetTab: z.string().optional(),
 });
+
+/** Un registro que el servidor no puede aceptar nunca, y por qué. */
+interface Invalid {
+  clientId?: string;
+  orderId?: string;
+  motiu: string;
+}
 
 /**
  * Registra entregas en el Google Sheet.
@@ -76,19 +94,54 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const bons: z.infer<typeof recordSchema>[] = [];
+  const invalids: Invalid[] = [];
+
+  for (const cru of parsed.data.records) {
+    const mirat = recordSchema.safeParse(cru);
+    if (mirat.success) {
+      bons.push(mirat.data);
+      continue;
+    }
+    const [problema] = mirat.error.issues;
+    const camps = cru as { clientId?: unknown; orderId?: unknown };
+    invalids.push({
+      clientId: typeof camps?.clientId === "string" ? camps.clientId : undefined,
+      orderId: typeof camps?.orderId === "string" ? camps.orderId : undefined,
+      motiu: `${problema.path.join(".") || "registre"} — ${problema.message}`,
+    });
+  }
+
+  if (invalids.length > 0) {
+    console.warn(
+      `${invalids.length} registro(s) rechazados en /api/deliveries: ` +
+        invalids.map((i) => `${i.orderId ?? i.clientId ?? "?"} (${i.motiu})`).join("; "),
+    );
+  }
+
+  // Ninguno aprovechable: eso ya no es un registro suelto mal, es la petición
+  // entera, y se contesta como tal.
+  if (bons.length === 0) {
+    return NextResponse.json(
+      { error: `Petición inválida: ${invalids[0].motiu}`, invalids },
+      { status: 400 },
+    );
+  }
+
   // En demo se guardan en memoria en vez de en el Sheet, para que la
   // pantalla se comporte igual que en real (las paradas entregadas no
   // reaparecen al sincronizar).
   if (isDemoMode()) {
-    recordDemoDeliveries(parsed.data.records);
+    recordDemoDeliveries(bons);
     return NextResponse.json({
-      applied: parsed.data.records.map((r) => r.orderId),
+      applied: bons.map((r) => r.orderId),
       notFound: [],
+      invalids,
     });
   }
 
   try {
-    const result = await writeDeliveries(parsed.data.records, parsed.data.sheetTab);
+    const result = await writeDeliveries(bons, parsed.data.sheetTab);
 
     if (result.notFound.length > 0) {
       console.warn(
@@ -96,7 +149,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, invalids });
   } catch (error) {
     console.error("Error escribiendo entregas en el Sheet:", error);
 
