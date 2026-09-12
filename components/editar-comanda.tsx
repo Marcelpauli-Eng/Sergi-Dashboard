@@ -152,10 +152,17 @@ export default function EditarComanda({
       onClick={onTancar}
     >
       <div
-        className="soft-card flex h-full w-full flex-col rounded-none sm:h-auto sm:max-h-[85svh] sm:max-w-md sm:rounded-[var(--radius)]"
+        /*
+          `max-sm:rounded-none!` y no `rounded-none` a secas: `.soft-card`
+          está declarada fuera de las capas de Tailwind en `globals.css`, y
+          el CSS sin capa gana siempre a las utilidades. Sin el `!`, las
+          esquinas seguían redondeadas y en pantalla completa se veía el
+          fondo negro asomando por las cuatro puntas.
+        */
+        className="soft-card flex h-full w-full flex-col max-sm:rounded-none! sm:h-auto sm:max-h-[85svh] sm:max-w-md"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start gap-3 p-5">
+        <div className="flex items-start gap-3 p-5 max-sm:pt-[max(1.25rem,env(safe-area-inset-top))]">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
             <Pencil className="size-5" aria-hidden />
           </span>
