@@ -512,7 +512,10 @@ export default function StopCard({
           )}
 
           <div className={cn("flex flex-col gap-2", detall ? "mt-4" : "mt-3")}>
-            <div className="flex flex-wrap gap-2">
+            {/* En la ficha van centrados: son tres iconos sueltos y pegados a
+                la izquierda quedaban descolgados. En la lista del día siguen
+                alineados con el texto de la parada. */}
+            <div className={cn("flex flex-wrap gap-2", detall && "justify-center")}>
               {/* Sin dirección ni coordenadas no hay a dónde ir: el botón
                   abriría un mapa vacío. Pasa con las comandas apuntadas al
                   vuelo, que solo llevan el número. */}
