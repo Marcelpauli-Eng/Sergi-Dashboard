@@ -1,5 +1,7 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -34,9 +36,26 @@ export default function Previsualitzacio({
   onTancar: () => void;
   children: React.ReactNode;
 }) {
-  return (
+  /* Como en `editar-comanda.tsx`: se espera al navegador para el portal. */
+  const muntat = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+  if (!muntat) return null;
+
+  /*
+    Del `<body>`, no de donde se abrió.
+
+    Medía la pantalla entera, sí, pero se pintaba POR DEBAJO de la cabecera y
+    de la barra de abajo: la zona de contenido lleva una animación, y una
+    animación con `transform` crea un contexto de apilamiento que encierra
+    todo lo de dentro. Por alto que fuera el `z-index` del velo, no salía de
+    ahí. Colgándolo del body compite de tú a tú y las tapa.
+  */
+  return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[150] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
       onClick={onTancar}
     >
       <div
@@ -46,7 +65,8 @@ export default function Previsualitzacio({
         <BotoTancarPrevisualitzacio onTancar={onTancar} />
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

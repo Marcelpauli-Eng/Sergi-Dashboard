@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getSelectedTab, syncNow } from "@/lib/sync";
@@ -67,6 +68,13 @@ export default function EditarComanda({
     notes: stop.notes ?? "",
   });
   const [desant, setDesant] = useState(false);
+  /* `createPortal` necesita el `document`, que en el servidor no existe: se
+     espera al primer pintado en el navegador. Igual que en `stop-card.tsx`. */
+  const muntat = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
   const [error, setError] = useState<string | null>(null);
 
   const desar = async () => {
@@ -116,16 +124,35 @@ export default function EditarComanda({
     }
   };
 
-  return (
+  /*
+    El diálogo se cuelga del `<body>`, no de donde se abrió.
+
+    Se abre desde dentro de la ficha, que a su vez vive dentro del velo de la
+    previsualización —y ese velo lleva `backdrop-blur`, que convierte a
+    cualquier ancestro suyo en el marco de referencia de lo que esté
+    `fixed`—. Según desde dónde se abriera, el diálogo dejaba de medir la
+    pantalla entera: la cabecera se veía por encima y la barra de abajo
+    tapaba los botones de Desar y Cancel·lar, que es justo lo que hay que
+    poder tocar. Colgándolo del body no hay ancestro que valga.
+  */
+  if (!muntat) return null;
+
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="editar-titol"
-      className="fixed inset-0 z-[120] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      /*
+        `z-[200]` deja por debajo la cabecera y la barra de navegación (las
+        dos en `z-20`) y también el velo de la previsualización (`z-[100]`).
+        En el móvil ocupa la pantalla entera: con la tarjeta centrada y el
+        teclado abierto, los botones del pie se quedaban fuera de alcance.
+      */
+      className="fixed inset-0 z-[200] flex animate-fade-in items-stretch justify-center bg-black/40 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onTancar}
     >
       <div
-        className="soft-card flex max-h-[85svh] w-full max-w-md flex-col"
+        className="soft-card flex h-full w-full flex-col rounded-none sm:h-auto sm:max-h-[85svh] sm:max-w-md sm:rounded-[var(--radius)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3 p-5">
@@ -163,7 +190,7 @@ export default function EditarComanda({
           ))}
         </div>
 
-        <div className="space-y-2 border-t border-border p-3">
+        <div className="space-y-2 border-t border-border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-3">
           {stop.bultos > 1 && (
             <p className="px-1 text-xs text-tertiary-foreground">
               Les mides no surten: aquesta comanda té {stop.bultos} bultos i
@@ -185,6 +212,7 @@ export default function EditarComanda({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
