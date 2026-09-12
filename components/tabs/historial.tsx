@@ -8,7 +8,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { ArrowUpDown, Download, Search } from "lucide-react";
+import { ArrowUpDown, Check, Download, Search, TriangleAlert } from "lucide-react";
 import { formatLongDate } from "@/lib/dates";
 import { euros } from "@/lib/factura";
 import type { Stop } from "@/lib/types";
@@ -284,27 +284,78 @@ export default function TabHistorial({
             </table>
           </div>
 
-          {/* En el móvil, las tarjetas de siempre: una tabla de seis columnas
-              en 375 px no se lee. */}
+          {/* En el móvil, filas compactas que se tocan para abrir la ficha
+              completa, como en el detall del dia del calendari. Una tabla de
+              seis columnas en 375 px no se lee, y una tarjeta entera por
+              comanda ocupa demasiado: la lista compacta deja ver más comandas
+              de un vistazo y tocar la que interesa. */}
           <div className="space-y-6 lg:hidden">
             {groupedByDate.map(group => (
-              <div key={group.date} className="space-y-3">
+              <div key={group.date} className="space-y-2">
                 <h3 className="sticky top-0 z-10 bg-background py-1 text-sm font-semibold">
                   {group.date === "Sense data" ? group.date : formatLongDate(group.date)}
                 </h3>
-                <ul className="space-y-3">
-                  {group.stops.map((stop) => (
-                    <li key={stop.id}>
-                      <StopCard
-                        stop={stop}
-                        onDelivered={onDelivered}
-                        onIncident={onIncident}
-                        onImporte={onImporte}
-                        onUndeliver={onUndeliver}
-                      />
-                    </li>
-                  ))}
-                </ul>
+                <section className="soft-card divide-y divide-border">
+                  {group.stops.map((stop) => {
+                    const incidencia = stop.statusCategory === "incidencia";
+                    return (
+                      <button
+                        key={stop.id}
+                        type="button"
+                        onClick={() => setObertId(stop.id)}
+                        className="pressable flex w-full items-start gap-3 px-4 py-3 text-left"
+                      >
+                        <span
+                          className={cn(
+                            "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full",
+                            incidencia
+                              ? "bg-[color-mix(in_srgb,var(--status-incidencia)_16%,transparent)] text-status-incidencia"
+                              : "bg-[color-mix(in_srgb,var(--success)_16%,transparent)] text-[color:var(--success)]",
+                          )}
+                        >
+                          {incidencia ? (
+                            <TriangleAlert className="size-4" aria-hidden />
+                          ) : (
+                            <Check className="size-4" strokeWidth={3} aria-hidden />
+                          )}
+                        </span>
+
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">
+                            {stop.customer || stop.id}
+                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {stop.id}
+                            {stop.city ? ` · ${stop.city}` : ""}
+                          </span>
+                          {incidencia && stop.incidentNote && (
+                            <span className="mt-1 block text-xs text-status-incidencia">
+                              {stop.incidentNote}
+                            </span>
+                          )}
+                        </span>
+
+                        <span className="shrink-0 text-right">
+                          {stop.deliveredTime && (
+                            <span className="block text-sm tabular-nums">
+                              {stop.deliveredTime}
+                            </span>
+                          )}
+                          {!incidencia && (
+                            <span
+                              className={cn(
+                                "block text-xs tabular-nums",
+                                stop.price ? "text-muted-foreground" : "text-warning",
+                              )}
+                            >
+                              {stop.price ? `${euros(stop.price)} €` : "sense import"}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </section>
               </div>
             ))}
           </div>
