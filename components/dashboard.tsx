@@ -622,6 +622,23 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       recordDelivery(orderId, "pendiente", null, preuAbans),
     );
   };
+
+  /**
+   * Deshace una entrega marcada por error.
+   *
+   * La comanda vuelve a estar pendiente, conservando el importe que tuviera
+   * para no perder un dato que se tecleó bien. Ofrece «Desfer» para
+   * re-entregarla si resulta que el clic en «Treure com entregada» fue el
+   * error de verdad.
+   */
+  const handleUndeliver = (orderId: string) => {
+    const abans = allStops.find((s) => s.id === orderId);
+    const preuAbans = abans?.price ?? null;
+    void recordDelivery(orderId, "pendiente", null, preuAbans);
+    anotarDesfer(`${nomDe(orderId)} · treta com entregada`, () =>
+      recordDelivery(orderId, "entregado", null, preuAbans),
+    );
+  };
   const handleDateAssignment = (orderId: string, newDate: string | null) => {
     // Un día que ya ha pasado no admite pedidos nuevos: planificar hacia
     // atrás no significa nada. Quitar sí se permite (newDate === null), que
@@ -914,6 +931,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 onDelivered={handleDelivered}
                 onIncident={handleIncident}
                 onImporte={handleImporte}
+                onUndeliver={handleUndeliver}
               />
             )}
             {activeTab === "factures" && (

@@ -53,6 +53,15 @@ interface Props {
    * que el pie se cambia por lo que sí toca hacer allí: assignar-la.
    */
   peu?: React.ReactNode;
+  /**
+   * Deshacer una entrega marcada por error.
+   *
+   * Solo se muestra cuando la comanda ya está entregada: en vez del botón
+   * «Entregat» sale «Treure com entregada», que la devuelve a pendiente.
+   * Lo usa l'Historial, donde una comanda ya cerrada puede haberse marcado
+   * sin querer y necesita deshacerse sin ir a buscar la hoja.
+   */
+  onUndeliver?: (orderId: string) => void;
 }
 
 /** Una fecha del Sheet, tal y como se lee: 01/07/2026. */
@@ -264,6 +273,7 @@ export default function StopCard({
   detall,
   onImporte,
   peu,
+  onUndeliver,
 }: Props) {
   /** La ficha abierta para corregir los datos de la comanda. */
   const [editant, setEditant] = useState(false);
@@ -762,6 +772,23 @@ export default function StopCard({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Deshacer una entrega marcada por error. Solo en la ficha de
+          l'Historial: allí no hay botón de entregar porque ya está cerrada,
+          pero sí hace falta poder deshacerlo si se marcó sin querer. */}
+      {!canClose && peu === undefined && onUndeliver && (
+        <div className="hairline p-3.5">
+          <Button
+            variant="secondary"
+            size="touch"
+            className="w-full"
+            onClick={() => onUndeliver(stop.id)}
+          >
+            <X strokeWidth={2.5} />
+            Treure com entregada
+          </Button>
         </div>
       )}
     </div>

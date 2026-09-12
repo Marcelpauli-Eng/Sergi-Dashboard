@@ -74,6 +74,7 @@ export default function TabHistorial({
   onDelivered,
   onIncident,
   onImporte,
+  onUndeliver,
 }: {
   historyStops: { entregat: Stop[]; incidencia: Stop[] };
   /** Nombre del full, solo para el nombre del CSV. */
@@ -81,6 +82,7 @@ export default function TabHistorial({
   onDelivered: (id: string, price: number | null) => void;
   onIncident: (id: string, note: string) => void;
   onImporte: (id: string, importe: number | null) => void;
+  onUndeliver: (id: string) => void;
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [ordre, setOrdre] = useState<{ clau: ClauHistorial; asc: boolean }>({
@@ -298,6 +300,7 @@ export default function TabHistorial({
                         onDelivered={onDelivered}
                         onIncident={onIncident}
                         onImporte={onImporte}
+                        onUndeliver={onUndeliver}
                       />
                     </li>
                   ))}
@@ -310,19 +313,25 @@ export default function TabHistorial({
 
       {obert && (
         <Previsualitzacio onTancar={() => setObertId(null)}>
-            <StopCard
-              detall
-              onImporte={onImporte}
-              stop={obert}
-              onDelivered={(id, price) => {
-                onDelivered(id, price);
-                setObertId(null);
-              }}
-              onIncident={(id, note) => {
-                onIncident(id, note);
-                setObertId(null);
-              }}
-            />
+            <div className="max-h-[85svh] overflow-y-auto overscroll-contain rounded-[var(--radius)]">
+              <StopCard
+                detall
+                onImporte={onImporte}
+                stop={obert}
+                onDelivered={(id, price) => {
+                  onDelivered(id, price);
+                  setObertId(null);
+                }}
+                onIncident={(id, note) => {
+                  onIncident(id, note);
+                  setObertId(null);
+                }}
+                onUndeliver={(id) => {
+                  onUndeliver(id);
+                  setObertId(null);
+                }}
+              />
+            </div>
         </Previsualitzacio>
       )}
     </div>
