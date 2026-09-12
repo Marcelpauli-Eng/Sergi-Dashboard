@@ -6,6 +6,7 @@ import { Check, Navigation, Pencil, Phone, TriangleAlert, X } from "lucide-react
 import type { Stop } from "@/lib/types";
 import { formatDistance, formatDuration, telHref } from "@/lib/format";
 import { appNavUrlFor, navUrlFor, obrirMaps } from "@/lib/maps";
+import EditarComanda from "@/components/editar-comanda";
 import { euros, parseImporte } from "@/lib/factura";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -264,6 +265,8 @@ export default function StopCard({
   onImporte,
   peu,
 }: Props) {
+  /** La ficha abierta para corregir los datos de la comanda. */
+  const [editant, setEditant] = useState(false);
   const [showIncident, setShowIncident] = useState(false);
   const [showPrice, setShowPrice] = useState(false);
   const [showNav, setShowNav] = useState(false);
@@ -510,16 +513,29 @@ export default function StopCard({
 
           <div className={cn("flex flex-col gap-2", detall ? "mt-4" : "mt-3")}>
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" size="sm" onClick={() => setShowNav(true)}>
-                <Navigation />
-                Navegar
-              </Button>
+              {/* Sin dirección ni coordenadas no hay a dónde ir: el botón
+                  abriría un mapa vacío. Pasa con las comandas apuntadas al
+                  vuelo, que solo llevan el número. */}
+              {(stop.address.trim() !== "" || stop.lat !== null) && (
+                <Button variant="secondary" size="sm" onClick={() => setShowNav(true)}>
+                  <Navigation />
+                  Navegar
+                </Button>
+              )}
               {stop.phone && (
                 <Button asChild variant="secondary" size="sm">
                   <a href={telHref(stop.phone)}>
                     <Phone />
                     Trucar
                   </a>
+                </Button>
+              )}
+              {/* Corregir los datos: solo en la ficha. En la lista del día
+                  estorbaría, y allí lo que se hace es repartir, no editar. */}
+              {detall && (
+                <Button variant="secondary" size="sm" onClick={() => setEditant(true)}>
+                  <Pencil />
+                  Editar
                 </Button>
               )}
             </div>
@@ -601,6 +617,14 @@ export default function StopCard({
             setDesat={setDesat}
           />
         </div>
+      )}
+
+      {editant && (
+        <EditarComanda
+          stop={stop}
+          onTancar={() => setEditant(false)}
+          onDesat={() => setEditant(false)}
+        />
       )}
 
       {peu !== undefined && <div className="hairline p-3.5">{peu}</div>}

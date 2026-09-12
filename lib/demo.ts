@@ -79,14 +79,37 @@ export function crearComandaDemo(dades: {
     id: dades.id,
     customer: dades.customer ?? "",
     address: [dades.address, dades.city].filter(Boolean).join(", "),
-    // Sin coordenadas: en la demo no se geocodifica nada.
-    lat: 41.3874,
-    lng: 2.1686,
+    // Sin coordenadas, como una comanda recién creada de verdad: la hoja
+    // no las trae y nadie las ha buscado todavía.
+    lat: null,
+    lng: null,
     priority: 99,
     phone: dades.phone,
     notes: dades.notes,
   });
   demoDates.set(dades.id, "");
+  return true;
+}
+
+/** Corrige los datos de una comanda de la demo. `false` si no existe. */
+export function actualitzarComandaDemo(
+  id: string,
+  dades: { customer?: string; address?: string; city?: string; phone?: string; notes?: string },
+): boolean {
+  const mostra = [...TODAY_SAMPLES, ...TOMORROW_SAMPLES, ...creadesDemo].find(
+    (s) => s.id === id,
+  );
+  if (!mostra) return false;
+
+  if (dades.customer !== undefined) mostra.customer = dades.customer;
+  if (dades.phone !== undefined) mostra.phone = dades.phone;
+  if (dades.notes !== undefined) mostra.notes = dades.notes;
+  // En la demo la dirección y la población van juntas, como en las muestras.
+  if (dades.address !== undefined || dades.city !== undefined) {
+    mostra.address = [dades.address ?? mostra.address, dades.city]
+      .filter(Boolean)
+      .join(", ");
+  }
   return true;
 }
 
@@ -124,8 +147,9 @@ interface Sample {
   id: string;
   customer: string;
   address: string;
-  lat: number;
-  lng: number;
+  /** `null` en las comandas creadas a mano: todavía no se han geocodificado. */
+  lat: number | null;
+  lng: number | null;
   priority: number;
   phone?: string;
   notes?: string;

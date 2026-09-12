@@ -18,11 +18,14 @@ import {
   Search,
   Settings,
   X,
+  Pencil,
+  TriangleAlert,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import RouteTrace from "@/components/route-trace";
 import HomeSummary from "@/components/home-summary";
 import Desfer, { MARGE_DESFER_MS, type AccioDesfer } from "@/components/desfer";
+import EditarComanda from "@/components/editar-comanda";
 import Endarrerides from "@/components/endarrerides";
 import Sidebar from "@/components/sidebar";
 import Previsualitzacio from "@/components/previsualitzacio";
@@ -207,6 +210,10 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   // ── Ruta bajo demanda ─────────────────────────────────────────────────
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
   const [generatingRoute, setGeneratingRoute] = useState(false);
+  /** Comandas de hoy sin dirección, mientras se decide qué hacer con ellas. */
+  const [senseAdrecaIds, setSenseAdrecaIds] = useState<string[]>([]);
+  /** La que se está completando desde ese aviso. */
+  const [afegintAdrecaId, setAfegintAdrecaId] = useState<string | null>(null);
 
   // ── Buscador global (⌘K) ──────────────────────────────────────────────
   const [cercantObert, setCercantObert] = useState(false);
@@ -459,10 +466,41 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     };
   }, [allStops, customOrderIds, todayDate]);
 
-  const generateRoute = useCallback(async () => {
+  const generateRoute = useCallback(async (
+    excloure: string[] = [],
+    /*
+      Las que se acaban de completar desde el aviso.
+
+      Hacen falta porque lo que se ve en pantalla sale de lo descargado, y
+      justo después de escribir la dirección en la hoja esta copia todavía
+      dice que no la tiene: sin esto, el aviso volvería a saltar por la
+      misma comanda que se acaba de arreglar. Al servidor le da igual —él
+      relee la hoja— así que basta con no volver a preguntar por ellas.
+    */
+    jaResoltes: string[] = [],
+  ) => {
     // Only generate route for "pendents" in today's active stops
-    const routeable = todayStops.filter(s => s.statusCategory === "pendent");
+    const routeable = todayStops.filter(
+      (s) => s.statusCategory === "pendent" && !excloure.includes(s.id),
+    );
     if (routeable.length === 0) return;
+
+    /*
+      Una comanda sin dirección no se puede meter en la ruta: no hay a dónde
+      ir. Pasa con las que se apuntan al vuelo, que solo llevan el número.
+
+      No se calla ni se salta sin más: se pregunta. O se pone la dirección
+      ahora —que es lo que suele faltar, y se sabe de memoria— o se hace la
+      ruta sin ella, pero sabiendo que se queda fuera.
+    */
+    const senseAdreca = routeable.filter(
+      (s) => s.address.trim() === "" && s.lat === null && !jaResoltes.includes(s.id),
+    );
+    if (senseAdreca.length > 0) {
+      setSenseAdrecaIds(senseAdreca.map((s) => s.id));
+      return;
+    }
+    setSenseAdrecaIds([]);
     setGeneratingRoute(true);
 
     // Obtener la ubicación actual
@@ -940,6 +978,104 @@ export default function Dashboard({ driverName }: { driverName: string }) {
           onEntregada={(id, quan) => handleDelivered(id, null, quan)}
           onTornarABossa={(id) => handleDateAssignment(id, null)}
           onTancar={() => setAvisEndarreridesTancat(true)}
+        />
+      )}
+
+      {/* ── Una comanda de la ruta no tiene dirección ──────────────────
+          Dos salidas, y ninguna es seguir como si nada: o se pone la
+          dirección ahora —que es lo que falta el 90 % de las veces, y se
+          sabe— o se hace la ruta sin ella, pero dicho. */}
+      {senseAdrecaIds.length > 0 && !afegintAdrecaId && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sense-adreca-titol"
+          className="fixed inset-0 z-[110] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+        >
+          <div className="soft-card w-full max-w-md">
+            <div className="flex items-start gap-3 p-5">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning">
+                <TriangleAlert className="size-5" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <h2 id="sense-adreca-titol" className="text-lg font-semibold">
+                  {senseAdrecaIds.length === 1
+                    ? "Una comanda no té adreça"
+                    : `${senseAdrecaIds.length} comandes no tenen adreça`}
+                </h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Sense adreça no es poden posar a la ruta: no hi ha on anar.
+                </p>
+              </div>
+            </div>
+
+            <ul className="divide-y divide-border border-t border-border">
+              {senseAdrecaIds.map((id) => {
+                const stop = allStops.find((s) => s.id === id);
+                return (
+                  <li
+                    key={id}
+                    className="flex items-center justify-between gap-3 px-5 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {stop?.customer || id}
+                      </p>
+                      <p className="truncate font-mono text-xs text-muted-foreground">
+                        {id}
+                      </p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => setAfegintAdrecaId(id)}
+                    >
+                      <Pencil />
+                      Afegir adreça
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="flex gap-2 border-t border-border p-3">
+              <Button
+                variant="ghost"
+                className="flex-1"
+                onClick={() => setSenseAdrecaIds([])}
+              >
+                Cancel·lar
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  const fora = senseAdrecaIds;
+                  setSenseAdrecaIds([]);
+                  void generateRoute(fora);
+                }}
+              >
+                Fer la ruta sense{" "}
+                {senseAdrecaIds.length === 1 ? "ella" : "elles"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Poner la dirección sin salir del aviso: al guardar, se relee la
+          hoja y se vuelve a intentar la ruta con la comanda ya completa. */}
+      {afegintAdrecaId && (
+        <EditarComanda
+          stop={allStops.find((s) => s.id === afegintAdrecaId)!}
+          focus="address"
+          onTancar={() => setAfegintAdrecaId(null)}
+          onDesat={() => {
+            const arreglada = afegintAdrecaId;
+            setAfegintAdrecaId(null);
+            setSenseAdrecaIds([]);
+            void generateRoute([], [arreglada]);
+          }}
         />
       )}
 

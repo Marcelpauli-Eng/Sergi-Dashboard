@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { isConfigError } from "@/lib/env";
-import { crearComanda } from "@/lib/sheets";
-import { crearComandaDemo, isDemoMode } from "@/lib/demo";
+import { actualitzarComanda, crearComanda } from "@/lib/sheets";
+import { actualitzarComandaDemo, crearComandaDemo, isDemoMode } from "@/lib/demo";
 
 /**
  * Crear una comanda a mano.
@@ -13,7 +13,8 @@ import { crearComandaDemo, isDemoMode } from "@/lib/demo";
  * tener que abrir el Google Sheet en el móvil.
  *
  * Solo el número es obligatorio —es la clave de todo lo demás— y el resto se
- * puede completar después desde la ficha de la comanda.
+ * puede completar después desde la ficha de la comanda, con el PATCH de aquí
+ * abajo.
  */
 
 const schema = z.object({
@@ -74,6 +75,76 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       { error: "No s'ha pogut crear la comanda al Google Sheet" },
+      { status: 502 },
+    );
+  }
+}
+
+const editarSchema = z.object({
+  id: z.string().trim().min(1).max(64),
+  sheetTab: z.string().max(120).optional(),
+  /*
+    Cada campo, opcional por separado: se manda solo lo que se toca. Una
+    cadena vacía SÍ se guarda —es borrar el dato— y por eso no vale con
+    ignorar lo que venga vacío; lo que no se manda es lo que no se toca.
+  */
+  customer: z.string().trim().max(200).optional(),
+  address: z.string().trim().max(300).optional(),
+  city: z.string().trim().max(120).optional(),
+  phone: z.string().trim().max(120).optional(),
+  measures: z.string().trim().max(300).optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+
+/**
+ * Corrige los datos de una comanda que ya está en la hoja.
+ *
+ * El número no se toca: es la clave con la que se guardan el importe y la
+ * factura, así que cambiarlo dejaría el precio colgado de una comanda que ya
+ * no existe. Para eso, se crea otra.
+ */
+export async function PATCH(request: Request) {
+  const driver = await getSession();
+  if (!driver) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+
+  const parsed = editarSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    const [problema] = parsed.error.issues;
+    return NextResponse.json(
+      { error: `Petición inválida: ${problema.path.join(".") || "cuerpo"} — ${problema.message}` },
+      { status: 400 },
+    );
+  }
+
+  const { id, sheetTab, ...dades } = parsed.data;
+  if (Object.keys(dades).length === 0) {
+    return NextResponse.json({ error: "No hi ha res per canviar" }, { status: 400 });
+  }
+
+  if (isDemoMode()) {
+    return actualitzarComandaDemo(id, dades)
+      ? NextResponse.json({ comanda: id })
+      : NextResponse.json({ error: "Comanda no encontrada" }, { status: 404 });
+  }
+
+  try {
+    const trobada = await actualitzarComanda(id, dades, sheetTab);
+    if (!trobada) {
+      return NextResponse.json(
+        { error: `La comanda ${id} ja no és al full` },
+        { status: 404 },
+      );
+    }
+    return NextResponse.json({ comanda: id });
+  } catch (error) {
+    console.error("Error actualizando la comanda:", error);
+    if (isConfigError(error)) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json(
+      { error: "No s'han pogut desar els canvis al Google Sheet" },
       { status: 502 },
     );
   }

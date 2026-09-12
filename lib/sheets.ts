@@ -283,13 +283,22 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
       continue;
     }
 
-    // Las órdenes sin fecha de reparto son totalmente válidas (se quedan en
-    // la bolsa de pendientes). Sin dirección no: no se puede ir a ningún
-    // sitio, y si fuera un bulto ya lo habría cogido la rama de arriba.
-    if (!address) {
-      skipped.push({ rowNumber, reason: "sin dirección" });
-      continue;
-    }
+    /*
+      Sin dirección también entra.
+
+      Antes se descartaba —"no se puede ir a ningún sitio"— y eso se comía
+      justo las comandas que se crean desde la app: allí el único campo
+      obligatorio es el número, así que una comanda apuntada al vuelo se
+      escribía en la hoja y no volvía nunca a la pantalla. Aparecía en el
+      Google Sheet y no en la bossa, que es lo peor de los dos mundos.
+
+      Una comanda sin dirección es trabajo pendiente igual: se le pone día,
+      se le pone importe y se factura. Lo único que no se puede es navegar
+      hasta ella, y de eso ya se encarga la tarjeta, que esconde el botón.
+
+      La fila vacía del todo sigue fuera, y los bultos —misma comanda sin
+      dirección— los ha cogido la rama de arriba antes de llegar aquí.
+    */
 
     porId.set(id, orders.length);
     orders.push(fila);
@@ -613,6 +622,51 @@ export async function crearComanda(
   );
 
   return { sheetTab: snapshot.sheetTab ?? "" };
+}
+
+/** Los datos de una comanda que se pueden corregir desde la app. */
+export type DadesComanda = Partial<
+  Record<"customer" | "address" | "city" | "phone" | "measures" | "notes", string>
+>;
+
+/**
+ * Corrige los datos de una comanda en la hoja.
+ *
+ * Hace falta desde que se pueden crear comandas con solo el número: la
+ * dirección se sabe cinco minutos después, por teléfono, y hasta ahora eso
+ * era abrir el Google Sheet en el móvil. También sirve para lo de siempre
+ * —un teléfono mal apuntado, un portal cambiado— que antes solo se podía
+ * arreglar en la hoja.
+ *
+ * Escribe en la fila de la comanda, que con varios bultos es la primera: es
+ * la que lleva la dirección y el cliente, las demás solo las medidas.
+ *
+ * Necesita cobertura y no pasa por la cola. La cola es para lo que se marca
+ * en la calle —entregado, incidencia, importe— y se sube tal cual llega.
+ * Esto es corregir lo que hay escrito: si se encolara, dos correcciones del
+ * mismo dato se pisarían sin que nadie viera cuál ha ganado.
+ */
+export async function actualitzarComanda(
+  id: string,
+  dades: DadesComanda,
+  sheetTab?: string | null,
+): Promise<boolean> {
+  const snapshot = await readSheet(sheetTab);
+  const order = snapshot.orders.find((o) => o.id === id);
+  if (!order) return false;
+
+  const updates: CellUpdate[] = [];
+  for (const [columna, valor] of Object.entries(dades)) {
+    if (valor === undefined) continue;
+    updates.push({
+      rowNumber: order.rowNumber,
+      column: columna as ColumnKey,
+      value: valor.trim(),
+    });
+  }
+
+  await writeCells(updates, snapshot.headerMap, snapshot.sheetTab);
+  return true;
 }
 
 /**

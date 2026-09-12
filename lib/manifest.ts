@@ -46,7 +46,16 @@ export async function fillMissingCoordinates(
   orders: Order[],
   snapshot: SheetSnapshot,
 ): Promise<void> {
-  const pending = orders.filter((o) => o.lat === null || o.lng === null);
+  /*
+    Las que no tienen dirección no se geocodifican: no hay nada que buscar.
+
+    Desde que se pueden crear comandas con solo el número, las hay sin
+    dirección, y preguntarle a Google por una cadena vacía es una llamada
+    tirada y un aviso en el log por cada una, cada vez que se sincroniza.
+  */
+  const pending = orders.filter(
+    (o) => (o.lat === null || o.lng === null) && o.address.trim() !== "",
+  );
   if (pending.length === 0) return;
 
   const resolved: { orderId: string; lat: number; lng: number }[] = [];
