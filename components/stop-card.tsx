@@ -516,26 +516,51 @@ export default function StopCard({
               {/* Sin dirección ni coordenadas no hay a dónde ir: el botón
                   abriría un mapa vacío. Pasa con las comandas apuntadas al
                   vuelo, que solo llevan el número. */}
+              {/*
+                En la ficha, solo el icono.
+
+                Ahí ya se sabe de qué comanda se trata y el nombre al lado de
+                cada icono no añadía nada: tres cápsulas de texto ocupando el
+                ancho entero. En la lista del día sí se quedan con su nombre,
+                que es donde se reparte y se mira de reojo.
+
+                `aria-label` en los tres: sin texto visible, es lo único que
+                tiene un lector de pantalla para saber qué hace el botón.
+              */}
               {(stop.address.trim() !== "" || stop.lat !== null) && (
-                <Button variant="secondary" size="sm" onClick={() => setShowNav(true)}>
+                <Button
+                  variant="secondary"
+                  size={detall ? "icon" : "sm"}
+                  aria-label="Navegar"
+                  onClick={() => setShowNav(true)}
+                >
                   <Navigation />
-                  Navegar
+                  {!detall && "Navegar"}
                 </Button>
               )}
               {stop.phone && (
-                <Button asChild variant="secondary" size="sm">
+                <Button
+                  asChild
+                  variant="secondary"
+                  size={detall ? "icon" : "sm"}
+                  aria-label="Trucar"
+                >
                   <a href={telHref(stop.phone)}>
                     <Phone />
-                    Trucar
+                    {!detall && "Trucar"}
                   </a>
                 </Button>
               )}
               {/* Corregir los datos: solo en la ficha. En la lista del día
                   estorbaría, y allí lo que se hace es repartir, no editar. */}
               {detall && (
-                <Button variant="secondary" size="sm" onClick={() => setEditant(true)}>
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  aria-label="Editar les dades"
+                  onClick={() => setEditant(true)}
+                >
                   <Pencil />
-                  Editar
                 </Button>
               )}
             </div>

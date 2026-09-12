@@ -448,7 +448,12 @@ export default function TabCalendari({
 
       {/* ── Columna de al lado: la bolsa ───────────────────────────────── */}
       <aside className="mt-6 flex flex-col gap-3 lg:mt-0 lg:min-h-0 lg:pt-0">
-        <Bossa stops={unassignedStops} onAssign={null} onImporte={onImporte} />
+        <Bossa
+          stops={unassignedStops}
+          onAssign={null}
+          onDelivered={onDelivered}
+          onImporte={onImporte}
+        />
       </aside>
     </div>
   );
@@ -706,6 +711,7 @@ function DiaDetall({
         <Bossa
           stops={unassignedStops}
           onAssign={(id) => onAssignDate(id, date)}
+          onDelivered={onDelivered}
           onImporte={onImporte}
         />
       )}
@@ -809,11 +815,21 @@ function Xifra({
 function Bossa({
   stops,
   onAssign,
+  onDelivered,
   onImporte,
 }: {
   stops: Stop[];
   /** `null` cuando no hay ningún día abierto: entonces tocar solo previsualiza. */
   onAssign: ((id: string) => void) | null;
+  /**
+   * Darla por entregada sin pasar por ningún día.
+   *
+   * La oficina apunta comandas con retraso, así que a veces aparece en la
+   * bolsa una que ya repartiste la semana pasada. Asignarla a un día para
+   * marcarla acto seguido es dar un rodeo por algo que ya está hecho: desde
+   * aquí se cierra y se va derecha al historial, con su importe.
+   */
+  onDelivered: (orderId: string, price: number | null) => void;
   /**
    * Poner el importe desde la previsualización.
    *
@@ -1016,22 +1032,43 @@ function Bossa({
               onIncident={() => {}}
               onImporte={onImporte}
               peu={
-                onAssign ? (
+                <div className="space-y-2">
+                  {onAssign ? (
+                    <Button
+                      className="w-full"
+                      size="touch"
+                      onClick={() => {
+                        onAssign(previewStop.id);
+                        setPreviewId(null);
+                      }}
+                    >
+                      Assignar comanda
+                    </Button>
+                  ) : (
+                    <p className="text-center text-sm text-muted-foreground">
+                      Obre un dia del calendari per assignar-la.
+                    </p>
+                  )}
+
+                  {/*
+                    Secundario y debajo: lo normal es asignar, y esto es para
+                    la comanda que ya repartiste y te llega tarde a la bolsa.
+                    El importe se pone aquí mismo con «Posar import», antes o
+                    después — y si no, queda en l'Historial esperando.
+                  */}
                   <Button
+                    variant="secondary"
                     className="w-full"
                     size="touch"
                     onClick={() => {
-                      onAssign(previewStop.id);
+                      onDelivered(previewStop.id, previewStop.price);
                       setPreviewId(null);
                     }}
                   >
-                    Assignar comanda
+                    <Check />
+                    Ja està entregada
                   </Button>
-                ) : (
-                  <p className="text-center text-sm text-muted-foreground">
-                    Obre un dia del calendari per assignar-la.
-                  </p>
-                )
+                </div>
               }
             />
             </div>
