@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Check, Navigation, Pencil, Phone, TriangleAlert, X } from "lucide-react";
 import type { Stop } from "@/lib/types";
 import { formatDistance, formatDuration, telHref } from "@/lib/format";
+import { appNavUrlFor, navUrlFor, obrirMaps } from "@/lib/maps";
 import { euros, parseImporte } from "@/lib/factura";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -550,13 +551,20 @@ export default function StopCard({
                     >
                       Mapes
                     </a>
-                    <a
-                      href={stop.lat ? `https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}&travelmode=driving` : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stop.address)}&travelmode=driving`}
-                      target="_blank" rel="noopener noreferrer"
-                      className="border-b border-white/10 px-4 py-3.5 text-[17px] text-[#0a84ff] transition-colors active:bg-[#3a3a3c]"
+                    {/* La APP de Google Maps, no la web: con el enlace
+                        `https://` el mapa se abría dentro de un navegador,
+                        sin voz y sin modo coche. Si no estuviera instalada,
+                        `obrirMaps` vuelve a la web sola. */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNav(false);
+                        obrirMaps(appNavUrlFor(stop), navUrlFor(stop));
+                      }}
+                      className="border-b border-white/10 px-4 py-3.5 text-left text-[17px] text-[#0a84ff] transition-colors active:bg-[#3a3a3c]"
                     >
                       Google Maps
-                    </a>
+                    </button>
                     <a
                       href={stop.lat ? `https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes` : `https://waze.com/ul?q=${encodeURIComponent(stop.address)}&navigate=yes`}
                       target="_blank" rel="noopener noreferrer"

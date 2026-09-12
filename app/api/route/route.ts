@@ -2,7 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSession } from "@/lib/session";
 import { readSheet } from "@/lib/sheets";
 import { fillMissingCoordinates, getDepotCoord } from "@/lib/manifest";
-import { optimizeRoute, navUrlFor, fullRouteUrlFor } from "@/lib/routing";
+import {
+  optimizeRoute,
+  navUrlFor,
+  fullRouteUrlFor,
+  appRouteUrlFor,
+} from "@/lib/routing";
 import { env } from "@/lib/env";
 import type { Order, Stop } from "@/lib/types";
 
@@ -74,6 +79,12 @@ export async function POST(request: NextRequest) {
       fullRouteUrl: fullRouteUrlFor(
         body.startLocation ? `${body.startLocation.lat},${body.startLocation.lng}` : env.depotAddress, 
         result.ordered
+      ),
+      // La misma ruta pero para la APP de Google Maps del móvil, que es
+      // donde se navega de verdad. Ver `lib/maps.ts`.
+      appRouteUrl: appRouteUrlFor(
+        body.startLocation ? `${body.startLocation.lat},${body.startLocation.lng}` : env.depotAddress,
+        result.ordered,
       ),
       totalDistanceMeters: result.totalDistanceMeters,
       totalDurationSeconds: result.totalDurationSeconds,

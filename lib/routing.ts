@@ -320,57 +320,11 @@ export async function optimizeRoute(
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Enlaces de navegación
-// ─────────────────────────────────────────────────────────────────────────
+/*
+  Los enlaces de navegación viven en `lib/maps.ts`: son cadenas de texto y
+  la pantalla los necesita también para abrir la app del móvil, cosa que
+  desde aquí no puede hacer —este módulo es solo de servidor—. Se
+  re-exportan porque medio proyecto los importa de aquí desde siempre.
+*/
+export { navUrlFor, fullRouteUrlFor, appNavUrlFor, appRouteUrlFor } from "./maps.ts";
 
-/**
- * Enlace que abre la navegación hacia una parada. En un móvil con Google
- * Maps instalado abre la app directamente; si no, la web.
- *
- * Se prefieren las coordenadas a la dirección en texto: evita que Maps
- * reinterprete la dirección y mande al transportista a otro sitio.
- */
-export function navUrlFor(order: Pick<Order, "lat" | "lng" | "address">): string {
-  const destination =
-    order.lat !== null && order.lng !== null
-      ? `${order.lat},${order.lng}`
-      : order.address;
-
-  const url = new URL("https://www.google.com/maps/dir/");
-  url.searchParams.set("api", "1");
-  url.searchParams.set("destination", destination);
-  url.searchParams.set("travelmode", "driving");
-  return url.toString();
-}
-
-/**
- * Enlace que abre la ruta completa con todas las paradas en Google Maps.
- *
- * La URL API de Google admite como máximo 9 paradas intermedias, así que
- * por encima de eso devolvemos `null` y el transportista navega parada a
- * parada, que es como se trabaja en reparto de todas formas.
- */
-export function fullRouteUrlFor(
-  depotAddress: string,
-  stops: Pick<Order, "lat" | "lng" | "address">[],
-): string | null {
-  if (stops.length === 0) return null;
-  if (stops.length > 10) return null;
-
-  const asPoint = (s: Pick<Order, "lat" | "lng" | "address">) =>
-    s.lat !== null && s.lng !== null ? `${s.lat},${s.lng}` : s.address;
-
-  const url = new URL("https://www.google.com/maps/dir/");
-  url.searchParams.set("api", "1");
-  url.searchParams.set("origin", depotAddress);
-  url.searchParams.set("destination", asPoint(stops[stops.length - 1]));
-  if (stops.length > 1) {
-    url.searchParams.set(
-      "waypoints",
-      stops.slice(0, -1).map(asPoint).join("|"),
-    );
-  }
-  url.searchParams.set("travelmode", "driving");
-  return url.toString();
-}
