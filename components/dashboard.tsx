@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
+import dynamic from "next/dynamic";
 import {
   ArrowUpDown,
   BarChart3,
@@ -30,14 +31,27 @@ import {
 import { db } from "@/lib/db";
 import RouteTrace from "@/components/route-trace";
 import HomeSummary from "@/components/home-summary";
-import Factures from "@/components/factures";
-import Informes from "@/components/informes";
-import Cobraments from "@/components/cobraments";
-import Cercador from "@/components/cercador";
 import Desfer, { MARGE_DESFER_MS, type AccioDesfer } from "@/components/desfer";
 import Endarrerides from "@/components/endarrerides";
-import Ajustos from "@/components/ajustos";
 import Sidebar from "@/components/sidebar";
+
+/*
+  Las pantallas que no son "Avui" se bajan cuando se abren, no al arrancar.
+
+  El transportista abre la app en la calle, con una raya de cobertura, y lo
+  único que necesita para empezar es la lista de paradas. Facturar, los
+  informes y los cobros son de fin de mes y de sofá: entre la maqueta de la
+  factura, el generador de PDF y la comparativa de fulls se llevaban la mitad
+  del JavaScript de la primera carga sin que nadie los hubiera pedido.
+
+  `ssr: false` porque ninguna se pinta en el servidor: todas leen de
+  IndexedDB o del documento privado.
+*/
+const Factures = dynamic(() => import("@/components/factures"), { ssr: false });
+const Informes = dynamic(() => import("@/components/informes"), { ssr: false });
+const Cobraments = dynamic(() => import("@/components/cobraments"), { ssr: false });
+const Ajustos = dynamic(() => import("@/components/ajustos"), { ssr: false });
+const Cercador = dynamic(() => import("@/components/cercador"), { ssr: false });
 import { leerDatosFacturacion, sincronizarFacturacio } from "@/lib/ajustes-factura";
 import { euros, type DatosFacturacion } from "@/lib/factura";
 import {
@@ -908,12 +922,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 
       {/* La comanda que se ha abierto desde el buscador, con sus acciones. */}
       {comandaOberta && (
-        <div
-          className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
-          onClick={() => setComandaObertaId(null)}
-        >
-          <div className="relative w-full max-w-md sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <BotoTancarPrevisualitzacio onTancar={() => setComandaObertaId(null)} />
+        <Previsualitzacio onTancar={() => setComandaObertaId(null)}>
             <StopCard
               detall
               onImporte={handleImporte}
@@ -927,8 +936,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 setComandaObertaId(null);
               }}
             />
-          </div>
-        </div>
+        </Previsualitzacio>
       )}
 
       {endarrerides.length > 0 && !avisEndarreridesTancat && (
@@ -999,6 +1007,39 @@ function BotoTancarPrevisualitzacio({ onTancar }: { onTancar: () => void }) {
     >
       <X />
     </Button>
+  );
+}
+
+/**
+ * La previsualización de una comanda: velo, tarjeta centrada y cruz.
+ *
+ * Cuatro pantallas la abren —el buscador, la bolsa, el calendario y el
+ * historial— y cada una llevaba su propia copia del mismo velo, la misma
+ * caja y la misma cruz: cuatro sitios donde arreglar cada cosa.
+ *
+ * Tocar fuera cierra; tocar dentro no, que si no se cerraría sola al darle
+ * a "Entregat".
+ */
+function Previsualitzacio({
+  onTancar,
+  children,
+}: {
+  onTancar: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      onClick={onTancar}
+    >
+      <div
+        className="relative w-full max-w-md sm:max-w-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <BotoTancarPrevisualitzacio onTancar={onTancar} />
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -1836,12 +1877,7 @@ function DiaDetall({
       )}
 
       {obert && (
-        <div
-          className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
-          onClick={() => setObertId(null)}
-        >
-          <div className="relative w-full max-w-md sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <BotoTancarPrevisualitzacio onTancar={() => setObertId(null)} />
+        <Previsualitzacio onTancar={() => setObertId(null)}>
             <div className="max-h-[85svh] overflow-y-auto overscroll-contain rounded-[var(--radius)]">
               <StopCard
                 detall
@@ -1857,8 +1893,7 @@ function DiaDetall({
                 }}
               />
             </div>
-          </div>
-        </div>
+        </Previsualitzacio>
       )}
     </div>
   );
@@ -2122,9 +2157,7 @@ function Bossa({
       )}
 
       {previewStop && (
-        <div className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => setPreviewId(null)}>
-          <div className="relative w-full max-w-md sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <BotoTancarPrevisualitzacio onTancar={() => setPreviewId(null)} />
+        <Previsualitzacio onTancar={() => setPreviewId(null)}>
             {/* El scroll va en esta caja de dentro y no en la de fuera: la
                 cruz de cerrar vive por encima de la tarjeta y un contenedor
                 con scroll se la come. Con tope de alto porque una comanda con
@@ -2165,8 +2198,7 @@ function Bossa({
               }
             />
             </div>
-          </div>
-        </div>
+        </Previsualitzacio>
       )}
     </div>
   );
@@ -2467,12 +2499,7 @@ function TabHistorial({
       )}
 
       {obert && (
-        <div
-          className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
-          onClick={() => setObertId(null)}
-        >
-          <div className="relative w-full max-w-md sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <BotoTancarPrevisualitzacio onTancar={() => setObertId(null)} />
+        <Previsualitzacio onTancar={() => setObertId(null)}>
             <StopCard
               detall
               onImporte={onImporte}
@@ -2486,8 +2513,7 @@ function TabHistorial({
                 setObertId(null);
               }}
             />
-          </div>
-        </div>
+        </Previsualitzacio>
       )}
     </div>
   );
