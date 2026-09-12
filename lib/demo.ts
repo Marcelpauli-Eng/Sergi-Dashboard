@@ -54,6 +54,42 @@ const demoDeliveries = new Map<string, DeliveryRecord>();
  */
 const demoDates = new Map<string, string>();
 
+/**
+ * Las comandas creadas durante la demo. En memoria, como todo lo demás.
+ *
+ * Sin día: se crean tal cual, van a la bossa y desde allí se asignan, que es
+ * el camino de verdad.
+ */
+const creadesDemo: Sample[] = [];
+
+export function crearComandaDemo(dades: {
+  id: string;
+  customer?: string;
+  address?: string;
+  city?: string;
+  phone?: string;
+  notes?: string;
+}): boolean {
+  const jaHiEs = [...TODAY_SAMPLES, ...TOMORROW_SAMPLES, ...creadesDemo].some(
+    (s) => s.id === dades.id,
+  );
+  if (jaHiEs) return false;
+
+  creadesDemo.push({
+    id: dades.id,
+    customer: dades.customer ?? "",
+    address: [dades.address, dades.city].filter(Boolean).join(", "),
+    // Sin coordenadas: en la demo no se geocodifica nada.
+    lat: 41.3874,
+    lng: 2.1686,
+    priority: 99,
+    phone: dades.phone,
+    notes: dades.notes,
+  });
+  demoDates.set(dades.id, "");
+  return true;
+}
+
 export function recordDemoDeliveries(records: DeliveryRecord[]): void {
   for (const record of records) {
     // Corregir el importe no cambia el estado ni la hora: solo el precio de
@@ -244,7 +280,7 @@ export function demoManifest(timezone: string): Manifest {
     generatedAt: new Date().toISOString(),
     demo: true,
     sheetTab: "Demo",
-    today: buildDay(TODAY_SAMPLES, todayDate, timezone),
+    today: buildDay([...TODAY_SAMPLES, ...creadesDemo], todayDate, timezone),
     tomorrow: buildDay(TOMORROW_SAMPLES, addDays(todayDate, 1), timezone),
   };
 }

@@ -11,6 +11,7 @@
  * hoja a mano y escribe "Entregat", "ENTREGADO", "x" o "Sí" según el día.
  */
 
+import type { ColumnKey } from "./sheet-schema.ts";
 import type { DeliveryStatus, Order } from "./types.ts";
 
 /** Índice de columna (0-based) a letra de columna: 0 → A, 26 → AA. */
@@ -166,4 +167,31 @@ export function fusionarBulto(base: Order, bulto: Order): Order {
     bultos: base.bultos + bulto.bultos,
     rowNumbers: [...base.rowNumbers, ...bulto.rowNumbers],
   };
+}
+
+/**
+ * La fila que se añade al crear una comanda a mano.
+ *
+ * Cada dato va a la columna que le toca según la cabecera de ESA pestaña, no
+ * en un orden fijo: en la hoja real el nº de comanda es la G y el cliente la
+ * B, y en otra hoja serían otras. Por eso se construye por posición.
+ *
+ * Los huecos entre columnas tienen que salir como celda vacía y no como
+ * agujero: `append` cuenta posiciones, y un hueco correría todo lo de la
+ * derecha una columna a la izquierda —el teléfono acabaría en la columna del
+ * estado de la entrega—.
+ */
+export function filaNovaComanda(
+  valores: Partial<Record<ColumnKey, string>>,
+  headerMap: Partial<Record<ColumnKey, number>>,
+): string[] {
+  const fila: string[] = [];
+
+  for (const [columna, valor] of Object.entries(valores) as [ColumnKey, string][]) {
+    const i = headerMap[columna];
+    if (i === undefined || valor.trim() === "") continue;
+    fila[i] = valor.trim();
+  }
+
+  return Array.from(fila, (celda) => celda ?? "");
 }

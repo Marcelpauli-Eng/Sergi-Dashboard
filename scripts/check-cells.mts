@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import {
   NO_PRIORITY,
   columnLetter,
+  filaNovaComanda,
   fusionarBulto,
   parseNumber,
   parsePriority,
@@ -21,6 +22,7 @@ import {
   text,
 } from "../lib/sheet-cells.ts";
 import type { Order } from "../lib/types.ts";
+import type { ColumnKey } from "../lib/sheet-schema.ts";
 
 // ── Letra de columna ─────────────────────────────────────────────────────
 // Decide en qué celda se escribe. Equivocarse aquí es escribir el estado de
@@ -231,6 +233,53 @@ import type { Order } from "../lib/types.ts";
   assert.equal(junta.priority, 10, "la prioridad más alta manda");
   // Y el estado NO se toca: una fila pendiente deja la parada en la ruta.
   assert.equal(junta.statusCategory, "pendent");
+}
+
+// ── La fila de una comanda creada a mano ─────────────────────────────────
+// Cada dato va a SU columna, y en la hoja real no están en orden: el nº de
+// comanda es la G y el cliente la B. Si un hueco entre columnas se escribe
+// como agujero en vez de como celda vacía, `append` corre todo lo de la
+// derecha una columna: el teléfono acabaría en la del estado de la entrega.
+{
+  // El mapa de la hoja real de JUL 26.
+  const real: Partial<Record<string, number>> = {
+    creationDate: 0, customer: 1, address: 2, city: 3, phone: 4,
+    measures: 5, id: 6, priority: 8, status: 9, notes: 12,
+  };
+
+  const fila = filaNovaComanda(
+    {
+      id: "C260700999X",
+      customer: "TALLERS PRAT",
+      city: "08500 Vic",
+      phone: "650 11 22 33",
+      creationDate: "12/09/2026",
+      notes: "Trucar abans",
+    },
+    real as Partial<Record<ColumnKey, number>>,
+  );
+
+  assert.equal(fila[6], "C260700999X", "el nº de comanda no cae en su columna");
+  assert.equal(fila[1], "TALLERS PRAT");
+  assert.equal(fila[3], "08500 Vic");
+  assert.equal(fila[4], "650 11 22 33");
+  assert.equal(fila[0], "12/09/2026");
+  assert.equal(fila[12], "Trucar abans");
+  assert.equal(fila.length, 13);
+  // Los huecos, vacíos de verdad y no agujeros.
+  for (const i of [2, 5, 7, 8, 9, 10, 11]) {
+    assert.equal(fila[i], "", `la columna ${i} tendría que ir vacía`);
+    assert.equal(i in fila, true, `la columna ${i} es un agujero, no una celda`);
+  }
+}
+
+// Lo que la hoja no tiene, no se escribe; y lo vacío tampoco.
+{
+  const fila = filaNovaComanda(
+    { id: "A-1", customer: "  ", notes: "hola", driverId: "sergi" },
+    { id: 0, customer: 1, notes: 2 },
+  );
+  assert.deepEqual(fila, ["A-1", "", "hola"], "un campo vacío o sin columna se ha colado");
 }
 
 console.log("✓ lib/sheet-cells.ts — las celdas se leen como las escribe la oficina");

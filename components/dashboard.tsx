@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
   ArrowUpDown,
@@ -23,8 +24,8 @@ import {
   Search,
   Settings,
   TriangleAlert,
-  Wallet,
   X,
+  Plus,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import RouteTrace from "@/components/route-trace";
@@ -52,8 +53,6 @@ import {
   setCustomOrder,
   applyCustomOrder,
   subscribeLocalPrefs,
-  getThemePreference,
-  getThemePreferenceServer,
 } from "@/lib/sync";
 import { formatDistance, formatDuration, telHref } from "@/lib/format";
 import { addDays, formatLongDate, getMonthGrid, getWeekGrid, getYearMonth } from "@/lib/dates";
@@ -167,7 +166,6 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   );
   const [loadingTabs, setLoadingTabs] = useState(false);
 
-  // ── Ajustes: tema claro/oscuro ─────────────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Inicialización perezosa: en el servidor `leerDatosFacturacion` devuelve
   // los valores de partida y en el cliente los guardados. No hay riesgo de
@@ -189,12 +187,6 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       setDatosFactura(await sincronizarFacturacio(leerDatosFacturacion()));
     })();
   }, []);
-  const theme = useSyncExternalStore(
-    subscribeLocalPrefs,
-    getThemePreference,
-    getThemePreferenceServer,
-  );
-
   // ── Orden personalizado (drag & drop) ─────────────────────────────────
   const customOrderIds = useSyncExternalStore(
     subscribeLocalPrefs,
@@ -654,7 +646,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       {/* Franja de arriba. En el móvil lleva el nombre y los botones; a partir
           de `lg` es la barra del escritorio: sección a la izquierda, día y
           full a la derecha. */}
-      <header className="warm-gradient sticky top-0 z-20 pt-[env(safe-area-inset-top)] lg:border-b lg:border-border">
+      <header className="sticky top-0 z-20 bg-background pt-[env(safe-area-inset-top)] lg:border-b lg:border-border">
         <div className="flex items-center justify-between gap-4 px-4 py-2.5 lg:px-8 lg:py-3">
           {/* `lg:contents` disuelve esta caja en pantalla grande: sus hijos
               pasan a ser celdas de la franja y el día se va a la derecha. */}
@@ -817,7 +809,6 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       {settingsOpen && (
         <Ajustos
           driverName={driverName}
-          theme={theme}
           datosFactura={datosFactura}
           onDatosFactura={setDatosFactura}
           onTancar={() => setSettingsOpen(false)}
@@ -922,15 +913,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
           onClick={() => setComandaObertaId(null)}
         >
           <div className="relative w-full max-w-md sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="secondary"
-              size="icon"
-              className="absolute -top-12 right-0 rounded-full text-white"
-              onClick={() => setComandaObertaId(null)}
-              aria-label="Tancar"
-            >
-              <X />
-            </Button>
+            <BotoTancarPrevisualitzacio onTancar={() => setComandaObertaId(null)} />
             <StopCard
               detall
               onImporte={handleImporte}
@@ -966,7 +949,10 @@ export default function Dashboard({ driverName }: { driverName: string }) {
           ["calendari", "Calendari", CalendarDays],
           ["historial", "Historial", History],
           ["factures", "Factures", FileText],
-          ["cobraments", "Cobrar", Wallet],
+          // Cobrar no está aquí: con seis pestañas la barra iba tan apretada
+          // que los nombres no se leían. Se llega desde los accesos de Avui,
+          // que es donde se va a mirar —una vez cada tantos días—, y en
+          // pantalla grande sigue en la barra lateral.
           ["informes", "Informes", BarChart3],
         ] as [TabValue, string, typeof Clock][]).map(([id, label, Icona]) => (
           <button
@@ -988,6 +974,33 @@ export default function Dashboard({ driverName }: { driverName: string }) {
 }
 
 // ── Tab: Avui ──────────────────────────────────────────────────────────
+
+/**
+ * La cruz de cerrar de las previsualizaciones.
+ *
+ * Flota por encima de la tarjeta, sobre el velo oscuro. Llevaba
+ * `text-white` encima de un botón de fondo claro: un aspa blanca sobre un
+ * círculo casi blanco, que en el móvil no se veía y había que adivinar
+ * dónde tocar.
+ *
+ * Ahora es el mismo círculo que los botones de la cabecera —fondo claro y
+ * aspa del color de la app—, con sombra para que se despegue del velo.
+ * Una sola vez porque son cuatro diálogos con la misma cruz, y hasta ahora
+ * era el mismo trozo copiado cuatro veces.
+ */
+function BotoTancarPrevisualitzacio({ onTancar }: { onTancar: () => void }) {
+  return (
+    <Button
+      variant="secondary"
+      size="icon"
+      className="absolute -top-12 right-0 rounded-full shadow-lg"
+      onClick={onTancar}
+      aria-label="Tancar"
+    >
+      <X />
+    </Button>
+  );
+}
 
 function TabAvui({
   todayStops,
@@ -1012,7 +1025,7 @@ function TabAvui({
   entregats: Stop[];
   incidencies: Stop[];
   avui: string;
-  onIr: (destino: "calendari" | "historial" | "factures") => void;
+  onIr: (destino: "calendari" | "historial" | "factures" | "cobraments") => void;
   routeResult: RouteResult | null;
   generatingRoute: boolean;
   online: boolean;
@@ -1828,15 +1841,7 @@ function DiaDetall({
           onClick={() => setObertId(null)}
         >
           <div className="relative w-full max-w-md sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="secondary"
-              size="icon"
-              className="absolute -top-12 right-0 rounded-full text-white"
-              onClick={() => setObertId(null)}
-              aria-label="Tancar"
-            >
-              <X />
-            </Button>
+            <BotoTancarPrevisualitzacio onTancar={() => setObertId(null)} />
             <div className="max-h-[85svh] overflow-y-auto overscroll-contain rounded-[var(--radius)]">
               <StopCard
                 detall
@@ -2027,12 +2032,28 @@ function Bossa({
 
   return (
     <div className="flex min-h-0 flex-col gap-2">
-      <div className="hairline flex items-baseline justify-between gap-2 pt-4">
+      <div className="hairline flex items-center justify-between gap-2 pt-4">
         <h3 className="flex items-center gap-1.5 text-sm font-semibold text-status-pendent">
           <Inbox className="size-4" aria-hidden />
           Bossa de comandes
         </h3>
-        <span className="text-sm tabular-nums text-muted-foreground">{stops.length}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm tabular-nums text-muted-foreground">{stops.length}</span>
+          {/*
+            Crear una comanda a mano. Al lado de la bossa porque es donde va
+            a caer: la oficina no siempre apunta lo que sale al momento, y
+            hasta ahora eso era abrir el Google Sheet en el móvil.
+
+            Es un enlace a una pantalla aparte, no un diálogo: son siete
+            campos y el teclado del móvil se come media pantalla.
+          */}
+          <Button asChild variant="secondary" size="sm">
+            <Link href="/nova-comanda">
+              <Plus strokeWidth={2.5} />
+              Crear
+            </Link>
+          </Button>
+        </div>
       </div>
       <p className="text-xs text-tertiary-foreground">
         <span className="lg:hidden">
@@ -2103,15 +2124,7 @@ function Bossa({
       {previewStop && (
         <div className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => setPreviewId(null)}>
           <div className="relative w-full max-w-md sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="secondary"
-              size="icon"
-              className="absolute -top-12 right-0 rounded-full text-white"
-              onClick={() => setPreviewId(null)}
-              aria-label="Tancar"
-            >
-              <X />
-            </Button>
+            <BotoTancarPrevisualitzacio onTancar={() => setPreviewId(null)} />
             {/* El scroll va en esta caja de dentro y no en la de fuera: la
                 cruz de cerrar vive por encima de la tarjeta y un contenedor
                 con scroll se la come. Con tope de alto porque una comanda con
@@ -2459,15 +2472,7 @@ function TabHistorial({
           onClick={() => setObertId(null)}
         >
           <div className="relative w-full max-w-md sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="secondary"
-              size="icon"
-              className="absolute -top-12 right-0 rounded-full text-white"
-              onClick={() => setObertId(null)}
-              aria-label="Tancar"
-            >
-              <X />
-            </Button>
+            <BotoTancarPrevisualitzacio onTancar={() => setObertId(null)} />
             <StopCard
               detall
               onImporte={onImporte}

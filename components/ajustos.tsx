@@ -3,23 +3,17 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Check,
   ChevronLeft,
   ChevronRight,
   FileText,
   LogOut,
-  Moon,
-  Palette,
-  Smartphone,
   Stethoscope,
-  Sun,
   UserRound,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import AjustosFacturacio from "@/components/ajustos-facturacio";
 import Diagnostic from "@/components/diagnostic";
-import { setThemePreference, type ThemePreference } from "@/lib/sync";
 import type { DatosFacturacion } from "@/lib/factura";
 
 /**
@@ -31,17 +25,15 @@ import type { DatosFacturacion } from "@/lib/factura";
  * hasta no poder leerse.
  */
 
-type Apartado = "aparenca" | "facturacio" | "compte" | "diagnostic";
+type Apartado = "facturacio" | "compte" | "diagnostic";
 
 export default function Ajustos({
   driverName,
-  theme,
   datosFactura,
   onDatosFactura,
   onTancar,
 }: {
   driverName: string;
-  theme: ThemePreference;
   datosFactura: DatosFacturacion;
   onDatosFactura: (datos: DatosFacturacion) => void;
   onTancar: () => void;
@@ -85,11 +77,7 @@ export default function Ajustos({
             </button>
           ) : null}
           <h2 className="flex-1 text-2xl font-semibold tracking-tight">
-            {apartado === "aparenca"
-              ? "Aparença"
-              : apartado === "compte"
-                ? "Compte"
-                : "Ajustos"}
+            {apartado === "compte" ? "Compte" : "Ajustos"}
           </h2>
           {!apartado && (
             <Button variant="ghost" size="touch" onClick={onTancar} aria-label="Tancar">
@@ -100,17 +88,6 @@ export default function Ajustos({
 
         {apartado === null && (
           <div className="space-y-6">
-            <Grup titol="Preferències">
-              <Fila
-                icona={Palette}
-                titol="Aparença"
-                detall={
-                  theme === "light" ? "Clar" : theme === "dark" ? "Fosc" : "Sistema"
-                }
-                onClick={() => setApartado("aparenca")}
-              />
-            </Grup>
-
             <Grup titol="Facturació">
               <Fila
                 icona={FileText}
@@ -142,30 +119,6 @@ export default function Ajustos({
                 onClick={() => setApartado("diagnostic")}
               />
             </Grup>
-          </div>
-        )}
-
-        {apartado === "aparenca" && (
-          <div className="overflow-hidden rounded-xl bg-card">
-            {(
-              [
-                { value: "light", label: "Clar", icon: Sun },
-                { value: "dark", label: "Fosc", icon: Moon },
-                { value: "system", label: "Sistema", icon: Smartphone },
-              ] as { value: ThemePreference; label: string; icon: typeof Sun }[]
-            ).map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                onClick={() => setThemePreference(value)}
-                className="hairline flex w-full items-center gap-3 px-4 py-3 text-left text-base first:border-t-0"
-              >
-                <Icon className="size-5 shrink-0 text-muted-foreground" />
-                <span className="flex-1">{label}</span>
-                {theme === value && (
-                  <Check className="size-5 shrink-0 text-primary" strokeWidth={2.5} />
-                )}
-              </button>
-            ))}
           </div>
         )}
 
@@ -216,7 +169,7 @@ function Fila({
   detall,
   onClick,
 }: {
-  icona: typeof Sun;
+  icona: typeof FileText;
   titol: string;
   detall?: string;
   onClick: () => void;

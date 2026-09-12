@@ -27,6 +27,7 @@ import {
 } from "./importes.ts";
 import {
   columnLetter,
+  filaNovaComanda,
   fusionarBulto,
   parseNumber,
   parsePriority,
@@ -534,6 +535,84 @@ export async function writeDeliveries(
   await writeCells(updates, headerMap, sheetTab);
   await writeImportes(importes);
   return { applied, notFound };
+}
+
+/** Lo que hace falta para crear una comanda a mano. Solo el número lo es. */
+export interface NovaComanda {
+  id: string;
+  /** Código del transportista, para las hojas que tengan esa columna. */
+  driverId?: string;
+  customer?: string;
+  address?: string;
+  city?: string;
+  phone?: string;
+  measures?: string;
+  notes?: string;
+}
+
+/**
+ * Añade una comanda al full, al final.
+ *
+ * La oficina apunta las comandas en su hoja, pero no siempre: un porte que
+ * sale al momento, una recogida que se pacta por teléfono. Eso se anotaba en
+ * un papel y se perdía, o había que abrir el Google Sheet en el móvil con
+ * los dedos en una cuadrícula de veinte columnas.
+ *
+ * Solo el número es obligatorio, porque es la clave de todo —los importes,
+ * la factura y la propia fila se buscan por él— y lo demás se puede
+ * completar después desde la ficha. La fecha de creación la pone el
+ * servidor: es el día de hoy y nadie tiene que teclearla.
+ *
+ * Se escribe en la columna que le toque a cada dato según la cabecera de esa
+ * pestaña, no en un orden fijo: cada hoja tiene las suyas y en otro orden.
+ */
+export async function crearComanda(
+  dades: NovaComanda,
+  sheetTab?: string | null,
+): Promise<{ sheetTab: string }> {
+  const snapshot = await readSheet(sheetTab);
+
+  /*
+    Dos filas con el mismo número rompen cosas que no se ven hasta mucho
+    después: el importe se guarda contra el número, así que se pisarían el
+    precio, y en la hoja la segunda se descarta al leer.
+  */
+  if (snapshot.orders.some((order) => order.id === dades.id)) {
+    throw new ErrorAccionable(
+      `Ja hi ha una comanda amb el número "${dades.id}" al full ${snapshot.sheetTab}.`,
+    );
+  }
+
+  const valores = filaNovaComanda(
+    {
+      id: dades.id,
+      customer: dades.customer ?? "",
+      address: dades.address ?? "",
+      city: dades.city ?? "",
+      phone: dades.phone ?? "",
+      measures: dades.measures ?? "",
+      notes: dades.notes ?? "",
+      // El día de hoy, como lo escribe la oficina: dd/mm/aaaa.
+      creationDate: today(env.timezone).split("-").reverse().join("/"),
+      /*
+        El transportista, solo si la hoja tiene esa columna.
+
+        Hoy no la tiene y todas las comandas son suyas. El día que la tenga,
+        una fila creada sin ella quedaría sin dueño y el filtro por
+        transportista la escondería: creas la comanda y no aparece.
+      */
+      driverId: dades.driverId ?? "",
+    },
+    snapshot.headerMap,
+  );
+
+  await sheetsFetch(
+    `/values/${encodeURIComponent(range("A:ZZ", snapshot.sheetTab))}:append` +
+      `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { method: "POST", body: JSON.stringify({ values: [valores] }) },
+  );
+
+  return { sheetTab: snapshot.sheetTab ?? "" };
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   MapPin,
   Route,
   TriangleAlert,
+  Wallet,
 } from "lucide-react";
 import { formatDistance, formatDuration } from "@/lib/format";
 import { euros } from "@/lib/factura";
@@ -45,7 +46,7 @@ interface Props {
   generandoRuta: boolean;
   online: boolean;
   onGenerarRuta: () => void;
-  onIr: (destino: "calendari" | "historial" | "factures") => void;
+  onIr: (destino: "calendari" | "historial" | "factures" | "cobraments") => void;
 }
 
 export default function HomeSummary({
@@ -355,6 +356,14 @@ export default function HomeSummary({
             etiqueta="Historial"
             insignia={incidencies.length}
             onClick={() => onIr("historial")}
+          />
+          {/* Cobrar vive aquí y no en la barra de abajo: se mira cada tantos
+              días, no cada parada, y como sexta pestaña dejaba la barra tan
+              apretada que no se leían los nombres. */}
+          <Acceso
+            icono={<Wallet className="size-6" aria-hidden />}
+            etiqueta="Cobrar"
+            onClick={() => onIr("cobraments")}
           />
         </div>
       </div>

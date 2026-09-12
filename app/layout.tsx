@@ -15,10 +15,7 @@ export const metadata: Metadata = {
     // pasase lo que pasase en la app.
     //
     // `default` sí sigue el color real: desde iOS 13 pinta la barra con el
-    // `theme-color` de abajo (que tiene una entrada para claro y otra para
-    // oscuro) y elige solo el contraste de los iconos. Sigue el modo
-    // claro/oscuro del SISTEMA; no puede seguir el interruptor manual de
-    // Ajustes, porque esa barra la pinta iOS al abrir la app, no la página.
+    // `theme-color` de abajo y elige solo el contraste de los iconos.
     statusBarStyle: "default",
   },
   icons: {
@@ -30,13 +27,10 @@ export const viewport: Viewport = {
   // Un color por esquema: si no, la barra del navegador se queda blanca
   // con la app en oscuro.
   //
-  // Son el tramo de arriba del degradado de la cabecera (`--warm-from`), que
-  // es justo lo que queda debajo de la barra de estado. Si aquí hubiera otro
-  // color se vería una franja distinta pegada al reloj.
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f5e7d4" },
-    { media: "(prefers-color-scheme: dark)", color: "#2a1f16" },
-  ],
+  // El fondo (`--background`), que es lo que queda debajo de la barra de
+  // estado desde que la cabecera dejó de llevar degradado. Uno solo: la app
+  // es siempre clara, así que no hay una versión oscura que seguir.
+  themeColor: "#ffffff",
   width: "device-width",
   initialScale: 1,
   // Se permite el zoom: hay direcciones con letra pequeña y gente que la
@@ -52,24 +46,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="es"
-      className="h-full antialiased"
-      // El script de abajo añade `data-theme` antes de que React hidrate,
-      // así que el HTML del servidor y el del cliente difieren a propósito
-      // en ese único atributo. Sin esto React lo marca como error.
-      suppressHydrationWarning
-    >
+    <html lang="es" className="h-full antialiased">
       <body className="min-h-svh overflow-x-hidden">
-        {/*
-          Aplica el tema guardado (Ajustes → Clar/Fosc) antes del primer
-          pintado. Sin esto, con el móvil en oscuro y "Clar" forzado, se
-          vería un parpadeo oscuro→claro al cargar.
-        */}
-        <Script id="theme-init" strategy="beforeInteractive">
-          {'(function(){try{var t=localStorage.getItem("themePreference");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}})()'}
-        </Script>
-
         {/*
           En desarrollo, fuera cualquier service worker que quede registrado.
 
