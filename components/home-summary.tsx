@@ -88,7 +88,7 @@ export default function HomeSummary({
     const senseImport = (stops: Stop[]) => stops.filter((s) => !s.price).length;
 
     /*
-      Por dónde se reparte hoy. Con los bultos de cada sitio juntos se ve de
+      Por dónde se reparte hoy. Con las entregas de cada sitio juntas se ve de
       un vistazo si queda un viaje largo por hacer o son cuatro portales.
 
       Las que no tienen población se cuentan aparte en vez de agruparse en un

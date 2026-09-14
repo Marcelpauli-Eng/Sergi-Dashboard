@@ -25,7 +25,6 @@ const parada = (extra: Partial<Stop> = {}): Stop => ({
   creationDate: null,
   date: "2026-08-26",
   priority: 1,
-  bultos: 1,
   customer: "Farmàcia Sant Pau",
   address: "Carrer Gran 1",
   city: null,

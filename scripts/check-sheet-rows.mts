@@ -3,26 +3,27 @@
  *
  *   npm run check:rows
  *
- * Aquí está lo que la oficina escribe de verdad: comandas de varios bultos
- * repartidas en varias filas, filas sin dirección y —lo que motivó esto—
- * una comanda PARTIDA EN DOS ENTREGAS. Una parte se lleva hoy y la otra
- * cuando llegue, y la oficina apunta cada parte en su fila con el mismo
- * número. Ese caso se descartaba al leer: la oficina veía las dos partes en
- * su hoja y el transportista solo una, así que la segunda ni se repartía ni
- * se cobraba.
+ * La regla es una y no tiene excepciones: cada fila de la hoja es una
+ * entrega. Una comanda grande no cabe en un viaje, así que el transportista
+ * va varias veces y la oficina apunta cada viaje en su fila con el mismo
+ * número. Cada viaje tiene su día, su hora y lo que se cobra por hacerlo.
+ *
+ * Antes no era así y por eso está esto: las filas repetidas sin dirección se
+ * juntaban en una parada sola, y las demás no salían por ningún lado —la
+ * oficina las veía en su hoja y el transportista no, así que ni se repartían
+ * ni se cobraban—.
  */
 
 import assert from "node:assert/strict";
 import { construirComandes } from "../lib/sheet-rows.ts";
 
-const CABECERA = ["Nº Comanda", "Client", "Adreça", "Població", "Mides", "_part"];
-const fila = (id: string, client = "", adreca = "", mides = "", part = "") => [
+const CABECERA = ["Nº Comanda", "Client", "Adreça", "Població", "Mides"];
+const fila = (id: string, client = "", adreca = "", mides = "") => [
   id,
   client,
   adreca,
   adreca === "" ? "" : "Barcelona",
   mides,
-  part,
 ];
 
 // Una comanda partida en dos entregas: salen las dos.
@@ -63,7 +64,6 @@ const fila = (id: string, client = "", adreca = "", mides = "", part = "") => [
   // Una comanda entera no va partida y no dice nada.
   assert.equal(orders.find((o) => o.codi === "749")?.parts, 1);
   assert.equal(orders.find((o) => o.codi === "749")?.part, 1);
-  assert.equal(orders.find((o) => o.codi === "749")?.id, "749");
 }
 
 // Partida en tres: la tercera también entra, con su clave.
@@ -86,7 +86,10 @@ const fila = (id: string, client = "", adreca = "", mides = "", part = "") => [
   );
 }
 
-// Los bultos siguen siendo bultos: fila sin dirección = un paquete más.
+// Una fila que solo trae las medidas también es una entrega. Es lo que más
+// escribe la oficina —lo que no cabe en un viaje, apuntado debajo— y antes se
+// juntaba con la primera: la parada salía una vez y los otros viajes no
+// salían por ningún lado.
 {
   const { orders } = construirComandes([
     CABECERA,
@@ -95,28 +98,36 @@ const fila = (id: string, client = "", adreca = "", mides = "", part = "") => [
     fila("C1", "", "", "3 caixes"),
   ]);
 
-  assert.equal(orders.length, 1, "un solo sitio al que ir");
-  assert.equal(orders[0].bultos, 3);
-  assert.equal(orders[0].measures, "1 caixa · 2 caixes · 3 caixes");
-  assert.deepEqual(orders[0].rowNumbers, [2, 3, 4]);
+  assert.equal(orders.length, 3, "tres files, tres entregues");
+  assert.deepEqual(
+    orders.map((o) => o.id),
+    ["C1", "C1#2", "C1#3"],
+  );
+  // Cada una con lo suyo: las medidas de su fila, no las de todas juntas.
+  assert.deepEqual(
+    orders.map((o) => o.measures),
+    ["1 caixa", "2 caixes", "3 caixes"],
+  );
+  // Y cada una se escribe en SU fila: marcar una entregada no toca las otras.
+  assert.deepEqual(
+    orders.map((o) => o.rowNumbers),
+    [[2], [3], [4]],
+  );
 }
 
-// Y en una comanda partida, cada bulto va a SU parte: a la última escrita,
-// que es detrás de la cual lo apunta la oficina.
+// Una parte creada desde la app: solo el número, porque la dirección llega
+// después. Sale igual.
 {
   const { orders } = construirComandes([
     CABECERA,
     fila("748", "CASA A", "Carrer Gran 1", "1 caixa"),
-    fila("748", "", "", "bulto de A"),
-    fila("748", "CASA B", "Avinguda Nova 2", "1 caixa"),
-    fila("748", "", "", "bulto de B"),
+    fila("748"),
   ]);
 
-  assert.equal(orders.length, 2);
-  assert.equal(orders[0].bultos, 2);
-  assert.equal(orders[0].measures, "1 caixa · bulto de A");
-  assert.equal(orders[1].bultos, 2);
-  assert.equal(orders[1].measures, "1 caixa · bulto de B");
+  assert.equal(orders.length, 2, "la part creada des de l'app ha de sortir");
+  assert.equal(orders[1].id, "748#2");
+  assert.equal(orders[1].codi, "748");
+  assert.equal(orders[1].address, "", "encara no té adreça, i entra igual");
 }
 
 // Una fila sin número de comanda sigue fuera, y diciendo dónde está.
@@ -132,48 +143,4 @@ const fila = (id: string, client = "", adreca = "", mides = "", part = "") => [
   assert.equal(skipped[0].rowNumber, 2);
 }
 
-// Una parte creada desde la app: solo el número, porque la dirección llega
-// después. Sin la marca `_part` se leería como un bulto de la primera y no
-// saldría nunca a la bossa, que es lo que pasaba.
-{
-  const { orders } = construirComandes([
-    CABECERA,
-    fila("748", "CASA A", "Carrer Gran 1", "1 caixa"),
-    fila("748", "", "", "", "2"),
-  ]);
-
-  assert.equal(orders.length, 2, "la part creada des de l'app ha de sortir");
-  assert.equal(orders[1].id, "748#2");
-  assert.equal(orders[1].codi, "748");
-  assert.equal(orders[1].address, "", "encara no té adreça, i entra igual");
-  assert.equal(orders[0].bultos, 1, "no s'ha comptat com un bulto de la primera");
-}
-
-// Y sin marca tampoco se pierde: una fila repetida que no dice ni medidas ni
-// cliente no es un bulto —un bulto existe para decir QUÉ paquete es—, así que
-// es otra parte. Es el caso de las creadas antes de que hubiera marca.
-{
-  const { orders } = construirComandes([
-    CABECERA,
-    fila("748", "CASA A", "Carrer Gran 1", "1 caixa"),
-    fila("748"),
-  ]);
-
-  assert.equal(orders.length, 2);
-  assert.equal(orders[1].id, "748#2");
-  assert.equal(orders[0].bultos, 1);
-}
-
-// Lo que sí es un bulto lo sigue siendo: trae medidas y nada más.
-{
-  const { orders } = construirComandes([
-    CABECERA,
-    fila("748", "CASA A", "Carrer Gran 1", "1 caixa"),
-    fila("748", "", "", "2 caixes"),
-  ]);
-
-  assert.equal(orders.length, 1, "això és un paquet més, no una altra entrega");
-  assert.equal(orders[0].bultos, 2);
-}
-
-console.log("✓ lib/sheet-rows.ts — bultos, filas sueltas y comandas partides");
+console.log("✓ lib/sheet-rows.ts — cada fila del full és una entrega");
