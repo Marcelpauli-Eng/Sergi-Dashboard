@@ -333,12 +333,12 @@ export async function writeDeliveries(
     const type = record.type || "status";
 
     /*
-      Lo mismo en TODAS las filas de la comanda, no solo en la primera.
+      Las filas de ESTA entrega, que hoy es siempre una: cada fila del full
+      es una entrega y se marca la suya. Ver `construirComandes`.
 
-      Una comanda de cuatro bultos son cuatro filas en la hoja. Marcando solo
-      la primera, la oficina ve una comanda a medias —dos "Pendent" y una
-      "Entregat"—, que es exactamente lo que hay hoy en la hoja real y no hay
-      forma de saber desde fuera si está entregada o no. Ver `rowNumbers`.
+      Se escribe recorriendo `rowNumbers` y no `rowNumber` a secas porque es
+      lo que garantiza que marcar una entrega no toque la fila de otra, que
+      con el mismo número de comanda está a un despiste de distancia.
     */
     const enTodasLasFilas = (column: ColumnKey, value: string | number) => {
       for (const rowNumber of order.rowNumbers) {
@@ -467,19 +467,6 @@ export async function crearComanda(
   }
 
   /*
-    Una parte nueva se marca en la hoja, y hay que asegurarse de que la
-    columna existe antes de escribirla.
-
-    Sin la marca, la fila que se acaba de crear —solo el número, porque la
-    dirección llega después— se leería como un BULTO más de la primera
-    parte: se quedaría en la hoja sin salir nunca a la bossa, que es justo
-    lo que hay que evitar. Ver `part` en `lib/sheet-schema.ts`.
-  */
-  const headerMap = partsJa > 0
-    ? await ensureManagedColumns(snapshot.headerMap, snapshot.sheetTab)
-    : snapshot.headerMap;
-
-  /*
     Una parte hereda de la primera lo que no cambia entre viajes: el cliente,
     la dirección, la población y el teléfono.
 
@@ -519,10 +506,8 @@ export async function crearComanda(
         transportista la escondería: creas la comanda y no aparece.
       */
       driverId: dades.driverId ?? "",
-      // La parte que le toca: la primera no se marca, las demás sí.
-      part: partsJa > 0 ? String(partsJa + 1) : "",
     },
-    headerMap,
+    snapshot.headerMap,
   );
 
   await sheetsFetch(
@@ -548,8 +533,8 @@ export type DadesComanda = Partial<
  * —un teléfono mal apuntado, un portal cambiado— que antes solo se podía
  * arreglar en la hoja.
  *
- * Escribe en la fila de la comanda, que con varios bultos es la primera: es
- * la que lleva la dirección y el cliente, las demás solo las medidas.
+ * Escribe en la fila de esa entrega y solo en esa: las otras filas con el
+ * mismo número son otros viajes y tienen sus propios datos.
  *
  * Necesita cobertura y no pasa por la cola. La cola es para lo que se marca
  * en la calle —entregado, incidencia, importe— y se sube tal cual llega.

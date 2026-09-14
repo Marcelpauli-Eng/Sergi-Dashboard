@@ -266,7 +266,6 @@ function toStop(
     // El día que se le haya puesto durante la demo manda sobre el del lote.
     date: demoDates.get(sample.id) ?? date,
     priority: sample.priority,
-    bultos: 1,
     customer: sample.customer,
     address: sample.address,
     city: null,

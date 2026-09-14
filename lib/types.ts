@@ -71,19 +71,8 @@ export interface Order {
    */
   billingClient: string | null;
   phone: string | null;
-  /** Medidas de los bultos, separadas por " · " cuando hay más de uno. */
+  /** Medidas de lo que se lleva en esta entrega, tal cual están en su fila. */
   measures: string | null;
-  /**
-   * Cuántos bultos lleva la comanda.
-   *
-   * La oficina escribe un bulto por FILA, todas con el mismo nº de comanda y
-   * solo las medidas rellenas. Esas filas se fusionan aquí en una sola
-   * parada —es una única entrega, en una única dirección— pero hay que
-   * saber cuántos paquetes hay que cargar: en la hoja real hay comandas de
-   * cuatro. Antes esas filas se descartaban y el transportista salía del
-   * almacén con uno.
-   */
-  bultos: number;
   notes: string | null;
   /**
    * A qué hora se entregó, "HH:MM". `null` mientras no se haya entregado.

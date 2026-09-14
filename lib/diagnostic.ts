@@ -182,13 +182,6 @@ export async function comprobarConfiguracion(timezone: string): Promise<Comproba
     */
     try {
       const hoja = await readSheet();
-      const bultos = hoja.orders.filter((o) => o.bultos > 1);
-      const deMas = bultos.reduce((n, o) => n + o.bultos - 1, 0);
-      const resumenBultos =
-        bultos.length > 0
-          ? ` ${bultos.length} comandas llevan más de un bulto (${deMas} filas juntadas).`
-          : "";
-
       /*
         Las comandas partidas en varias entregas, con la fila de cada parte.
 
@@ -221,14 +214,14 @@ export async function comprobarConfiguracion(timezone: string): Promise<Comproba
               id: "filas",
               titulo: `Filas de "${hoja.sheetTab}"`,
               estado: "ok",
-              detalle: `Se leen las ${hoja.orders.length} comandas.${resumenBultos}${resumenPartides}`,
+              detalle: `Se leen las ${hoja.orders.length} comandas.${resumenPartides}`,
             }
           : {
               id: "filas",
               titulo: `Filas de "${hoja.sheetTab}"`,
               estado: "aviso",
               detalle:
-                `${hoja.orders.length} comandas leídas.${resumenBultos}${resumenPartides} ` +
+                `${hoja.orders.length} comandas leídas.${resumenPartides} ` +
                 `${hoja.skipped.length} filas no se pueden leer: ` +
                 hoja.skipped
                   .slice(0, 12)
