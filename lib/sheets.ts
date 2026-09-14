@@ -459,12 +459,25 @@ export async function crearComanda(
     su día y su importe. Eso lo dice quien la crea con `afegirPart`, y es
     una decisión suya, no algo que se pueda adivinar aquí.
   */
-  const jaHiEs = snapshot.orders.some((order) => order.codi === dades.id);
-  if (jaHiEs && !dades.afegirPart) {
+  const partsJa = snapshot.orders.filter((order) => order.codi === dades.id).length;
+  if (partsJa > 0 && !dades.afegirPart) {
     throw new ErrorAccionable(
       `Ja hi ha una comanda amb el número "${dades.id}" al full ${snapshot.sheetTab}.`,
     );
   }
+
+  /*
+    Una parte nueva se marca en la hoja, y hay que asegurarse de que la
+    columna existe antes de escribirla.
+
+    Sin la marca, la fila que se acaba de crear —solo el número, porque la
+    dirección llega después— se leería como un BULTO más de la primera
+    parte: se quedaría en la hoja sin salir nunca a la bossa, que es justo
+    lo que hay que evitar. Ver `part` en `lib/sheet-schema.ts`.
+  */
+  const headerMap = partsJa > 0
+    ? await ensureManagedColumns(snapshot.headerMap, snapshot.sheetTab)
+    : snapshot.headerMap;
 
   const valores = filaNovaComanda(
     {
@@ -485,8 +498,10 @@ export async function crearComanda(
         transportista la escondería: creas la comanda y no aparece.
       */
       driverId: dades.driverId ?? "",
+      // La parte que le toca: la primera no se marca, las demás sí.
+      part: partsJa > 0 ? String(partsJa + 1) : "",
     },
-    snapshot.headerMap,
+    headerMap,
   );
 
   await sheetsFetch(
