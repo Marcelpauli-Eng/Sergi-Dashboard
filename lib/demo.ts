@@ -241,6 +241,8 @@ function toStop(sample: Sample, date: string, sequence: number, timezone: string
   const recorded = demoDeliveries.get(sample.id);
   return {
     id: sample.id,
+    codi: sample.id,
+    duplicats: 1,
     driverId: DEMO_DRIVER.id,
     creationDate: null,
     // El día que se le haya puesto durante la demo manda sobre el del lote.

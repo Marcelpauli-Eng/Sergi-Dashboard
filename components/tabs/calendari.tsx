@@ -344,7 +344,7 @@ export default function TabCalendari({
                       )}
                     >
                       {stop.statusCategory === "entregat" && "✓ "}
-                      {stop.customer || stop.id}
+                      {stop.customer || stop.codi}
                     </span>
                   ))}
                   {delDia.length > CHIPS_PER_DIA && (
@@ -427,14 +427,14 @@ export default function TabCalendari({
                             stop.statusCategory !== "incidencia"
                           }
                           onDragStart={(e) => e.dataTransfer.setData("text/plain", stop.id)}
-                          title={`${stop.customer || stop.id}${stop.city ? ` · ${stop.city}` : ""}`}
+                          title={`${stop.customer || stop.codi}${stop.city ? ` · ${stop.city}` : ""}`}
                           className={cn(
                             "truncate rounded-md px-1.5 py-1 text-[11px] leading-4 lg:cursor-grab lg:active:cursor-grabbing",
                             classeChip(stop.statusCategory),
                           )}
                         >
                           {stop.statusCategory === "entregat" && "✓ "}
-                          {stop.customer || stop.id}
+                          {stop.customer || stop.codi}
                         </li>
                       ))}
                     </ul>
@@ -615,10 +615,10 @@ function DiaDetall({
                       className="pressable min-w-0 flex-1 text-left"
                     >
                       <p className="truncate text-sm font-medium">
-                        {stop.customer || stop.id}
+                        {stop.customer || stop.codi}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {stop.id}
+                        {stop.codi}
                         {stop.city ? ` · ${stop.city}` : ""}
                       </p>
                       {incidencia && stop.incidentNote && (
@@ -683,9 +683,9 @@ function DiaDetall({
                   onClick={() => setObertId(stop.id)}
                   className="pressable min-w-0 flex-1 text-left"
                 >
-                  <p className="truncate text-sm font-medium">{stop.customer || stop.id}</p>
+                  <p className="truncate text-sm font-medium">{stop.customer || stop.codi}</p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {stop.city || stop.address || stop.id}
+                    {stop.city || stop.address || stop.codi}
                   </p>
                 </button>
                 <Trucar phone={stop.phone} />
@@ -1000,7 +1000,7 @@ function Bossa({
                 }}
                 className="pressable flex min-w-0 flex-1 touch-none select-none flex-col items-start gap-0.5 py-2.5 pl-3 text-left lg:cursor-grab lg:active:cursor-grabbing"
               >
-                <span className="w-full truncate text-sm font-medium">{stop.customer || stop.id}</span>
+                <span className="w-full truncate text-sm font-medium">{stop.customer || stop.codi}</span>
                 <span className="w-full truncate text-xs text-muted-foreground">{stop.city || "Sense adreça"}</span>
               </button>
               <Trucar phone={stop.phone} />

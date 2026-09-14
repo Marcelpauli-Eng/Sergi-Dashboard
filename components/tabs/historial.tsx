@@ -101,7 +101,7 @@ export default function TabHistorial({
     if (!searchTerm.trim()) return allHistory;
     const q = searchTerm.toLowerCase();
     return allHistory.filter(stop =>
-      stop.id.toLowerCase().includes(q) ||
+      stop.codi.toLowerCase().includes(q) ||
       (stop.customer && stop.customer.toLowerCase().includes(q)) ||
       (stop.address && stop.address.toLowerCase().includes(q)) ||
       (stop.city && stop.city.toLowerCase().includes(q))
@@ -243,7 +243,7 @@ export default function TabHistorial({
                     onClick={() => setObertId(stop.id)}
                     className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/60"
                   >
-                    <td className="px-4 py-2 tabular-nums">{stop.id}</td>
+                    <td className="px-4 py-2 tabular-nums">{stop.codi}</td>
                     <td className="max-w-0 truncate px-4 py-2">{stop.customer || "—"}</td>
                     <td className="max-w-0 truncate px-4 py-2 text-muted-foreground">
                       {stop.city || "—"}
@@ -322,10 +322,10 @@ export default function TabHistorial({
 
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium">
-                            {stop.customer || stop.id}
+                            {stop.customer || stop.codi}
                           </span>
                           <span className="block truncate text-xs text-muted-foreground">
-                            {stop.id}
+                            {stop.codi}
                             {stop.city ? ` · ${stop.city}` : ""}
                           </span>
                           {incidencia && stop.incidentNote && (

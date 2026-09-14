@@ -227,7 +227,7 @@ function ImportEditable({
           type="text"
           inputMode="decimal"
           placeholder="0,00"
-          aria-label={`Import de la comanda ${stop.id}`}
+          aria-label={`Import de la comanda ${stop.codi}`}
           aria-invalid={malament || undefined}
           className={cn(
             "w-32 rounded-lg px-3 py-1.5 text-right text-base font-semibold tabular-nums outline-none ring-1",
@@ -449,7 +449,11 @@ export default function StopCard({
                la tarjeta de lista esto no cabe y por eso allí va apretado en
                una línea de letra pequeña. */
             <dl className="mt-4 border-t border-border pt-2 sm:grid sm:grid-cols-2 sm:gap-x-10">
-              <Camp etiqueta="Comanda" valor={stop.id} mono />
+              <Camp
+                etiqueta="Comanda"
+                valor={stop.duplicats > 1 ? `${stop.codi} (nº repetit)` : stop.codi}
+                mono
+              />
               {/*
                 El día solo cuando ya está hecha, y entonces es el día en que
                 se hizo.
@@ -482,7 +486,17 @@ export default function StopCard({
                   ella. Sigue sirviendo para ORDENAR la bossa —primero lo que
                   lleva más tiempo esperando—, que es para lo único que se
                   usa. */}
-              <p className="mt-1 font-mono text-xs text-tertiary-foreground">{stop.id}</p>
+              <p className="mt-1 font-mono text-xs text-tertiary-foreground">
+                {stop.codi}
+                {/* Dos entregas distintas con el mismo número: las dos salen
+                    en la bossa y hay que poder distinguirlas de un vistazo,
+                    porque en la hoja se llaman igual. */}
+                {stop.duplicats > 1 && (
+                  <span className="ml-2 rounded bg-warning/15 px-1.5 py-0.5 font-sans text-[10px] font-medium text-warning">
+                    nº repetit · {stop.duplicats} comandes
+                  </span>
+                )}
+              </p>
 
               {(stop.measures || stop.bultos > 1) && (
                 <p className="mt-1 text-xs text-tertiary-foreground">
