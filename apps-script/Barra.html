@@ -61,7 +61,8 @@
     <div id="estat"></div>
 
     <p class="ajuda">
-      Escriu i <b>tria de la llista</b>: així la fila es queda amb el punt
+      Pica una casella de <b>Adreça</b> i aquest quadre s'omple sol amb
+      aquella fila. Escriu i <b>tria de la llista</b>: així la fila es queda amb el punt
       exacte i el transportista hi arriba al portal. Si l'escrius a mà, la
       casella es marca en ambre fins que la triïs d'aquí.
     </p>
@@ -112,22 +113,51 @@
         estat.textContent = text;
       }
 
-      /* Qué fila está seleccionada. Se refresca al abrir y cada vez que se
-         vuelve al panel: en la hoja el cursor se mueve todo el rato, y
-         escribir la dirección en la fila de otra comanda es el peor error
-         posible. */
+      /*
+        El panel sigue al cursor.
+
+        Se pregunta cada segundo dónde está: en la hoja el cursor se mueve
+        todo el rato, y escribir la dirección de una comanda en la fila de
+        otra es el peor error posible.
+
+        Y cuando el cursor CAE en la casilla de la dirección, el panel se
+        pone en marcha solo: carga esa fila, escribe lo que ya hubiera y
+        deja el cursor dentro para escribir. Eso es lo más parecido a que se
+        abra Google al entrar en la casilla — dentro de la casilla no se
+        puede dibujar nada, Sheets no lo permite.
+      */
+      var ultimaFila = null;
+
       function mirarFila() {
         google.script.run
           .withSuccessHandler(function (info) {
             fila = info.fila;
             infoFila.textContent = info.resum;
-            if (info.adreca && !cerca.value) cerca.value = info.adreca;
+            infoFila.style.background = info.aAdreca ? "#e6f4ea" : "#e8f0fe";
+
+            // Solo al CAMBIAR de casilla: si no, cada segundo borraría lo
+            // que se está escribiendo.
+            var clau = info.fila + "|" + info.aAdreca;
+            if (clau === ultimaFila) return;
+            ultimaFila = clau;
+
+            llista.innerHTML = "";
+            dir("");
+
+            if (info.aAdreca) {
+              cerca.value = info.adreca || "";
+              cerca.focus();
+              cerca.select();
+            }
           })
           .filaActual();
       }
 
       mirarFila();
       window.addEventListener("focus", mirarFila);
+      // Un segundo: se nota inmediato al pinchar y no machaca la hoja a
+      // preguntas. Es lo único que corre en bucle aquí.
+      setInterval(mirarFila, 1000);
 
       cerca.addEventListener("input", function () {
         clearTimeout(espera);

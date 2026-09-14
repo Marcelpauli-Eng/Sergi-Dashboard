@@ -49,6 +49,7 @@ var TITOL = "Adreces";
  */
 var COLUMNES = {
   address: ["Adreça", "Adreca", "Direccion", "Dirección", "Domicilio", "Address"],
+  client: ["Client", "Cliente", "Nombre", "Destinatario", "Customer"],
   city: ["Població", "Poblacio", "Población", "Poblacion", "Ciudad", "City"],
   lat: ["_lat", "lat", "latitud"],
   lng: ["_lng", "lng", "longitud"],
@@ -59,9 +60,28 @@ var COLUMNES = {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu(TITOL)
-    .addItem("Cercar adreça…", "obrirPanell")
+    .addItem("Obrir el cercador", "obrirPanell")
     .addItem("Ajuda: com posar un punt", "ajuda")
     .addToUi();
+
+  /*
+    Y se abre solo, sin que nadie vaya al menú.
+
+    Es la diferencia entre una herramienta que se usa y una que se olvida:
+    quien entra a escribir direcciones se lo encuentra abierto, y el panel
+    ya va siguiendo el cursor. Dentro de la casilla no se puede dibujar
+    —Sheets no deja—, así que esto es lo más cerca que se llega: el panel
+    al lado, siempre.
+
+    Si falla no pasa nada: hay hojas donde no hay permiso para abrirlo al
+    arrancar, y entonces se abre del menú como siempre.
+  */
+  try {
+    obrirPanell();
+  } catch (error) {
+    // A propósito en silencio: un aviso al abrir la hoja cada mañana cansa
+    // más de lo que ayuda, y el menú sigue estando.
+  }
 }
 
 function obrirPanell() {
@@ -127,25 +147,40 @@ function netejarMarca(rang) {
 }
 
 /**
- * Lo que el panel necesita saber al abrirse: dónde está parado el cursor.
+ * Dónde está el cursor ahora mismo.
  *
- * Se enseña en el panel ("Fila 34 — RICARD CIRCUNS") para que nadie escriba
- * la dirección de una comanda en la fila de otra, que es el error que más
- * caro sale de todos.
+ * El panel lo pregunta cada segundo. Es lo que hace que pinchar una casilla
+ * de "Adreça" sea como entrar en un buscador: al caer ahí, el panel carga
+ * esa fila, escribe lo que ya hubiera puesto y deja el cursor listo.
+ *
+ * Y enseña de quién es la fila ("Fila 34 — RICARD CIRCUNS") porque escribir
+ * la dirección de una comanda en la fila de otra es el error que más caro
+ * sale de todos: el transportista va, y no hay nadie.
  */
 function filaActual() {
   var full = SpreadsheetApp.getActiveSheet();
-  var fila = full.getActiveRange().getRow();
-  if (fila < 2) return { fila: 0, resum: "Posa el cursor a la fila de la comanda" };
-
+  var rang = full.getActiveRange();
+  var fila = rang.getRow();
   var columnes = mapaColumnes(full);
-  var valors = full.getRange(fila, 1, 1, full.getLastColumn()).getValues()[0];
 
-  var adreca = columnes.address ? valors[columnes.address - 1] : "";
+  if (fila < 2 || !columnes.address) {
+    return { fila: 0, resum: "Posa el cursor a la fila de la comanda", aAdreca: false };
+  }
+
+  var valors = full.getRange(fila, 1, 1, full.getLastColumn()).getValues()[0];
+  var adreca = String(valors[columnes.address - 1] || "");
+  var client = columnes.client ? String(valors[columnes.client - 1] || "") : "";
+
   return {
     fila: fila,
-    resum: "Fila " + fila + (adreca ? " — " + adreca : " — sense adreça"),
-    adreca: String(adreca || ""),
+    // El cliente antes que la dirección: es lo que se reconoce de un vistazo
+    // cuando lo que se está comprobando es "¿es esta la fila?".
+    resum: "Fila " + fila + (client ? " — " + client : "") + (adreca ? " · " + adreca : " · sense adreça"),
+    adreca: adreca,
+    /* Si el cursor está justo en la casilla de la dirección. Entonces el
+       panel se pone en marcha solo; si está en otra columna, se queda
+       quieto para no robar el teclado a quien está escribiendo medidas. */
+    aAdreca: rang.getColumn() === columnes.address,
   };
 }
 

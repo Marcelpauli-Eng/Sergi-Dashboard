@@ -108,10 +108,22 @@ llamar a Google Maps.
 
 ## Cómo se usa
 
-1. Pon el cursor en la fila de la comanda.
-2. Menú **Adreces → Cercar adreça…**
-3. Escribe y **elige de la lista**. La fila queda con la dirección buena y el
-   punto exacto.
+El panel **se abre solo** al abrir la hoja y **sigue al cursor**:
+
+1. Pica una casilla de la columna **Adreça**.
+2. El panel carga esa fila —enseña de qué cliente es— y pone el cursor
+   dentro del buscador con lo que ya hubiera escrito.
+3. Escribes, **eliges de la lista**, y la fila queda con la dirección buena y
+   el punto exacto.
+
+Si el cursor está en otra columna, el panel se queda quieto: no le roba el
+teclado a quien está escribiendo medidas.
+
+### Por qué es un panel y no la casilla misma
+
+Google Sheets no deja dibujar nada dentro de una celda. Ningún script puede
+hacer que se despliegue un buscador ahí. Lo más cerca que se llega es esto:
+un panel al lado, abierto siempre, que apunta a la casilla donde estás.
 
 Si se escribe la dirección a mano, la celda se marca en ámbar con una nota:
 es un aviso de que eso todavía no es un punto. Al elegirla del panel, la
