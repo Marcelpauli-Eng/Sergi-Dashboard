@@ -29,6 +29,7 @@ import {
   columnLetter,
   filaNovaComanda,
   fusionarBulto,
+  parseGeoLevel,
   parseNumber,
   parsePriority,
   parseStatus,
@@ -255,6 +256,7 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
       lat: parseNumber(cell(row, "lat")),
       lng: parseNumber(cell(row, "lng")),
       placeId: text(cell(row, "placeId")) || null,
+      geoLevel: parseGeoLevel(cell(row, "geoLevel")),
       bultos: 1,
       rowNumber,
       rowNumbers: [rowNumber],
@@ -675,7 +677,13 @@ export async function actualitzarComanda(
  * a pagar geocoding por la misma dirección nunca más.
  */
 export async function cacheCoordinates(
-  coords: { orderId: string; lat: number; lng: number; placeId: string | null }[],
+  coords: {
+    orderId: string;
+    lat: number;
+    lng: number;
+    placeId: string | null;
+    geoLevel: "portal" | "negoci" | "carrer" | "poble";
+  }[],
   snapshot: SheetSnapshot,
 ): Promise<void> {
   if (coords.length === 0) return;
@@ -699,6 +707,11 @@ export async function cacheCoordinates(
       rowNumber: order.rowNumber,
       column: "placeId",
       value: coord.placeId ?? "",
+    });
+    updates.push({
+      rowNumber: order.rowNumber,
+      column: "geoLevel",
+      value: coord.geoLevel,
     });
   }
 

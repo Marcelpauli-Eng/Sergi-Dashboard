@@ -179,6 +179,7 @@ import type { ColumnKey } from "../lib/sheet-schema.ts";
     lat: null,
     lng: null,
     placeId: null,
+  geoLevel: null,
     rowNumber: 58,
     rowNumbers: [58],
     ...extra,
@@ -193,6 +194,7 @@ import type { ColumnKey } from "../lib/sheet-schema.ts";
     lat: 41.413,
     lng: 2.162,
     placeId: null,
+  geoLevel: null,
   });
 
   let junta = base;
@@ -221,7 +223,7 @@ import type { ColumnKey } from "../lib/sheet-schema.ts";
     customer: "", address: "A", city: null, billingClient: null, phone: null,
     measures: null, notes: null, bultos: 1, deliveredTime: null, incidentNote: null,
     status: "pendiente", rawStatus: "", statusCategory: "pendent", price: null,
-    lat: null, lng: null, placeId: null, rowNumber: 2, rowNumbers: [2], ...extra,
+    lat: null, lng: null, placeId: null, geoLevel: null, rowNumber: 2, rowNumbers: [2], ...extra,
   });
 
   const junta = fusionarBulto(

@@ -23,7 +23,21 @@ import type { Order } from "./types.ts";
 
 /** Lo que hace falta de una parada para poder llevar a alguien hasta ella. */
 type Destino = Pick<Order, "lat" | "lng" | "address"> &
-  Partial<Pick<Order, "city" | "placeId">>;
+  Partial<Pick<Order, "city" | "placeId" | "geoLevel">>;
+
+/**
+ * Si el punto guardado es el sitio, o solo la zona.
+ *
+ * `portal` y `negoci` son el sitio: se navega por coordenadas, que es lo que
+ * evita que Maps reinterprete nada. `carrer` deja en la calle correcta, que
+ * para repartir sirve. `poble` es el centro del pueblo, y ahí las
+ * coordenadas son justo lo que NO se quiere: mejor darle a Maps la
+ * dirección escrita y que la busque él, que a lo mejor la conoce.
+ */
+function puntDeFiar(destino: Destino): boolean {
+  if (destino.lat === null || destino.lng === null) return false;
+  return destino.geoLevel !== "poble";
+}
 
 /**
  * La dirección entera, con el pueblo.
@@ -46,9 +60,24 @@ function adreca(destino: Destino): string {
  * que Maps sí busca, en vez de navegar al centro del pueblo.
  */
 function punt(destino: Destino): string {
-  return destino.lat !== null && destino.lng !== null
+  return puntDeFiar(destino)
     ? `${destino.lat},${destino.lng}`
-    : adreca(destino);
+    : adreca(destino) || `${destino.lat},${destino.lng}`;
+}
+
+/**
+ * Quita el número de una dirección para quedarse con la calle.
+ *
+ * "Carrer Cabrerés, 2" → "Carrer Cabrerés". Sirve para el peldaño de la
+ * calle: cuando el número no existe o Google no lo tiene, la calle entera
+ * sí la conoce, y deja al transportista en el sitio correcto.
+ */
+export function nomDeCarrer(address: string): string {
+  return address
+    // "nº 12", "num 12", "12" al final, con o sin letra de puerta.
+    .replace(/[,;]?\s*(n[.ºo]*|num(ero)?\.?)?\s*\d+\s*[a-zA-Z]?\s*$/u, "")
+    .replace(/[\s,;]+$/u, "")
+    .trim();
 }
 
 /**
@@ -61,7 +90,7 @@ function punt(destino: Destino): string {
 export function navUrlFor(order: Destino): string {
   const url = new URL("https://www.google.com/maps/dir/");
   url.searchParams.set("api", "1");
-  if (order.placeId) {
+  if (order.placeId && order.geoLevel !== "poble") {
     /*
       Con `destination_place_id`, `destination` es solo lo que se lee en
       pantalla —Google exige que vaya, pero manda el identificador—. Se pone
@@ -141,6 +170,30 @@ export function appRouteUrlFor(
   url.searchParams.set("daddr", stops.map(punt).join(" to:"));
   url.searchParams.set("directionsmode", "driving");
   return url.toString();
+}
+
+/**
+ * Navegar con Apple Mapes.
+ *
+ * Mismo criterio que con Google: las coordenadas solo cuando son del sitio.
+ * Si lo que hay es el centro del pueblo, se le pasa la dirección escrita.
+ */
+export function appleNavUrlFor(order: Destino): string {
+  return `http://maps.apple.com/?daddr=${encodeURIComponent(punt(order))}&dirflg=d`;
+}
+
+/**
+ * Navegar con Waze.
+ *
+ * Waze tiene dos parámetros distintos: `ll` para coordenadas y `q` para
+ * buscar por texto. No se pueden confundir —un `ll` con una dirección
+ * dentro no lleva a ninguna parte—, así que se elige el que toca.
+ */
+export function wazeNavUrlFor(order: Destino): string {
+  if (puntDeFiar(order)) {
+    return `https://waze.com/ul?ll=${order.lat},${order.lng}&navigate=yes`;
+  }
+  return `https://waze.com/ul?q=${encodeURIComponent(adreca(order))}&navigate=yes`;
 }
 
 /**

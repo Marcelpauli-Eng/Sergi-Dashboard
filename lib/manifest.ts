@@ -9,7 +9,9 @@ import {
 import {
   geocodeAddress,
   navUrlFor,
+  resolveUbicacio,
   type Coord,
+  type NivellUbicacio,
 } from "./routing";
 import { today } from "./dates";
 import type { Manifest, Order, Stop } from "./types";
@@ -57,32 +59,37 @@ export async function fillMissingCoordinates(
   snapshot: SheetSnapshot,
 ): Promise<void> {
   /*
-    Las que no tienen dirección no se geocodifican: no hay nada que buscar.
-
-    Desde que se pueden crear comandas con solo el número, las hay sin
-    dirección, y preguntarle a Google por una cadena vacía es una llamada
-    tirada y un aviso en el log por cada una, cada vez que se sincroniza.
+    Las que no tienen dirección ni cliente no se buscan: no hay nada que
+    buscar. Desde que se pueden crear comandas con solo el número, las hay
+    vacías, y preguntarle a Google por una cadena vacía es una llamada
+    tirada y un aviso en el log cada vez que se sincroniza.
   */
-  const conDireccion = orders.filter((o) => o.address.trim() !== "");
-
-  const sinCoordenadas = conDireccion.filter(
-    (o) => o.lat === null || o.lng === null,
+  const buscables = orders.filter(
+    (o) => o.address.trim() !== "" || o.customer.trim() !== "",
   );
-  /*
-    Las que tienen coordenadas pero no portal son de antes de guardarlo, y
-    entre ellas están las que mandaban al transportista al centro del pueblo:
-    en su día se guardó lo que Google contestara, fuera el portal o el
-    centroide, y como ya había coordenadas no se volvía a preguntar nunca.
 
-    Se vuelven a resolver, pero con tope: son las comandas del día, y un día
-    con la hoja entera por estrenar no debe convertirse en cien llamadas a
-    Google de golpe. Las que queden se arreglan al día siguiente.
+  const sensePunt = buscables.filter((o) => o.lat === null || o.lng === null);
+  /*
+    Las que tienen un punto que no es el portal se vuelven a buscar.
+
+    Aquí entran dos cosas: las que quedaron en la calle o en el pueblo
+    —Google puede saber hoy lo que no sabía el mes pasado, y una tienda
+    recién dada de alta aparece con el tiempo— y las de antes de que se
+    guardara el nivel, que son las que mandaban al pueblo sin decirlo.
+
+    Con tope, porque esto corre cada vez que el transportista abre la app:
+    las que queden se reintentan en la siguiente ronda.
   */
-  const sinPortal = conDireccion
-    .filter((o) => o.lat !== null && o.lng !== null && o.placeId === null)
+  const arevisar = buscables
+    .filter(
+      (o) =>
+        o.lat !== null &&
+        o.lng !== null &&
+        (o.geoLevel === null || o.geoLevel === "carrer" || o.geoLevel === "poble"),
+    )
     .slice(0, MAX_REVISIONES_POR_RONDA);
 
-  const pending = [...sinCoordenadas, ...sinPortal];
+  const pending = [...sensePunt, ...arevisar];
   if (pending.length === 0) return;
 
   const resolved: {
@@ -90,52 +97,56 @@ export async function fillMissingCoordinates(
     lat: number;
     lng: number;
     placeId: string | null;
+    geoLevel: NivellUbicacio;
   }[] = [];
 
   // En serie a propósito: son pocas direcciones nuevas al día y así no se
-  // dispara el rate limit de la Geocoding API en un pico.
+  // dispara el rate limit de las APIs de Google en un pico.
   for (const order of pending) {
-    // Construir dirección completa con la ciudad si existe
-    const fullAddress = order.city
-      ? `${order.address}, ${order.city}`
-      : order.address;
-    const coord = await geocodeAddress(fullAddress);
-    if (!coord) {
+    const ubicacio = await resolveUbicacio({
+      address: order.address,
+      city: order.city,
+      customer: order.customer || null,
+    });
+
+    if (!ubicacio) {
       console.warn(
-        `Dirección no reconocida por Google (pedido ${order.id}): "${fullAddress}"`,
+        `Sin punto para el pedido ${order.id}: ni la dirección ("${order.address}") ` +
+          `ni el cliente ("${order.customer}") le dicen nada a Google.`,
       );
       continue;
     }
 
-    if (!coord.precise) {
-      /*
-        Google ha contestado el centro del pueblo, no el portal.
+    /*
+      Lo que se encuentre se guarda, sea el portal o el pueblo: el
+      transportista prefiere que le lleve al pueblo a que el botón no haga
+      nada. Lo que NO se hace es fingir que el pueblo es la dirección — el
+      nivel viaja con el punto y la tarjeta lo avisa.
 
-        Ese punto NO se guarda como si fuera la dirección: guardarlo es lo
-        que hacía que el botón de navegar llevara al pueblo y se quedara así
-        para siempre. Sin coordenadas, la tarjeta navega con la dirección en
-        texto —que al menos la busca Maps— y la parada queda fuera del
-        cálculo de ruta, que es lo mismo que pasa con una dirección que
-        Google no reconoce.
+      Si lo nuevo es peor que lo que ya había, se queda lo de antes: una
+      revisión que hoy devuelve el pueblo no debe borrar el portal que se
+      encontró en su día.
+    */
+    if (esPitjor(ubicacio.nivell, order.geoLevel)) continue;
 
-        Se sigue usando como referencia para ordenar la ruta solo si ya
-        venía de la hoja; si no había nada, se deja a null.
-      */
+    if (ubicacio.nivell !== "portal") {
       console.warn(
-        `Google solo ha sabido situar el pueblo, no la calle (pedido ${order.id}): "${fullAddress}". ` +
-          `Revisa la dirección en la hoja; mientras tanto se navega por texto.`,
+        `El punto del pedido ${order.id} es ${DESCRIPCIO_NIVELL[ubicacio.nivell]}, ` +
+          `no el portal: "${order.address}${order.city ? `, ${order.city}` : ""}". ` +
+          `Revisa la dirección en la hoja si la entrega falla.`,
       );
-      continue;
     }
 
-    order.lat = coord.lat;
-    order.lng = coord.lng;
-    order.placeId = coord.placeId;
+    order.lat = ubicacio.lat;
+    order.lng = ubicacio.lng;
+    order.placeId = ubicacio.placeId;
+    order.geoLevel = ubicacio.nivell;
     resolved.push({
       orderId: order.id,
-      lat: coord.lat,
-      lng: coord.lng,
-      placeId: coord.placeId,
+      lat: ubicacio.lat,
+      lng: ubicacio.lng,
+      placeId: ubicacio.placeId,
+      geoLevel: ubicacio.nivell,
     });
   }
 
@@ -144,11 +155,26 @@ export async function fillMissingCoordinates(
       await cacheCoordinates(resolved, snapshot);
     } catch (error) {
       // Que falle el cacheo no debe tumbar la ruta: solo significa que
-      // mañana habrá que volver a geocodificar.
+      // mañana habrá que volver a buscar.
       console.error("No se pudieron cachear las coordenadas en el Sheet:", error);
     }
   }
 }
+
+/** De mejor a peor. Se usa para no sustituir un punto bueno por uno malo. */
+const ORDRE_NIVELL: NivellUbicacio[] = ["portal", "negoci", "carrer", "poble"];
+
+function esPitjor(nou: NivellUbicacio, vell: Order["geoLevel"]): boolean {
+  if (vell === null) return false;
+  return ORDRE_NIVELL.indexOf(nou) > ORDRE_NIVELL.indexOf(vell);
+}
+
+const DESCRIPCIO_NIVELL: Record<NivellUbicacio, string> = {
+  portal: "el portal",
+  negoci: "la ficha del negocio en Google",
+  carrer: "la calle, sin número",
+  poble: "el centro del pueblo",
+};
 
 /**
  * Avisa del fallo de los importes una sola vez por proceso.

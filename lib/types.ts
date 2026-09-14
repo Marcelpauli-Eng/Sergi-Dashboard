@@ -84,6 +84,15 @@ export interface Order {
   lat: number | null;
   lng: number | null;
   /**
+   * Hasta dónde afina el punto guardado: el portal, la ficha del negocio,
+   * la calle sin número o el centro del pueblo.
+   *
+   * Se guarda para poder avisar al transportista cuando el punto NO es el
+   * portal —que es justo cuando la navegación "no marca exacto"— y para
+   * volver a intentarlo otro día a ver si Google ya lo sabe.
+   */
+  geoLevel: "portal" | "negoci" | "carrer" | "poble" | null;
+  /**
    * El identificador del portal en Google, cacheado junto a las coordenadas.
    *
    * Es lo que hace que navegar caiga en la calle exacta y no en el centro

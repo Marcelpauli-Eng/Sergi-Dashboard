@@ -128,6 +128,22 @@ export function parseStatusCategory(
 }
 
 /**
+ * Lo que dice la celda `_geo`: hasta dónde afinó la búsqueda del sitio.
+ *
+ * La escribe la app, así que solo puede traer uno de cuatro valores. Lo que
+ * no sea uno de ellos —una celda tocada a mano, o de una versión anterior—
+ * se lee como "no lo sabemos", que hace que se vuelva a buscar.
+ */
+export function parseGeoLevel(
+  raw: unknown,
+): "portal" | "negoci" | "carrer" | "poble" | null {
+  const k = clave(raw);
+  return k === "portal" || k === "negoci" || k === "carrer" || k === "poble"
+    ? k
+    : null;
+}
+
+/**
  * Junta a una comanda otra fila suya: un bulto más.
  *
  * La oficina escribe un bulto por fila. Todas llevan el mismo nº de comanda

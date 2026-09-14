@@ -143,6 +143,15 @@ export const COLUMNS = {
    * app lo vuelve a intentar otro día en vez de mandar allí al transportista.
    */
   placeId: ["_placeId", "placeid", "place_id"],
+
+  /**
+   * Hasta dónde afinó la búsqueda: "portal", "negoci", "carrer" o "poble".
+   *
+   * Sirve para dos cosas: avisar en la pantalla cuando el punto no es el
+   * portal, y volver a intentarlo otro día en las que no lo son —una calle
+   * nueva o una tienda recién dada de alta en Google aparecen con el tiempo.
+   */
+  geoLevel: ["_geo", "geo", "precision"],
 } as const;
 
 export type ColumnKey = keyof typeof COLUMNS;
@@ -169,6 +178,7 @@ export const MANAGED_COLUMNS: ColumnKey[] = [
   "lat",
   "lng",
   "placeId",
+  "geoLevel",
   "date",
 ];
 

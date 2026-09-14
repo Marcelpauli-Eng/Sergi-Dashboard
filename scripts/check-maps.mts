@@ -13,9 +13,12 @@
 import assert from "node:assert/strict";
 import {
   appNavUrlFor,
+  appleNavUrlFor,
+  wazeNavUrlFor,
   appRouteUrlFor,
   fullRouteUrlFor,
   navUrlFor,
+  nomDeCarrer,
 } from "../lib/maps.ts";
 
 const parada = (lat: number | null, lng: number | null, address = "Carrer Gran 1") => ({
@@ -126,6 +129,69 @@ const parada = (lat: number | null, lng: number | null, address = "Carrer Gran 1
     placeId: null,
   });
   assert.equal(new URL(app).searchParams.get("daddr"), "Carrer Gran, 12, Torelló");
+}
+
+// ── El punto del pueblo NO se navega por coordenadas ─────────────────────
+// Es el caso que hacía que "no marcara exacto": llevar al transportista al
+// centro del pueblo con toda la seguridad del mundo. Con `_geo` a "poble"
+// se le pasa la dirección escrita y que la busque Maps, que a lo mejor la
+// conoce; y si no, al menos el transportista ve qué está buscando.
+{
+  const alPoble = {
+    lat: 41.9301,
+    lng: 2.2545,
+    address: "Carrer Nou, 44",
+    city: "Manlleu",
+    placeId: "ChIJpoble",
+    geoLevel: "poble" as const,
+  };
+
+  assert.equal(
+    new URL(navUrlFor(alPoble)).searchParams.get("destination"),
+    "Carrer Nou, 44, Manlleu",
+  );
+  assert.equal(
+    new URL(navUrlFor(alPoble)).searchParams.get("destination_place_id"),
+    null,
+    "el place_id del pueblo es el pueblo: no se manda",
+  );
+  assert.equal(
+    new URL(appNavUrlFor(alPoble)).searchParams.get("daddr"),
+    "Carrer Nou, 44, Manlleu",
+  );
+  assert.ok(wazeNavUrlFor(alPoble).includes("q="), "Waze busca por texto, no por ll");
+  assert.ok(appleNavUrlFor(alPoble).includes("Manlleu"));
+}
+
+// ── La calle sin número sí es un punto que sirve ──────────────────────────
+// No es el portal, pero deja al transportista en la calle correcta, que es
+// mucho más de lo que hace el centro del pueblo.
+{
+  const alCarrer = {
+    lat: 41.9312,
+    lng: 2.2501,
+    address: "Carrer Nou, 44",
+    city: "Manlleu",
+    placeId: "ChIJcarrer",
+    geoLevel: "carrer" as const,
+  };
+  assert.equal(
+    new URL(navUrlFor(alCarrer)).searchParams.get("destination_place_id"),
+    "ChIJcarrer",
+  );
+  assert.ok(wazeNavUrlFor(alCarrer).includes("ll=41.9312,2.2501"));
+}
+
+// ── Quedarse con la calle cuando el número no existe ─────────────────────
+// Es el peldaño que evita el salto directo al centro del pueblo: si Google
+// no tiene el 44, la calle entera sí la conoce.
+{
+  assert.equal(nomDeCarrer("Carrer Cabrerés, 2"), "Carrer Cabrerés");
+  assert.equal(nomDeCarrer("Carrer Nou 44"), "Carrer Nou");
+  assert.equal(nomDeCarrer("Avinguda Diagonal, 405 B"), "Avinguda Diagonal");
+  assert.equal(nomDeCarrer("Ctra. de Vic, nº 12"), "Ctra. de Vic");
+  // Sin número no hay nada que quitar, y un polígono no se toca.
+  assert.equal(nomDeCarrer("Polígon Mas Galí"), "Polígon Mas Galí");
 }
 
 console.log("✓ lib/maps.ts — els enllaços obren l'app de mapes, no el navegador");

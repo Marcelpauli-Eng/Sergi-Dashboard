@@ -269,6 +269,7 @@ function toStop(sample: Sample, date: string, sequence: number, timezone: string
     lat: sample.lat,
     lng: sample.lng,
     placeId: null,
+  geoLevel: null,
     sequence,
     navUrl: navUrlFor(sample),
     legDistanceMeters: sample.legDistanceMeters ?? null,
