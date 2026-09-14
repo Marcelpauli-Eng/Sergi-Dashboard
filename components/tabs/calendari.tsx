@@ -993,12 +993,31 @@ function Bossa({
                 }}
                 onPointerLeave={cancelPress}
                 onPointerMove={cancelPress} // Si el dedo se mueve (scrolling), cancelamos
+                /*
+                  El navegador se queda el gesto para hacer scroll: los
+                  pointer events de esta fila se cancelan de golpe y el
+                  `onPointerUp` no llega nunca. Sin esto, el temporizador del
+                  mantener-pulsado seguiría vivo y la previsualización se
+                  abriría sola en mitad de un scroll.
+                */
+                onPointerCancel={cancelPress}
                 // El dedo ya se ha resuelto en `onPointerUp`; el click que iOS
                 // dispara después no debe contar dos veces.
                 onClick={() => {
                   if (tipusRef.current !== "touch") activar(stop);
                 }}
-                className="pressable flex min-w-0 flex-1 touch-none select-none flex-col items-start gap-0.5 py-2.5 pl-3 text-left lg:cursor-grab lg:active:cursor-grabbing"
+                /*
+                  `touch-pan-y` y no `touch-none`.
+
+                  Con `touch-none` el navegador entendía que ningún toque que
+                  empezara en una fila era para hacer scroll, y como las filas
+                  ocupan la bossa entera, la lista no se podía mover con el
+                  dedo: había que buscar el borde de la pantalla. Dejando
+                  pasar el gesto vertical se scrollea desde cualquier sitio, y
+                  el tocar y el mantener pulsado siguen funcionando —el scroll
+                  cancela el temporizador, que es lo que se quiere—.
+                */
+                className="pressable flex min-w-0 flex-1 touch-pan-y select-none flex-col items-start gap-0.5 py-2.5 pl-3 text-left lg:cursor-grab lg:active:cursor-grabbing"
               >
                 <span className="w-full truncate text-sm font-medium">{stop.customer || stop.codi}</span>
                 <span className="w-full truncate text-xs text-muted-foreground">{stop.city || "Sense adreça"}</span>
