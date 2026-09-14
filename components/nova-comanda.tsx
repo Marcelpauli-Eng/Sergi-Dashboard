@@ -205,9 +205,12 @@ export default function NovaComanda() {
             {repetida && (
               <>
                 <p className="mt-1">
-                  Si és una altra part de la mateixa comanda —una part ara i la
-                  resta més tard— es pot afegir igualment: seran dues entregues,
-                  cada una amb el seu dia i el seu import, amb el mateix número.
+                  Si és una altra part de la mateixa comanda —el que no cap en
+                  un sol viatge— es pot afegir igualment: serà una entrega a
+                  part, amb el seu dia i el seu import, amb el mateix número.
+                  El client, l&apos;adreça i el telèfon es copien de la part
+                  anterior; les mides i les notes, no, que són d&apos;aquest
+                  viatge.
                 </p>
                 <Button
                   type="button"

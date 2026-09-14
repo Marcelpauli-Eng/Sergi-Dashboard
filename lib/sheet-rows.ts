@@ -139,14 +139,19 @@ export function construirComandes(rows: unknown[][]): {
       rowNumbers: [rowNumber],
     };
 
+    /*
+      La marca que escribe la app al crear otra parte desde el móvil. Ver
+      `part` en `lib/sheet-schema.ts`: sin ella, una parte recién creada
+      —que solo tiene el número— sería indistinguible de un bulto.
+    */
+    const marcaPart = parseNumber(cell(row, "part"));
+
     const yaEsta = porId.get(id);
     if (yaEsta !== undefined) {
       /*
-        Otra fila con el mismo nº de comanda. Si no trae dirección es un
-        bulto más de la misma entrega —así escribe la oficina las comandas
-        de varios paquetes— y se fusiona. Ver `fusionarBulto`.
-
-        Si SÍ trae dirección es OTRA PARTE de la misma comanda: la entrega
+        Otra fila con el mismo nº de comanda: o es un bulto más de la misma
+        entrega —así escribe la oficina las comandas de varios paquetes, y se
+        fusiona; ver `fusionarBulto`— o de la misma comanda: la entrega
         se parte en dos cuando no cabe todo o cuando falta material, y la
         oficina apunta cada parte en su fila con el mismo número. Son dos
         entregas, cada una con su día, su hora y lo que se cobra por hacerla.
@@ -157,10 +162,25 @@ export function construirComandes(rows: unknown[][]): {
         que marcar una entregada no toque la otra y cada una lleve su
         importe.
 
+        Se reconoce por tres cosas, y basta una:
+
+        - Dirección propia: así lo escribe la oficina.
+        - La marca `_part`: así lo escribe la app, donde una parte nueva nace
+          solo con el número y la dirección llega después.
+        - Ni medidas ni cliente: no hay nada que la haga un bulto. Una fila
+          de bulto existe para decir QUÉ paquete es —lleva las medidas—, así
+          que una fila repetida que no dice nada de eso no lo es. Esto
+          recupera las partes creadas antes de que existiera la marca.
+
         El número que se enseña y el que va a la factura sigue siendo el de
         la hoja —`codi`—: para el cliente es una sola comanda.
       */
-      if (address) {
+      const esBulto =
+        !address &&
+        (marcaPart === null || marcaPart <= 1) &&
+        (fila.measures !== null || fila.customer !== "");
+
+      if (!esBulto) {
         const parte = (vecesVisto.get(id) ?? 1) + 1;
         vecesVisto.set(id, parte);
         const otraParte: Order = {

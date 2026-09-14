@@ -15,13 +15,14 @@
 import assert from "node:assert/strict";
 import { construirComandes } from "../lib/sheet-rows.ts";
 
-const CABECERA = ["Nº Comanda", "Client", "Adreça", "Població", "Mides"];
-const fila = (id: string, client = "", adreca = "", mides = "") => [
+const CABECERA = ["Nº Comanda", "Client", "Adreça", "Població", "Mides", "_part"];
+const fila = (id: string, client = "", adreca = "", mides = "", part = "") => [
   id,
   client,
   adreca,
   adreca === "" ? "" : "Barcelona",
   mides,
+  part,
 ];
 
 // Una comanda partida en dos entregas: salen las dos.
@@ -129,6 +130,50 @@ const fila = (id: string, client = "", adreca = "", mides = "") => [
   assert.equal(orders.length, 1);
   assert.equal(skipped.length, 1);
   assert.equal(skipped[0].rowNumber, 2);
+}
+
+// Una parte creada desde la app: solo el número, porque la dirección llega
+// después. Sin la marca `_part` se leería como un bulto de la primera y no
+// saldría nunca a la bossa, que es lo que pasaba.
+{
+  const { orders } = construirComandes([
+    CABECERA,
+    fila("748", "CASA A", "Carrer Gran 1", "1 caixa"),
+    fila("748", "", "", "", "2"),
+  ]);
+
+  assert.equal(orders.length, 2, "la part creada des de l'app ha de sortir");
+  assert.equal(orders[1].id, "748#2");
+  assert.equal(orders[1].codi, "748");
+  assert.equal(orders[1].address, "", "encara no té adreça, i entra igual");
+  assert.equal(orders[0].bultos, 1, "no s'ha comptat com un bulto de la primera");
+}
+
+// Y sin marca tampoco se pierde: una fila repetida que no dice ni medidas ni
+// cliente no es un bulto —un bulto existe para decir QUÉ paquete es—, así que
+// es otra parte. Es el caso de las creadas antes de que hubiera marca.
+{
+  const { orders } = construirComandes([
+    CABECERA,
+    fila("748", "CASA A", "Carrer Gran 1", "1 caixa"),
+    fila("748"),
+  ]);
+
+  assert.equal(orders.length, 2);
+  assert.equal(orders[1].id, "748#2");
+  assert.equal(orders[0].bultos, 1);
+}
+
+// Lo que sí es un bulto lo sigue siendo: trae medidas y nada más.
+{
+  const { orders } = construirComandes([
+    CABECERA,
+    fila("748", "CASA A", "Carrer Gran 1", "1 caixa"),
+    fila("748", "", "", "2 caixes"),
+  ]);
+
+  assert.equal(orders.length, 1, "això és un paquet més, no una altra entrega");
+  assert.equal(orders[0].bultos, 2);
 }
 
 console.log("✓ lib/sheet-rows.ts — bultos, filas sueltas y comandas partides");
