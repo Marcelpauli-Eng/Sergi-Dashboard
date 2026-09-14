@@ -13,6 +13,7 @@
 import assert from "node:assert/strict";
 import {
   adrecaCompleta,
+  mateixaAdreca,
   appNavUrlFor,
   appRouteUrlFor,
   fullRouteUrlFor,
@@ -82,6 +83,21 @@ const parada = (
   assert.equal(
     new URL(appNavUrlFor(parada(41.9, 2.25, "Carrer Cabrerés, 2", "08500 Vic"))).searchParams.get("daddr"),
     "41.9,2.25",
+  );
+}
+
+// ── La misma dirección escrita de otra manera ────────────────────────────
+// Decide si unas coordenadas cacheadas siguen valiendo: con esto, corregir
+// "cabreres" por "Cabrerés" no cuesta una consulta a Google para acabar en
+// el mismo portal. Cambiar el número sí.
+{
+  assert.ok(mateixaAdreca("Carrer Cabrerés, 2", "carrer cabreres 2"));
+  assert.ok(mateixaAdreca("  Carrer  Gran   1 ", "Carrer Gran 1"));
+  assert.equal(mateixaAdreca("Carrer Cabrerés, 2", "Carrer Cabrerés, 8"), false);
+  assert.equal(
+    mateixaAdreca("Carrer Cabrerés, 2, 08500 Vic", "Carrer Cabrerés, 2, 08240 Manresa"),
+    false,
+    "otro pueblo es otro sitio",
   );
 }
 

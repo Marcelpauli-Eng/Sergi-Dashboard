@@ -43,6 +43,29 @@ export function adrecaCompleta(destino: Destino): string {
 }
 
 /**
+ * La misma dirección escrita de dos maneras es la misma dirección.
+ *
+ * Se compara así, y no letra a letra, porque corregir "carrer" por "Carrer"
+ * o quitar un espacio de más no mueve el portal ni un metro: volver a
+ * geocodificar por eso es pagar una consulta a Google para acabar en el
+ * mismo sitio. Los acentos también caen: la oficina escribe "Cabreres" y
+ * "Cabrerés" el mismo día.
+ */
+export function normalitzaAdreca(adreca: string): string {
+  return adreca
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** Si dos direcciones llevan al mismo sitio. */
+export function mateixaAdreca(a: string, b: string): boolean {
+  return normalitzaAdreca(a) === normalitzaAdreca(b);
+}
+
+/**
  * El punto, en coordenadas si las hay.
  *
  * Se prefieren a la dirección en texto: evita que Maps reinterprete la

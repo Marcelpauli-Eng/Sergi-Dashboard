@@ -40,6 +40,7 @@ const parada = (extra: Partial<Stop> = {}): Stop => ({
   price: null,
   lat: null,
   lng: null,
+  geoAddress: null,
   sequence: 1,
   navUrl: "",
   legDistanceMeters: null,

@@ -287,6 +287,8 @@ function toStop(
     price: recorded?.price ?? null,
     lat: sample.lat,
     lng: sample.lng,
+    // En la demo no se geocodifica nada: no se habla con Google.
+    geoAddress: null,
     sequence,
     navUrl: navUrlFor(sample),
     legDistanceMeters: sample.legDistanceMeters ?? null,

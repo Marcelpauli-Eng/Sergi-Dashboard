@@ -135,6 +135,27 @@ export const COLUMNS = {
   lat: ["_lat", "lat", "latitud"],
   lng: ["_lng", "lng", "longitud"],
 
+  /**
+   * La dirección que se geocodificó para obtener `lat`/`lng`.
+   *
+   * Sin esto, unas coordenadas cacheadas valían para siempre: se corregía el
+   * portal —o la oficina cambiaba la calle en la hoja— y el transportista
+   * seguía yendo al sitio de antes, porque las coordenadas mandan sobre el
+   * texto. Guardando junto a las coordenadas la dirección de la que salieron
+   * se sabe si siguen valiendo: si no coincide con la que hay hoy en la
+   * fila, están caducadas y se vuelve a geocodificar.
+   *
+   * También marca las que Google no reconoce: la dirección queda apuntada
+   * sin coordenadas, y así no se le vuelve a preguntar por la misma cada vez
+   * que alguien abre la app.
+   *
+   * Se llama `_geo` y no `_adreca` porque las cabeceras se comparan sin
+   * acentos ni signos: "_adreca" y la columna "Adreça" de la hoja acaban
+   * siendo la misma palabra, y esto habría leído la dirección de la fila
+   * creyendo que era la geocodificada —con lo cual nunca caducaría nada—.
+   */
+  geoAddress: ["_geo", "_geoadreca"],
+
 } as const;
 
 export type ColumnKey = keyof typeof COLUMNS;
@@ -160,6 +181,7 @@ export const MANAGED_COLUMNS: ColumnKey[] = [
   "incidentNote",
   "lat",
   "lng",
+  "geoAddress",
   "date",
 ];
 

@@ -23,6 +23,7 @@ import {
   MissingColumnsError,
   type ColumnKey,
 } from "./sheet-schema.ts";
+import { adrecaCompleta, mateixaAdreca } from "./maps.ts";
 import type { Order } from "./types.ts";
 
 /** Filas descartadas al leer, con el motivo, para poder avisar. */
@@ -132,9 +133,29 @@ export function construirComandes(rows: unknown[][]): {
       price: null,
       lat: parseNumber(cell(row, "lat")),
       lng: parseNumber(cell(row, "lng")),
+      geoAddress: text(cell(row, "geoAddress")) || null,
       rowNumber,
       rowNumbers: [rowNumber],
     };
+
+    /*
+      Unas coordenadas de una dirección que ya no es la de la fila no valen:
+      llevan al sitio de antes.
+
+      Pasa cada vez que se corrige un portal desde la app o que la oficina
+      cambia la calle en la hoja. Las coordenadas mandan sobre el texto al
+      navegar, así que quedarse con las viejas es mandar al transportista a
+      la dirección equivocada sin que nada lo avise. Aquí se tiran: la
+      comanda navega por texto —que es la dirección nueva y correcta— hasta
+      que `geocodificarPendents` le ponga las coordenadas buenas.
+
+      Solo cuando hay dirección apuntada. Las filas de antes de esta columna
+      no la tienen y sus coordenadas se respetan: nadie ha tocado nada.
+    */
+    if (fila.geoAddress && !mateixaAdreca(fila.geoAddress, adrecaCompleta(fila))) {
+      fila.lat = null;
+      fila.lng = null;
+    }
 
     /*
       Otra fila con el mismo nº de comanda es OTRA ENTREGA. Siempre.

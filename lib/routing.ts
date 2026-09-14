@@ -49,6 +49,34 @@ export function haversine(a: Coord, b: Coord): number {
  * queda fuera del cálculo de ruta.
  */
 export async function geocodeAddress(address: string): Promise<Coord | null> {
+  const resultat = await geocodificar(address);
+  return resultat.estat === "ok" ? resultat.coord : null;
+}
+
+/**
+ * Lo que contestó Google al preguntarle por una dirección.
+ *
+ * Hay tres respuestas y no dos, porque "no la encuentro" y "ahora no puedo
+ * contestarte" se arreglan de forma distinta: la primera es definitiva —esa
+ * dirección no existe tal y como está escrita, y volver a preguntar mañana
+ * dará lo mismo— y la segunda es de hoy: sin red, sin cuota o con la clave
+ * mal, y la misma pregunta mañana sí tiene respuesta.
+ *
+ * La diferencia importa porque las definitivas se apuntan en la hoja para no
+ * volver a preguntarlas nunca —cada consulta se paga— y las de hoy NO: si se
+ * apuntaran, un corte de red dejaría la comanda sin coordenadas para
+ * siempre.
+ */
+export type ResultatGeocodificacio =
+  | { estat: "ok"; coord: Coord }
+  /** Google contestó, y esa dirección no la reconoce. */
+  | { estat: "desconeguda" }
+  /** No se le ha podido preguntar. Se reintenta más adelante. */
+  | { estat: "sense_resposta"; motiu: string };
+
+export async function geocodificar(
+  address: string,
+): Promise<ResultatGeocodificacio> {
   const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
   url.searchParams.set("address", address);
   url.searchParams.set("key", env.google.mapsApiKey);
@@ -56,17 +84,38 @@ export async function geocodeAddress(address: string): Promise<Coord | null> {
   url.searchParams.set("region", "es");
   url.searchParams.set("language", "es");
 
-  const response = await fetch(url, { cache: "no-store" });
-  if (!response.ok) return null;
-
-  const data = (await response.json()) as {
+  let data: {
     status: string;
+    error_message?: string;
     results?: { geometry: { location: { lat: number; lng: number } } }[];
   };
+  try {
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) {
+      return { estat: "sense_resposta", motiu: `HTTP ${response.status}` };
+    }
+    data = await response.json();
+  } catch (error) {
+    return { estat: "sense_resposta", motiu: String(error) };
+  }
 
-  if (data.status !== "OK" || !data.results?.length) return null;
-  const { lat, lng } = data.results[0].geometry.location;
-  return { lat, lng };
+  if (data.status === "OK" && data.results?.length) {
+    const { lat, lng } = data.results[0].geometry.location;
+    return { estat: "ok", coord: { lat, lng } };
+  }
+
+  /*
+    ZERO_RESULTS es la única negativa que es de la dirección. El resto
+    —cuota agotada, clave mal, petición malformada, un error de Google— son
+    del servicio, y la misma dirección volverá a intentarse.
+  */
+  if (data.status === "ZERO_RESULTS" || (data.status === "OK" && !data.results?.length)) {
+    return { estat: "desconeguda" };
+  }
+  return {
+    estat: "sense_resposta",
+    motiu: data.error_message ? `${data.status}: ${data.error_message}` : data.status,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
