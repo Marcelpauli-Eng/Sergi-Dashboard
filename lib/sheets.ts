@@ -479,13 +479,34 @@ export async function crearComanda(
     ? await ensureManagedColumns(snapshot.headerMap, snapshot.sheetTab)
     : snapshot.headerMap;
 
+  /*
+    Una parte hereda de la primera lo que no cambia entre viajes: el cliente,
+    la dirección, la población y el teléfono.
+
+    Es el mismo sitio —la comanda se parte porque no cabe todo en un viaje,
+    no porque vaya a dos lados—, y sin dirección la parte nueva no se puede
+    navegar: la tarjeta esconde el botón. Copiarla aquí es también no volver
+    a pagar geocoding por una dirección que la app ya resolvió: se traen las
+    coordenadas cacheadas con ella.
+
+    Lo que SÍ cambia en cada viaje —medidas y notas— no se hereda: es lo que
+    distingue una parte de otra.
+  */
+  const primera = snapshot.orders.find((order) => order.codi === dades.id);
+  const hereda = (propi: string | undefined, delPare: string | null | undefined) =>
+    propi && propi.trim() !== "" ? propi : (delPare ?? "");
+  const coords =
+    dades.address && dades.address.trim() !== "" ? null : primera;
+
   const valores = filaNovaComanda(
     {
       id: dades.id,
-      customer: dades.customer ?? "",
-      address: dades.address ?? "",
-      city: dades.city ?? "",
-      phone: dades.phone ?? "",
+      customer: hereda(dades.customer, primera?.customer),
+      address: hereda(dades.address, primera?.address),
+      city: hereda(dades.city, primera?.city),
+      phone: hereda(dades.phone, primera?.phone),
+      lat: coords?.lat !== null && coords?.lat !== undefined ? String(coords.lat) : "",
+      lng: coords?.lng !== null && coords?.lng !== undefined ? String(coords.lng) : "",
       measures: dades.measures ?? "",
       notes: dades.notes ?? "",
       // El día de hoy, como lo escribe la oficina: dd/mm/aaaa.
