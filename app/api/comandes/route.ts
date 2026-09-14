@@ -17,6 +17,20 @@ import { actualitzarComandaDemo, crearComandaDemo, isDemoMode } from "@/lib/demo
  * abajo.
  */
 
+
+/**
+ * La dirección elegida en el buscador de Google.
+ *
+ * Es opcional: se puede seguir escribiendo la dirección a mano. Cuando
+ * viene, la comanda se guarda con el portal exacto y ya no hace falta
+ * adivinar nada el día del reparto.
+ */
+const llocSchema = z.object({
+  placeId: z.string().trim().min(1).max(300),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+});
+
 const schema = z.object({
   id: z.string().trim().min(1).max(64),
   customer: z.string().trim().max(200).optional(),
@@ -25,6 +39,7 @@ const schema = z.object({
   phone: z.string().trim().max(120).optional(),
   measures: z.string().trim().max(300).optional(),
   notes: z.string().trim().max(500).optional(),
+  lloc: llocSchema.optional(),
   /** Full donde crearla. Si no se pasa, el del mes en curso. */
   sheetTab: z.string().max(120).optional(),
   /**
@@ -51,7 +66,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { sheetTab, ...dades } = parsed.data;
+  const { sheetTab, lloc, ...dades } = parsed.data;
 
   if (isDemoMode()) {
     return crearComandaDemo(dades)
@@ -66,7 +81,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const resultat = await crearComanda({ ...dades, driverId: driver.id }, sheetTab);
+    const resultat = await crearComanda({ ...dades, driverId: driver.id }, sheetTab, lloc);
     console.warn(`Comanda ${dades.id} creada por ${driver.id} en ${resultat.sheetTab}`);
     return NextResponse.json({ comanda: dades.id, sheetTab: resultat.sheetTab });
   } catch (error) {
@@ -111,6 +126,7 @@ const editarSchema = z.object({
   phone: z.string().trim().max(120).optional(),
   measures: z.string().trim().max(300).optional(),
   notes: z.string().trim().max(500).optional(),
+  lloc: llocSchema.optional(),
 });
 
 /**
@@ -135,7 +151,7 @@ export async function PATCH(request: Request) {
     );
   }
 
-  const { id, sheetTab, ...dades } = parsed.data;
+  const { id, sheetTab, lloc, ...dades } = parsed.data;
   if (Object.keys(dades).length === 0) {
     return NextResponse.json({ error: "No hi ha res per canviar" }, { status: 400 });
   }
@@ -147,7 +163,7 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const trobada = await actualitzarComanda(id, dades, sheetTab);
+    const trobada = await actualitzarComanda(id, dades, sheetTab, lloc);
     if (!trobada) {
       return NextResponse.json(
         { error: `La comanda ${id} ja no és al full` },

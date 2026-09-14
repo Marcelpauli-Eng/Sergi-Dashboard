@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { db } from "@/lib/db";
 import { getSelectedTab, subscribeLocalPrefs } from "@/lib/sync";
 import { formatLongDate } from "@/lib/dates";
+import CampAdreca from "@/components/camp-adreca";
+import type { LlocTriat } from "@/lib/llocs";
 
 /**
  * Crear una comanda a mano.
@@ -64,6 +66,14 @@ export default function NovaComanda() {
     measures: "",
     notes: "",
   });
+  /*
+    La dirección elegida de la lista de Google, si se ha elegido.
+
+    Se manda con la comanda y la hace nacer con el punto exacto: ni hay que
+    buscarla después, ni puede salir el centro del pueblo. Escribiéndola a
+    mano se queda en `null` y se hace lo de siempre.
+  */
+  const [lloc, setLloc] = useState<LlocTriat | null>(null);
   const [desant, setDesant] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /*
@@ -87,6 +97,9 @@ export default function NovaComanda() {
         body: JSON.stringify({
           id: id.trim(),
           ...camps,
+          // Solo si la dirección sigue siendo la que se eligió: si después
+          // se ha retocado a mano, el punto ya no es de esa dirección.
+          ...(lloc && lloc.address === camps.address ? { lloc } : {}),
           ...(full ? { sheetTab: full } : {}),
           ...(afegirPart ? { afegirPart: true } : {}),
         }),
@@ -178,17 +191,40 @@ export default function NovaComanda() {
                   opcional
                 </span>
               </label>
-              <input
-                id={camp.clau}
-                value={camps[camp.clau]}
-                onChange={(e) =>
-                  setCamps((previs) => ({ ...previs, [camp.clau]: e.target.value }))
-                }
-                type={"type" in camp ? camp.type : "text"}
-                autoCapitalize={"autoCapitalize" in camp ? camp.autoCapitalize : undefined}
-                placeholder={camp.exemple}
-                className="mt-2 w-full rounded-xl bg-muted px-3 py-2.5 text-base outline-none placeholder:text-tertiary-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-              />
+              {camp.clau === "address" ? (
+                /* La dirección se elige de la lista de Google: es la única
+                   forma de que el punto sea exacto seguro. Se puede escribir
+                   a mano igual, que entonces se busca al hacer la ruta. */
+                <CampAdreca
+                  id={camp.clau}
+                  value={camps.address}
+                  onChange={(valor) => {
+                    setLloc(null);
+                    setCamps((previs) => ({ ...previs, address: valor }));
+                  }}
+                  onTriar={(triat) => {
+                    setLloc(triat);
+                    setCamps((previs) => ({
+                      ...previs,
+                      address: triat.address,
+                      city: triat.city || previs.city,
+                    }));
+                  }}
+                  placeholder={camp.exemple}
+                />
+              ) : (
+                <input
+                  id={camp.clau}
+                  value={camps[camp.clau]}
+                  onChange={(e) =>
+                    setCamps((previs) => ({ ...previs, [camp.clau]: e.target.value }))
+                  }
+                  type={"type" in camp ? camp.type : "text"}
+                  autoCapitalize={"autoCapitalize" in camp ? camp.autoCapitalize : undefined}
+                  placeholder={camp.exemple}
+                  className="mt-2 w-full rounded-xl bg-muted px-3 py-2.5 text-base outline-none placeholder:text-tertiary-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                />
+              )}
             </div>
           ))}
         </div>

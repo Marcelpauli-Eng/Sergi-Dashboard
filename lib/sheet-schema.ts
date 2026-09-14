@@ -156,6 +156,29 @@ export const COLUMNS = {
    */
   geoAddress: ["_geo", "_geoadreca"],
 
+  /**
+   * El identificador del portal en Google, al lado de las coordenadas.
+   *
+   * Es lo único que señala un portal sin ambigüedad: navegando con él, Maps
+   * no vuelve a interpretar la dirección. Se guarda cuando alguien ELIGE la
+   * dirección de la lista de Google —desde la app o desde el panel del
+   * full— y también cuando la encuentra el geocodificador.
+   */
+  placeId: ["_placeId"],
+
+  /**
+   * Hasta dónde afinó la búsqueda: "portal", "negoci", "carrer" o "poble".
+   *
+   * `_geo` guarda QUÉ dirección se buscó; esto, CÓMO de fino se encontró.
+   * Son dos cosas distintas y las dos hacen falta: una dice si el punto está
+   * caducado, y la otra si el punto es el portal o el centro del pueblo.
+   *
+   * Se llama `_precisio` y no `_geonivell` por lo mismo que `_geo` no se
+   * llama `_adreca`: las cabeceras se comparan sin acentos ni signos, y hay
+   * que mirar que ninguna acabe chocando con otra. Ver `check:schema`.
+   */
+  precisio: ["_precisio"],
+
 } as const;
 
 export type ColumnKey = keyof typeof COLUMNS;
@@ -181,6 +204,8 @@ export const MANAGED_COLUMNS: ColumnKey[] = [
   "incidentNote",
   "lat",
   "lng",
+  "placeId",
+  "precisio",
   "geoAddress",
   "date",
 ];

@@ -10,6 +10,7 @@
  */
 
 import {
+  parseGeoLevel,
   parseNumber,
   parsePriority,
   parseStatus,
@@ -134,6 +135,8 @@ export function construirComandes(rows: unknown[][]): {
       lat: parseNumber(cell(row, "lat")),
       lng: parseNumber(cell(row, "lng")),
       geoAddress: text(cell(row, "geoAddress")) || null,
+      placeId: text(cell(row, "placeId")) || null,
+      geoLevel: parseGeoLevel(cell(row, "precisio")),
       rowNumber,
       rowNumbers: [rowNumber],
     };

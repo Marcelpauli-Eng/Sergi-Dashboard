@@ -9,9 +9,10 @@ import {
 } from "./sheets";
 import {
   geocodeAddress,
-  geocodificar,
   navUrlFor,
+  resolveUbicacio,
   type Coord,
+  type NivellUbicacio,
 } from "./routing";
 import { adrecaCompleta, normalitzaAdreca } from "./maps";
 import { today } from "./dates";
@@ -75,7 +76,23 @@ let geocodificantAra: Promise<void> | null = null;
 function toca(order: Order): boolean {
   if (order.statusCategory === "entregat") return false;
   if (adrecaCompleta(order) === "") return false;
-  if (order.lat !== null && order.lng !== null) return false;
+  /*
+    Con punto ya puesto, normalmente no se toca. Con una excepción: las
+    filas que tienen coordenadas pero no dicen de qué calidad son.
+
+    Son las de antes de guardarlo, y entre ellas están las que mandaban al
+    centro del pueblo —se guardó lo que Google contestara, portal o
+    centroide, y como ya había coordenadas no se volvía a preguntar nunca—.
+    Se resuelven una vez, con la cascada, y a partir de ahí ya llevan su
+    nivel y no vuelven a entrar.
+
+    Las que SÍ dicen su nivel no se reintentan aunque sea "poble", y es a
+    propósito: reintentarlas cada sincronización sería pagarle a Google lo
+    mismo para siempre. Lo que las arregla es corregir la dirección en la
+    hoja —entonces `geoAddress` deja de coincidir y vuelven a entrar— o
+    clavar el punto a mano desde el panel.
+  */
+  if (order.lat !== null && order.lng !== null && order.geoLevel !== null) return false;
   /*
     Ya se preguntó por esta misma dirección y Google no la reconoció. No se
     vuelve a preguntar hasta que alguien la corrija —y cuando la corrija,
@@ -139,9 +156,29 @@ async function geocodificarTanda(
   const resolved: CoordCacheada[] = [];
 
   // En serie a propósito: son pocas direcciones nuevas al día y así no se
-  // dispara el rate limit de la Geocoding API en un pico.
+  // dispara el rate limit de las APIs de Google en un pico.
   for (const { adreca, comandes } of tanda) {
-    const resultat = await geocodificar(adreca);
+    /*
+      El nombre del cliente, solo si TODAS las comandas de esta dirección
+      son del mismo.
+
+      Sirve para el peldaño del negocio: "Fusteria Vilalta" encuentra la
+      nave que el número de la carretera no encuentra. Pero si en esa misma
+      dirección hay comandas de clientes distintos —un polígono, un bloque—
+      el punto del negocio de uno no es el de los otros, así que en ese caso
+      no se busca por nombre y se queda en la calle.
+    */
+    const clients = new Set(comandes.map((o) => o.customer.trim().toLowerCase()));
+    const client =
+      clients.size === 1 && comandes[0].customer.trim() !== ""
+        ? comandes[0].customer
+        : null;
+
+    const resultat = await resolveUbicacio({
+      address: comandes[0].address,
+      city: comandes[0].city,
+      customer: client,
+    });
 
     if (resultat.estat === "sense_resposta") {
       /*
@@ -157,29 +194,62 @@ async function geocodificarTanda(
 
     if (resultat.estat === "desconeguda") {
       /*
-        Google contestó que no la conoce. Se apunta la dirección SIN
-        coordenadas: deja constancia de que ya se preguntó y evita repetir
-        la misma consulta en cada sincronización, para siempre. En cuanto
-        alguien corrija la dirección dejará de coincidir y se volverá a
-        buscar.
+        Google contestó que no la conoce, ni por dirección, ni por nombre,
+        ni por calle, ni por pueblo. Se apunta la dirección SIN coordenadas:
+        deja constancia de que ya se preguntó y evita repetir la misma
+        consulta en cada sincronización, para siempre. En cuanto alguien
+        corrija la dirección dejará de coincidir y se volverá a buscar.
       */
       console.warn(`Dirección no reconocida por Google: "${adreca}"`);
       for (const order of comandes) {
         order.geoAddress = adreca;
-        resolved.push({ orderId: order.id, address: adreca, lat: null, lng: null });
+        resolved.push({
+          orderId: order.id,
+          address: adreca,
+          lat: null,
+          lng: null,
+          placeId: null,
+          geoLevel: null,
+        });
       }
       continue;
     }
 
+    const { ubicacio } = resultat;
+
+    /*
+      Y si lo que se ha encontrado ahora es PEOR que lo que ya había, se
+      deja lo de antes: una revisión que hoy devuelve el pueblo no puede
+      borrar el portal que se encontró en su día.
+    */
+    if (comandes.every((o) => esPitjor(ubicacio.nivell, o.geoLevel))) continue;
+
+    /*
+      Cuando lo que se ha encontrado NO es el portal, se dice en el log con
+      el número de comanda: son las direcciones que hay que corregir en la
+      hoja, y son las que hacen que el transportista "no llegue exacto".
+      En la pantalla lo avisa la tarjeta, con `geoLevel`.
+    */
+    if (ubicacio.nivell !== "portal") {
+      console.warn(
+        `El punto de "${adreca}" es ${DESCRIPCIO_NIVELL[ubicacio.nivell]}, no el portal ` +
+          `(${comandes.map((o) => o.codi).join(", ")}). Revisa la dirección en la hoja.`,
+      );
+    }
+
     for (const order of comandes) {
-      order.lat = resultat.coord.lat;
-      order.lng = resultat.coord.lng;
+      order.lat = ubicacio.lat;
+      order.lng = ubicacio.lng;
       order.geoAddress = adreca;
+      order.placeId = ubicacio.placeId;
+      order.geoLevel = ubicacio.nivell;
       resolved.push({
         orderId: order.id,
         address: adreca,
-        lat: resultat.coord.lat,
-        lng: resultat.coord.lng,
+        lat: ubicacio.lat,
+        lng: ubicacio.lng,
+        placeId: ubicacio.placeId,
+        geoLevel: ubicacio.nivell,
       });
     }
   }
@@ -189,11 +259,26 @@ async function geocodificarTanda(
       await cacheCoordinates(resolved, snapshot);
     } catch (error) {
       // Que falle el cacheo no debe tumbar la ruta: solo significa que
-      // mañana habrá que volver a geocodificar.
+      // mañana habrá que volver a buscar.
       console.error("No se pudieron cachear las coordenadas en el Sheet:", error);
     }
   }
 }
+
+/** De mejor a peor. Se usa para no sustituir un punto bueno por uno malo. */
+const ORDRE_NIVELL: NivellUbicacio[] = ["portal", "negoci", "carrer", "poble"];
+
+function esPitjor(nou: NivellUbicacio, vell: Order["geoLevel"]): boolean {
+  if (vell === null) return false;
+  return ORDRE_NIVELL.indexOf(nou) > ORDRE_NIVELL.indexOf(vell);
+}
+
+const DESCRIPCIO_NIVELL: Record<NivellUbicacio, string> = {
+  portal: "el portal",
+  negoci: "la ficha del negocio en Google",
+  carrer: "la calle, sin número",
+  poble: "el centro del pueblo",
+};
 
 /**
  * Lo mismo, pero solo para las comandas de una ruta concreta y sin tope.
@@ -206,35 +291,16 @@ export async function fillMissingCoordinates(
   orders: Order[],
   snapshot: SheetSnapshot,
 ): Promise<void> {
-  const pending = orders.filter(
-    (o) => (o.lat === null || o.lng === null) && adrecaCompleta(o) !== "",
-  );
-  if (pending.length === 0) return;
+  /*
+    Lo mismo que la sincronización, ni más ni menos.
 
-  const resolved: CoordCacheada[] = [];
-
-  for (const order of pending) {
-    const adreca = adrecaCompleta(order);
-    const coord = await geocodeAddress(adreca);
-    if (!coord) {
-      console.warn(
-        `Dirección no reconocida por Google (pedido ${order.id}): "${adreca}"`,
-      );
-      continue;
-    }
-    order.lat = coord.lat;
-    order.lng = coord.lng;
-    order.geoAddress = adreca;
-    resolved.push({ orderId: order.id, address: adreca, lat: coord.lat, lng: coord.lng });
-  }
-
-  if (resolved.length > 0) {
-    try {
-      await cacheCoordinates(resolved, snapshot);
-    } catch (error) {
-      console.error("No se pudieron cachear las coordenadas en el Sheet:", error);
-    }
-  }
+    Antes esto buscaba por su cuenta, con una sola consulta por dirección y
+    sin mirar si lo que contestaba Google era el portal o el centro del
+    pueblo. Resultado: según por dónde entrara la comanda —abriendo la app o
+    pulsando "Generar ruta"— quedaba guardada con una calidad u otra, y la
+    peor pisaba a la mejor. Un solo camino y se acabó.
+  */
+  await geocodificarPendents(orders, snapshot);
 }
 
 /**

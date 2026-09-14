@@ -6,6 +6,8 @@ import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getSelectedTab, syncNow } from "@/lib/sync";
 import type { Stop } from "@/lib/types";
+import CampAdreca from "@/components/camp-adreca";
+import type { LlocTriat } from "@/lib/llocs";
 
 /**
  * Corregir los datos de una comanda.
@@ -67,6 +69,14 @@ export default function EditarComanda({
     measures: stop.measures ?? "",
     notes: stop.notes ?? "",
   });
+  /*
+    La dirección elegida de la lista de Google, si se ha elegido.
+
+    Se manda con el resto y hace que la hoja guarde el portal exacto en vez
+    de tener que adivinarlo después. Si se escribe a mano se queda en `null`
+    y se hace lo de siempre: buscarla al calcular la ruta.
+  */
+  const [lloc, setLloc] = useState<LlocTriat | null>(null);
   const [desant, setDesant] = useState(false);
   /* `createPortal` necesita el `document`, que en el servidor no existe: se
      espera al primer pintado en el navegador. Igual que en `stop-card.tsx`. */
@@ -90,6 +100,7 @@ export default function EditarComanda({
         body: JSON.stringify({
           id: stop.id,
           ...Object.fromEntries(visibles.map((c) => [c.clau, camps[c.clau]])),
+          ...(lloc && lloc.address === camps.address ? { lloc } : {}),
           ...(full ? { sheetTab: full } : {}),
         }),
       });
@@ -182,17 +193,42 @@ export default function EditarComanda({
               <label htmlFor={`ed-${camp.clau}`} className="block text-sm font-medium">
                 {camp.etiqueta}
               </label>
-              <input
-                id={`ed-${camp.clau}`}
-                value={camps[camp.clau]}
-                onChange={(e) =>
-                  setCamps((previs) => ({ ...previs, [camp.clau]: e.target.value }))
-                }
-                type={"type" in camp ? camp.type : "text"}
-                autoFocus={camp.clau === focus}
-                placeholder={camp.exemple}
-                className="mt-1.5 w-full rounded-xl bg-muted px-3 py-2.5 text-base outline-none placeholder:text-tertiary-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-              />
+              {camp.clau === "address" ? (
+                /* La dirección, con la lista de Google: es la que hay que
+                   clavar, y las demás son texto y ya está. */
+                <CampAdreca
+                  id={`ed-${camp.clau}`}
+                  value={camps.address}
+                  onChange={(valor) => {
+                    setLloc(null);
+                    setCamps((previs) => ({ ...previs, address: valor }));
+                  }}
+                  onTriar={(triat) => {
+                    setLloc(triat);
+                    setCamps((previs) => ({
+                      ...previs,
+                      address: triat.address,
+                      // La población que dice Google, pero sin borrar la que
+                      // ya hubiera si él no la sabe.
+                      city: triat.city || previs.city,
+                    }));
+                  }}
+                  autoFocus={camp.clau === focus}
+                  placeholder={camp.exemple}
+                />
+              ) : (
+                <input
+                  id={`ed-${camp.clau}`}
+                  value={camps[camp.clau]}
+                  onChange={(e) =>
+                    setCamps((previs) => ({ ...previs, [camp.clau]: e.target.value }))
+                  }
+                  type={"type" in camp ? camp.type : "text"}
+                  autoFocus={camp.clau === focus}
+                  placeholder={camp.exemple}
+                  className="mt-1.5 w-full rounded-xl bg-muted px-3 py-2.5 text-base outline-none placeholder:text-tertiary-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                />
+              )}
             </div>
           ))}
         </div>

@@ -41,6 +41,8 @@ const parada = (extra: Partial<Stop> = {}): Stop => ({
   lat: null,
   lng: null,
   geoAddress: null,
+  placeId: null,
+  geoLevel: null,
   sequence: 1,
   navUrl: "",
   legDistanceMeters: null,

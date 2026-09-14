@@ -5,7 +5,13 @@ import { createPortal } from "react-dom";
 import { Check, Navigation, Pencil, Phone, TriangleAlert, X } from "lucide-react";
 import type { Stop } from "@/lib/types";
 import { formatDistance, formatDuration, telHref } from "@/lib/format";
-import { adrecaCompleta, appNavUrlFor, navUrlFor, obrirMaps } from "@/lib/maps";
+import {
+  appNavUrlFor,
+  appleNavUrlFor,
+  navUrlFor,
+  obrirMaps,
+  wazeNavUrlFor,
+} from "@/lib/maps";
 import EditarComanda from "@/components/editar-comanda";
 import { euros, parseImporte } from "@/lib/factura";
 import { cn } from "@/lib/utils";
@@ -260,6 +266,20 @@ function ImportEditable({
   );
 }
 
+
+/**
+ * Qué avisar cuando el punto de la parada no es el portal.
+ *
+ * `portal` y `negoci` no avisan: llevan al sitio. Los otros dos sí, porque
+ * el transportista llega y no hay nada, y sin este texto parece que la app
+ * se ha equivocado cuando lo que pasa es que Google no sabe más.
+ */
+function avisUbicacio(nivell: Stop["geoLevel"]): string | null {
+  if (nivell === "carrer") return "Ubicació aproximada: el carrer, sense número";
+  if (nivell === "poble") return "Ubicació aproximada: només el poble";
+  return null;
+}
+
 export default function StopCard({
   stop,
   onDelivered,
@@ -444,6 +464,16 @@ export default function StopCard({
             </>
           )}
 
+          {/* Cuando el punto NO es el portal, se dice.
+
+              Es la diferencia entre "el navegador me ha engañado" y "ya sé
+              que esto me deja en la calle, el número lo busco yo": Google no
+              conoce todas las direcciones, y callarlo es lo que hacía que
+              pareciera una avería. */}
+          {avisUbicacio(stop.geoLevel) && (
+            <p className="mt-1 text-sm text-amber-500">{avisUbicacio(stop.geoLevel)}</p>
+          )}
+
           {detall ? (
             /* Todo lo que se sabe de la comanda, cada dato con su nombre. En
                la tarjeta de lista esto no cabe y por eso allí va apretado en
@@ -609,11 +639,7 @@ export default function StopCard({
 
                   <div className="flex flex-col overflow-hidden rounded-xl bg-[#2c2c2e]">
                     <a
-                      href={
-                        stop.lat !== null && stop.lng !== null
-                          ? `https://maps.apple.com/?daddr=${stop.lat},${stop.lng}&dirflg=d`
-                          : `https://maps.apple.com/?daddr=${encodeURIComponent(adrecaCompleta(stop))}&dirflg=d`
-                      }
+                      href={appleNavUrlFor(stop)}
                       target="_blank" rel="noopener noreferrer"
                       className="border-b border-white/10 px-4 py-3.5 text-[17px] text-[#0a84ff] transition-colors active:bg-[#3a3a3c]"
                     >
@@ -634,11 +660,7 @@ export default function StopCard({
                       Google Maps
                     </button>
                     <a
-                      href={
-                        stop.lat !== null && stop.lng !== null
-                          ? `https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes`
-                          : `https://waze.com/ul?q=${encodeURIComponent(adrecaCompleta(stop))}&navigate=yes`
-                      }
+                      href={wazeNavUrlFor(stop)}
                       target="_blank" rel="noopener noreferrer"
                       className="px-4 py-3.5 text-[17px] text-[#0a84ff] transition-colors active:bg-[#3a3a3c]"
                     >
