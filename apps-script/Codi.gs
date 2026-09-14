@@ -146,6 +146,27 @@ function alEditar(e) {
 
   // El punto de antes ya no vale: era de la dirección anterior.
   esborrarPunt(full, e.range.getRow(), columnes);
+
+  /*
+    Y se abre el panel, aquí mismo.
+
+    Escribir en la casilla de la dirección es justo el momento en que hace
+    falta: quien lo está haciendo quiere dejarla exacta. Si el panel ya está
+    abierto, esto lo refresca y sigue apuntando a la misma fila.
+
+    Al PINCHAR la casilla no se puede abrir: Apps Script tiene un disparador
+    de cambio de selección, pero corre sin permisos y no puede abrir paneles.
+    Escribir es lo más cerca que se llega.
+
+    En try/catch porque abrir una ventana desde un disparador no siempre se
+    puede —depende de quién esté editando—, y si no se puede, lo que NO debe
+    pasar es que se pierda el ámbar, que es lo importante de esta función.
+  */
+  try {
+    obrirPanell();
+  } catch (error) {
+    // Sin ruido: el menú "Adreces" sigue estando para abrirlo a mano.
+  }
 }
 
 /** Quita el ámbar y la nota: la dirección ya está comprobada. */

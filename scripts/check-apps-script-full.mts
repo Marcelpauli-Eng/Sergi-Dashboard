@@ -335,6 +335,16 @@ function carregar(full: ReturnType<typeof fullFals>) {
   assert.equal(full._cel(2, 13).valor, "", "el punt vell s'esborra: era d'una altra adreça");
   assert.equal(full._cel(2, 14).valor, "");
 
+  /*
+    Y el ámbar aguanta aunque el panel no se pueda abrir.
+
+    En este banco de pruebas `getUi()` revienta a propósito —no hay ventanas
+    que abrir—, que es lo que pasa de verdad cuando edita alguien que no
+    instaló el activador. Lo que NO puede pasar es que por eso se pierda la
+    marca, que es lo importante de esta función.
+  */
+  assert.equal(full._cel(2, 3).fons, "#fff3cd", "l'ambre no depèn que s'obri el panell");
+
   // Una edición en otra columna no hace nada.
   full._cel(3, 6).valor = "100 x 80 cm";
   gs.alEditar({ range: full.getRange(3, 6) });
