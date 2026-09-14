@@ -223,7 +223,8 @@ function carregar(full: ReturnType<typeof fullFals>) {
   assert.equal(mapa.lng, 14);
   // Las que no existen todavía en esa hoja.
   assert.equal(mapa.placeId, undefined);
-  assert.equal(mapa.geo, undefined);
+  assert.equal(mapa.precisio, undefined);
+  assert.equal(mapa.geoAddress, undefined);
 }
 
 /* ── Elegir una dirección de la lista ───────────────────────────────────── */
@@ -241,9 +242,17 @@ function carregar(full: ReturnType<typeof fullFals>) {
 
   // Las columnas que faltaban, creadas al final y con el nombre de la app.
   assert.equal(full._capçalera(15), "_placeId");
-  assert.equal(full._capçalera(16), "_geo");
+  assert.equal(full._capçalera(16), "_precisio");
+  assert.equal(full._capçalera(17), "_geo");
   assert.equal(full._cel(3, 15).valor, "ChIJxyz");
   assert.equal(full._cel(3, 16).valor, "portal");
+  /*
+    Y la dirección que se acaba de guardar, que es lo que hace que la app dé
+    el punto por bueno. Sin esto, la siguiente sincronización vería la
+    dirección cambiada, geocodificaría otra vez y se cargaría el portal que
+    ha elegido una persona.
+  */
+  assert.equal(full._cel(3, 17).valor, "Carrer Cabrerés, 2, 08500 Vic");
 
   // Y nada más: ni otras columnas de esta fila, ni la fila de al lado.
   assert.equal(full._cel(3, 6).valor, abans, "les mides no es toquen");
@@ -268,6 +277,11 @@ function carregar(full: ReturnType<typeof fullFals>) {
   assert.equal(full._cel(2, 14).valor, 2.2545678);
   assert.equal(full._cel(2, 16).valor, "portal");
   assert.equal(full._cel(2, 15).valor, "", "sense fitxa de Google no hi ha placeId");
+  assert.equal(
+    full._cel(2, 17).valor,
+    "Camí del tortells, S/N Camino particular, llamar entes., 43737 EL MOLAR",
+    "el punt es queda lligat a l'adreça que hi ha escrita, perquè l'app no el refaci",
+  );
 
   assert.equal(
     full._cel(2, 3).valor,

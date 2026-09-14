@@ -52,14 +52,14 @@ export default function EditarComanda({
   onTancar: () => void;
 }) {
   /*
-    Las medidas no se tocan cuando la comanda lleva varios bultos.
+    Las medidas se pueden tocar siempre.
 
-    Ahí lo que se enseña es la suma de todas las filas —"100 x 80 · 220 x 80
-    · …"— y guardarlo escribiría esa cadena entera en la casilla del primer
-    bulto, dejando la comanda con unas medidas que no son las de nadie. Cada
-    bulto tiene su fila en la hoja; para cambiarlas hay que ir allí.
+    Antes no: cuando una comanda juntaba varias filas, lo que se enseñaba era
+    la suma de todas —"100 x 80 · 220 x 80 · …"— y guardarlo habría escrito
+    esa cadena entera en la casilla de la primera. Ya no se junta nada: cada
+    fila del full es una entrega y las medidas que se ven son las suyas.
   */
-  const visibles = CAMPS.filter((c) => c.clau !== "measures" || stop.bultos <= 1);
+  const visibles = CAMPS;
 
   const [camps, setCamps] = useState<Record<Clau, string>>({
     address: stop.address,
@@ -182,7 +182,7 @@ export default function EditarComanda({
               Dades de la comanda
             </h2>
             <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-              {stop.id}
+              {stop.codi}
             </p>
           </div>
         </div>
@@ -234,12 +234,6 @@ export default function EditarComanda({
         </div>
 
         <div className="space-y-2 border-t border-border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-3">
-          {stop.bultos > 1 && (
-            <p className="px-1 text-xs text-tertiary-foreground">
-              Les mides no surten: aquesta comanda té {stop.bultos} bultos i
-              cadascun té la seva fila al full.
-            </p>
-          )}
           {error && (
             <p className="rounded-xl bg-warning-surface px-3 py-2 text-sm text-warning-foreground">
               {error}

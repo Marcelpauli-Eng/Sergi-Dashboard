@@ -25,11 +25,12 @@ Solo en la fila donde está el cursor, y solo estas columnas:
 | `Població` | Código postal y pueblo: "08500 Vic". |
 | `_lat`, `_lng` | El punto. |
 | `_placeId` | El identificador del portal en Google. |
-| `_geo` | `portal` — lo eligió una persona, la app ya no lo vuelve a buscar. |
+| `_precisio` | `portal` — lo eligió una persona, la app ya no lo vuelve a buscar. |
+| `_geo` | La dirección a la que corresponde el punto. Es lo que impide que la app lo sustituya por lo que diga el geocodificador. |
 
 Nada más. No borra filas, no ordena, no toca ninguna otra columna.
 
-Las columnas `_lat`, `_lng`, `_placeId` y `_geo` las crea el script solo, al
+Las columnas `_lat`, `_lng`, `_placeId`, `_precisio` y `_geo` las crea el script solo, al
 final de la hoja, la primera vez que guardas una dirección desde el panel.
 No hace falta prepararlas.
 
@@ -38,10 +39,10 @@ No hace falta prepararlas.
 Sin escribir en ella: se exportó y se le pasó por encima la misma lógica que
 corre dentro del script (14/09/2026, 1.259 filas).
 
-- Las columnas se reconocen: `Adreça` (C), `Població` (D), `_lat` (M),
-  `_lng` (N). **`_placeId` y `_geo` no existen** en esa hoja — por eso el
-  script las crea ahora; antes se guardaba la dirección buena y se tiraba el
-  punto exacto sin decir nada.
+- Las columnas se reconocen: `Client` (B), `Adreça` (C), `Població` (D),
+  `_lat` (M), `_lng` (N). **`_placeId`, `_precisio` y `_geo` no existen** en
+  esa hoja — por eso el script las crea ahora; antes se guardaba la dirección
+  buena y se tiraba el punto exacto sin decir nada.
 - De las 1.103 filas con dirección escrita, **220 no llevan número de
   portal**. Son exactamente las que acaban en el centro del pueblo, y las
   que más ganan con el panel.
@@ -64,7 +65,7 @@ Sí. El panel tiene dos vías y **la segunda no necesita ninguna clave**:
 
 Pegar significa: abrir Google Maps como siempre, buscar el sitio, copiar el
 enlace (o botón derecho sobre el mapa → copiar las coordenadas) y pegarlo en
-el recuadro de abajo del panel. Se guarda `_lat`, `_lng` y `_geo = portal`.
+el recuadro de abajo del panel. Se guarda `_lat`, `_lng`, `_precisio = portal` y la dirección en `_geo`.
 **La dirección escrita no se toca**: quien pega un punto está diciendo dónde
 está la casa, no cómo se llama la calle.
 

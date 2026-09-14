@@ -42,6 +42,12 @@ const schema = z.object({
   lloc: llocSchema.optional(),
   /** Full donde crearla. Si no se pasa, el del mes en curso. */
   sheetTab: z.string().max(120).optional(),
+  /**
+   * Crear la comanda aunque ese número ya exista en el full: es otra parte
+   * de la misma entrega. Lo manda la pantalla después de preguntarlo, no va
+   * nunca de serie: un número repetido sin querer es un número mal tecleado.
+   */
+  afegirPart: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -66,7 +72,10 @@ export async function POST(request: Request) {
     return crearComandaDemo(dades)
       ? NextResponse.json({ comanda: dades.id, sheetTab: "Demo" })
       : NextResponse.json(
-          { error: `Ja hi ha una comanda amb el número "${dades.id}".` },
+          {
+            error: `Ja hi ha una comanda amb el número "${dades.id}".`,
+            repetida: true,
+          },
           { status: 409 },
         );
   }
@@ -84,8 +93,16 @@ export async function POST(request: Request) {
       con el mensaje tal cual y un 409, no con un 500 mudo.
     */
     if (isConfigError(error)) {
+      /*
+        El 409 no es un "no": la pantalla lo usa para preguntar si es otra
+        parte de la misma comanda y reenviarlo con `afegirPart`. Por eso va
+        con `repetida`, para que no tenga que mirar el texto del mensaje.
+      */
       const repetida = error.message.includes("Ja hi ha");
-      return NextResponse.json({ error: error.message }, { status: repetida ? 409 : 500 });
+      return NextResponse.json(
+        { error: error.message, repetida: repetida || undefined },
+        { status: repetida ? 409 : 500 },
+      );
     }
 
     return NextResponse.json(

@@ -14,7 +14,7 @@
  *  1. Menú "Adreces" → "Cercar adreça…". Se abre un panel al lado, se
  *     escribe, se ELIGE de la lista de Google y la fila queda con la
  *     dirección buena, la población, y el punto exacto en _lat/_lng/
- *     _placeId/_geo — las mismas columnas que usa la app.
+ *     _placeId/_precisio/_geo — las mismas columnas que usa la app.
  *
  *  2. Al escribir una dirección a mano, la celda se marca en ámbar con una
  *     nota: "sense comprovar". Es el aviso de que eso todavía no es un punto,
@@ -54,7 +54,15 @@ var COLUMNES = {
   lat: ["_lat", "lat", "latitud"],
   lng: ["_lng", "lng", "longitud"],
   placeId: ["_placeId", "placeid", "place_id"],
-  geo: ["_geo", "geo", "precision"],
+  precisio: ["_precisio"],
+  /*
+    La dirección que se geocodificó. La escribe la app para saber si el
+    punto sigue valiendo: cuando no coincide con la de la fila, alguien la
+    ha corregido y hay que volver a buscar. Al guardar desde aquí se pone
+    la dirección elegida, para que la app NO la vuelva a buscar y respete
+    el portal que ha escogido una persona.
+  */
+  geoAddress: ["_geo", "_geoadreca"],
 };
 
 function onOpen() {
@@ -253,7 +261,7 @@ function desarAdreca(fila, placeId, sessionToken) {
     Las columnas del punto puede que no estén.
 
     En la hoja de verdad hay "_lat" y "_lng" —las creó la app— pero no
-    "_placeId" ni "_geo". Sin ellas, esto guardaba la dirección buena y
+    "_placeId", "_precisio" ni "_geo". Sin ellas, esto guardaba la dirección buena y
     tiraba el punto exacto a la basura sin decir nada, y la app volvía a
     buscar la dirección como si nadie la hubiera elegido. Se crean al final,
     que es donde las pone la app.
@@ -270,7 +278,19 @@ function desarAdreca(fila, placeId, sessionToken) {
   if (columnes.placeId) full.getRange(fila, columnes.placeId).setValue(lloc.placeId);
   // "portal": la eligió una persona de la lista de Google. No hay nada más
   // exacto que eso, y la app ya no la vuelve a buscar.
-  if (columnes.geo) full.getRange(fila, columnes.geo).setValue("portal");
+  if (columnes.precisio) full.getRange(fila, columnes.precisio).setValue("portal");
+  /*
+    Y la dirección que se acaba de guardar, en `_geo`.
+
+    Es con lo que la app decide si el punto está caducado: poniendo aquí la
+    misma que se escribe en la casilla, no vuelve a geocodificar y respeta
+    el portal que ha elegido una persona, que es más de fiar que cualquier
+    cosa que conteste el geocodificador.
+  */
+  if (columnes.geoAddress) {
+    var sencera = lloc.city ? lloc.address + ", " + lloc.city : lloc.address;
+    full.getRange(fila, columnes.geoAddress).setValue(sencera);
+  }
 
   return lloc;
 }
@@ -319,7 +339,18 @@ function desarPunt(fila, enganxat) {
     lo sustituiría por lo que dijera el geocodificador, que es justo lo que
     se está corrigiendo.
   */
-  full.getRange(fila, columnes.geo).setValue("portal");
+  full.getRange(fila, columnes.precisio).setValue("portal");
+  /*
+    La dirección que hay escrita ahora, para que la app dé el punto por
+    bueno y no lo sustituya por lo que diga el geocodificador. Quien pega
+    un punto del mapa sabe dónde está la casa mejor que Google.
+  */
+  var adrecaFila = String(full.getRange(fila, columnes.address).getValue() || "");
+  if (columnes.city) {
+    var poble = String(full.getRange(fila, columnes.city).getValue() || "");
+    if (poble) adrecaFila = adrecaFila ? adrecaFila + ", " + poble : poble;
+  }
+  full.getRange(fila, columnes.geoAddress).setValue(adrecaFila);
 
   var cel = full.getRange(fila, columnes.address);
   netejarMarca(cel);
@@ -419,13 +450,19 @@ function repartir(detall) {
 /**
  * Crea las columnas del punto que falten, al final de la hoja.
  *
- * Con el nombre que usa la app (`_placeId`, `_geo`): si se llamaran de otra
+ * Con el nombre que usa la app (`_placeId`, `_precisio`, `_geo`): si se llamaran de otra
  * forma, la app no las encontraría y las crearía otra vez al lado.
  *
  * Solo añade cabeceras en la fila 1. No mueve ni borra nada de lo que hay.
  */
 function assegurarColumnes(full, columnes) {
-  var CAPÇALERES = { lat: "_lat", lng: "_lng", placeId: "_placeId", geo: "_geo" };
+  var CAPÇALERES = {
+    lat: "_lat",
+    lng: "_lng",
+    placeId: "_placeId",
+    precisio: "_precisio",
+    geoAddress: "_geo",
+  };
   var seguent = full.getLastColumn();
 
   Object.keys(CAPÇALERES).forEach(function (clau) {
@@ -467,7 +504,7 @@ function normalitzar(text) {
 
 /** Vacía el punto de una fila: la dirección ha cambiado y ya no es el suyo. */
 function esborrarPunt(full, fila, columnes) {
-  ["lat", "lng", "placeId", "geo"].forEach(function (clau) {
+  ["lat", "lng", "placeId", "precisio", "geoAddress"].forEach(function (clau) {
     if (columnes[clau]) full.getRange(fila, columnes[clau]).clearContent();
   });
 }

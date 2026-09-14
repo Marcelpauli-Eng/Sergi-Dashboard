@@ -194,4 +194,35 @@ import {
   assert.equal(sheetIdFrom(""), "");
 }
 
+// ── Dos campos no pueden llamarse igual ─────────────────────────────────
+//
+// Las cabeceras se comparan sin acentos, sin espacios y sin signos, así que
+// nombres que a la vista son distintos acaban siendo la misma palabra:
+// "_adreca" y "Adreça" son "adreca" los dos. Cuando eso pasa, el segundo
+// campo lee la columna del primero y nadie se entera — la app no falla,
+// enseña otra cosa.
+//
+// La única pareja que comparte columna a propósito es `date` y
+// `deliveredAt`: el día y la hora de la entrega van en la misma celda.
+{
+  const compartidas = new Set(["date", "deliveredAt"]);
+  const vistos = new Map<string, string>();
+
+  for (const [clau, alies] of Object.entries(COLUMNS) as [string, readonly string[]][]) {
+    for (const alias of alies) {
+      const normalitzat = normalizeHeader(alias);
+      const abans = vistos.get(normalitzat);
+      if (abans === undefined) {
+        vistos.set(normalitzat, clau);
+        continue;
+      }
+      if (abans === clau) continue;
+      assert.ok(
+        compartidas.has(abans) && compartidas.has(clau),
+        `"${alias}" vale para "${abans}" y para "${clau}" a la vez: uno de los dos leerá la columna del otro`,
+      );
+    }
+  }
+}
+
 console.log("✓ lib/sheet-schema.ts + lib/sheet-tab.ts — columnas, pestañas e IDs");

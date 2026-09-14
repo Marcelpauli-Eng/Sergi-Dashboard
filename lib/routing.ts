@@ -1,7 +1,7 @@
 import "server-only";
 import { env } from "./env";
 import type { Order } from "./types";
-import { nomDeCarrer } from "./maps.ts";
+import { adrecaCompleta, nomDeCarrer } from "./maps.ts";
 
 /**
  * Cálculo de la ruta del día.
@@ -80,15 +80,29 @@ const TIPOS_IMPRECISOS = new Set([
 ]);
 
 /**
- * Convierte una dirección en coordenadas.
+ * Lo que contestó Google al preguntarle por una dirección.
  *
- * Devuelve `null` si Google no la reconoce, en cuyo caso el pedido sigue
- * apareciendo en la lista (el transportista puede navegar por texto) pero
- * queda fuera del cálculo de ruta.
+ * Hay tres respuestas y no dos, porque "no la encuentro" y "ahora no puedo
+ * contestarte" se arreglan de forma distinta: la primera es definitiva —esa
+ * dirección no existe tal y como está escrita, y volver a preguntar mañana
+ * dará lo mismo— y la segunda es de hoy: sin red, sin cuota o con la clave
+ * mal, y la misma pregunta mañana sí tiene respuesta.
+ *
+ * La diferencia importa porque las definitivas se apuntan en la hoja para no
+ * volver a preguntarlas nunca —cada consulta se paga— y las de hoy NO: si se
+ * apuntaran, un corte de red dejaría la comanda sin coordenadas para
+ * siempre.
  */
-export async function geocodeAddress(
+export type ResultatGeocodificacio =
+  | { estat: "ok"; coord: Coord; precise: boolean; placeId: string | null }
+  /** Google contestó, y esa dirección no la reconoce. */
+  | { estat: "desconeguda" }
+  /** No se le ha podido preguntar. Se reintenta más adelante. */
+  | { estat: "sense_resposta"; motiu: string };
+
+export async function geocodificar(
   address: string,
-): Promise<GeocodeResult | null> {
+): Promise<ResultatGeocodificacio> {
   const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
   url.searchParams.set("address", address);
   url.searchParams.set("key", env.google.mapsApiKey);
@@ -96,11 +110,9 @@ export async function geocodeAddress(
   url.searchParams.set("region", "es");
   url.searchParams.set("language", "es");
 
-  const response = await fetch(url, { cache: "no-store" });
-  if (!response.ok) return null;
-
-  const data = (await response.json()) as {
+  let data: {
     status: string;
+    error_message?: string;
     results?: {
       geometry: { location: { lat: number; lng: number }; location_type?: string };
       place_id?: string;
@@ -108,30 +120,67 @@ export async function geocodeAddress(
       partial_match?: boolean;
     }[];
   };
+  try {
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) {
+      return { estat: "sense_resposta", motiu: `HTTP ${response.status}` };
+    }
+    data = await response.json();
+  } catch (error) {
+    return { estat: "sense_resposta", motiu: String(error) };
+  }
 
-  if (data.status !== "OK" || !data.results?.length) return null;
+  if (data.status === "OK" && data.results?.length) {
+    const result = data.results[0];
+    const { lat, lng } = result.geometry.location;
 
-  const result = data.results[0];
-  const { lat, lng } = result.geometry.location;
+    /*
+      Tres señales, y basta con que falle una para no fiarse:
+
+       - `partial_match`: Google ha tenido que inventarse parte de lo que se
+         le pidió (típico cuando el número no existe en esa calle).
+       - `location_type: APPROXIMATE`: el punto es un centroide, no un
+         portal. "ROOFTOP" es el tejado; "RANGE_INTERPOLATED" y
+         "GEOMETRIC_CENTER" son el tramo de calle, que para repartir sirve.
+       - `types`: si lo más fino que sabe decir es "locality", lo que ha
+         devuelto es el pueblo entero.
+
+      Sin esto, el centroide del pueblo se guardaba como si fuera la
+      dirección y el transportista acababa allí, con toda la seguridad del
+      mundo.
+    */
+    const tipoMasEspecifico = result.types?.[0];
+    const precise =
+      result.partial_match !== true &&
+      result.geometry.location_type !== "APPROXIMATE" &&
+      (tipoMasEspecifico === undefined || !TIPOS_IMPRECISOS.has(tipoMasEspecifico));
+
+    return {
+      estat: "ok",
+      coord: { lat, lng },
+      precise,
+      placeId: result.place_id ?? null,
+    };
+  }
 
   /*
-    Tres señales, y basta con que falle una para no fiarse:
-
-     - `partial_match`: Google ha tenido que inventarse parte de lo que se le
-       pidió (típico cuando el número no existe en esa calle).
-     - `location_type: APPROXIMATE`: el punto es un centroide, no un portal.
-       "ROOFTOP" es el tejado; "RANGE_INTERPOLATED" y "GEOMETRIC_CENTER" son
-       el tramo de calle, que para repartir sirve.
-     - `types`: si lo más fino que sabe decir es "locality", lo que ha
-       devuelto es el pueblo entero.
+    ZERO_RESULTS es la única negativa que es de la dirección. El resto
+    —cuota agotada, clave mal, petición malformada, un error de Google— son
+    del servicio, y la misma dirección volverá a intentarse.
   */
-  const tipoMasEspecifico = result.types?.[0];
-  const precise =
-    result.partial_match !== true &&
-    result.geometry.location_type !== "APPROXIMATE" &&
-    (tipoMasEspecifico === undefined || !TIPOS_IMPRECISOS.has(tipoMasEspecifico));
+  if (data.status === "ZERO_RESULTS" || (data.status === "OK" && !data.results?.length)) {
+    return { estat: "desconeguda" };
+  }
+  return {
+    estat: "sense_resposta",
+    motiu: data.error_message ? `${data.status}: ${data.error_message}` : data.status,
+  };
+}
 
-  return { lat, lng, precise, placeId: result.place_id ?? null };
+/** Las coordenadas a secas, para quien no necesita saber más. */
+export async function geocodeAddress(address: string): Promise<Coord | null> {
+  const resultat = await geocodificar(address);
+  return resultat.estat === "ok" ? resultat.coord : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -147,7 +196,8 @@ export async function geocodeAddress(
  *    carreteras, naves sin número—, y suele clavarla mejor que el número.
  *  - `carrer`: la calle sin número. No es el portal, pero deja al
  *    transportista en la calle correcta.
- *  - `poble`: el centro del pueblo. El último recurso.
+ *  - `poble`: el centro del pueblo. El último recurso, y se avisa en la
+ *    tarjeta de que es eso.
  */
 export type NivellUbicacio = "portal" | "negoci" | "carrer" | "poble";
 
@@ -156,6 +206,18 @@ export interface Ubicacio extends Coord {
   placeId: string | null;
   nivell: NivellUbicacio;
 }
+
+/**
+ * Lo que sale de buscar un sitio, con las mismas tres respuestas.
+ *
+ * "Desconeguda" significa que Google contestó que no a TODOS los peldaños:
+ * ni la dirección, ni el negocio, ni la calle, ni el pueblo. Solo entonces
+ * se apunta en la hoja para no volver a preguntar.
+ */
+export type ResultatUbicacio =
+  | { estat: "ok"; ubicacio: Ubicacio }
+  | { estat: "desconeguda" }
+  | { estat: "sense_resposta"; motiu: string };
 
 /**
  * Cuánto se puede alejar del pueblo un negocio para creérselo, en metros.
@@ -180,12 +242,19 @@ export async function findPlaceByName(
   nom: string,
   aprop: Coord | null,
 ): Promise<Ubicacio | null> {
-  const body: Record<string, unknown> = { textQuery: nom, languageCode: "es", regionCode: "ES" };
+  const body: Record<string, unknown> = {
+    textQuery: nom,
+    languageCode: "ca",
+    regionCode: "ES",
+  };
   if (aprop) {
     // Sesga la búsqueda al pueblo de la comanda: sin esto, un nombre de
     // negocio corriente devuelve el de la otra punta del país.
     body.locationBias = {
-      circle: { center: { latitude: aprop.lat, longitude: aprop.lng }, radius: RADI_NEGOCI_M },
+      circle: {
+        center: { latitude: aprop.lat, longitude: aprop.lng },
+        radius: RADI_NEGOCI_M,
+      },
     };
   }
 
@@ -244,60 +313,88 @@ function avisarPlacesUnaVez(status: number, body: string): void {
  *   3. La calle sin número.
  *   4. El centro del pueblo.
  *
- * Devuelve `null` solo si no hay nada: ni dirección reconocible ni nombre
- * que buscar. El nivel al que ha llegado va dentro, para que la pantalla
- * pueda decir "esto es la calle, no el portal" en vez de fingir precisión.
+ * El nivel al que ha llegado va dentro, para que la pantalla pueda decir
+ * "esto es la calle, no el portal" en vez de fingir precisión.
  */
 export async function resolveUbicacio(dades: {
   address: string;
   city: string | null;
   customer: string | null;
-}): Promise<Ubicacio | null> {
-  const adrecaCompleta = dades.city
-    ? `${dades.address}, ${dades.city}`
-    : dades.address;
-
-  // 1. El portal.
-  const exacta = dades.address.trim() ? await geocodeAddress(adrecaCompleta) : null;
-  if (exacta?.precise) {
-    return { lat: exacta.lat, lng: exacta.lng, placeId: exacta.placeId, nivell: "portal" };
-  }
+}): Promise<ResultatUbicacio> {
+  const adreca = adrecaCompleta({ ...dades, lat: null, lng: null });
 
   /*
-    El punto de referencia del pueblo.
-
-    Si el paso 1 ha devuelto algo impreciso, ESO es el centroide del pueblo y
-    ya lo tenemos. Si no había ni dirección, se pregunta por el pueblo solo:
-    hace falta igualmente para sesgar la búsqueda del negocio.
+    Si en algún momento Google no ha podido contestar, la comanda NO se
+    apunta como desconocida: se reintenta otro día. Apuntarla por un corte
+    de red la dejaría sin coordenadas para siempre.
   */
-  let poble: GeocodeResult | null = exacta;
-  if (!poble && dades.city) poble = await geocodeAddress(dades.city);
-  const referencia = poble ? { lat: poble.lat, lng: poble.lng } : null;
+  let hiHaHagutFallada: string | null = null;
+
+  // 1. El portal.
+  let poble: { coord: Coord; placeId: string | null } | null = null;
+  if (adreca) {
+    const exacta = await geocodificar(adreca);
+    if (exacta.estat === "ok") {
+      if (exacta.precise) {
+        return {
+          estat: "ok",
+          ubicacio: { ...exacta.coord, placeId: exacta.placeId, nivell: "portal" },
+        };
+      }
+      /*
+        Impreciso: ESTO es el centroide del pueblo, y ya lo tenemos. Se
+        guarda para el final —es mejor que nada— y para sesgar la búsqueda
+        del negocio.
+      */
+      poble = { coord: exacta.coord, placeId: exacta.placeId };
+    } else if (exacta.estat === "sense_resposta") {
+      hiHaHagutFallada = exacta.motiu;
+    }
+  }
+
+  if (!poble && dades.city && !hiHaHagutFallada) {
+    const nomesPoble = await geocodificar(dades.city);
+    if (nomesPoble.estat === "ok") {
+      poble = { coord: nomesPoble.coord, placeId: nomesPoble.placeId };
+    } else if (nomesPoble.estat === "sense_resposta") {
+      hiHaHagutFallada = nomesPoble.motiu;
+    }
+  }
 
   // 2. El negocio por su nombre.
   if (dades.customer?.trim()) {
     const consulta = [dades.customer, dades.address, dades.city]
       .filter((tros) => tros && String(tros).trim())
       .join(", ");
-    const negoci = await findPlaceByName(consulta, referencia);
-    if (negoci) return negoci;
+    const negoci = await findPlaceByName(consulta, poble?.coord ?? null);
+    if (negoci) return { estat: "ok", ubicacio: negoci };
   }
 
   // 3. La calle sin número.
   const carrer = nomDeCarrer(dades.address);
   if (carrer && carrer !== dades.address.trim()) {
     const nomes = dades.city ? `${carrer}, ${dades.city}` : carrer;
-    const trobat = await geocodeAddress(nomes);
-    if (trobat?.precise) {
-      return { lat: trobat.lat, lng: trobat.lng, placeId: trobat.placeId, nivell: "carrer" };
+    const trobat = await geocodificar(nomes);
+    if (trobat.estat === "ok" && trobat.precise) {
+      return {
+        estat: "ok",
+        ubicacio: { ...trobat.coord, placeId: trobat.placeId, nivell: "carrer" },
+      };
     }
+    if (trobat.estat === "sense_resposta") hiHaHagutFallada = trobat.motiu;
   }
 
   // 4. El pueblo, que es mejor que nada.
   if (poble) {
-    return { lat: poble.lat, lng: poble.lng, placeId: poble.placeId, nivell: "poble" };
+    return {
+      estat: "ok",
+      ubicacio: { ...poble.coord, placeId: poble.placeId, nivell: "poble" },
+    };
   }
-  return null;
+
+  return hiHaHagutFallada
+    ? { estat: "sense_resposta", motiu: hiHaHagutFallada }
+    : { estat: "desconeguda" };
 }
 
 // ─────────────────────────────────────────────────────────────────────────

@@ -22,8 +22,49 @@ import type { Order } from "./types.ts";
  */
 
 /** Lo que hace falta de una parada para poder llevar a alguien hasta ella. */
-type Destino = Pick<Order, "lat" | "lng" | "address"> &
-  Partial<Pick<Order, "city" | "placeId" | "geoLevel">>;
+type Destino = Pick<Order, "lat" | "lng" | "address"> & {
+  city?: string | null;
+  placeId?: string | null;
+  geoLevel?: Order["geoLevel"];
+};
+
+/**
+ * La dirección tal y como hay que buscarla: calle Y población.
+ *
+ * La calle sola no basta. "Carrer Cabrerés, 2" hay en media Cataluña, así
+ * que Maps abre la pantalla de resultados —o se planta sin navegar— en vez
+ * de arrancar la ruta. La población es justo lo que lo desambigua, y en la
+ * comanda viene aparte de la calle: `address` es la calle, `city` el
+ * pueblo.
+ */
+export function adrecaCompleta(destino: Destino): string {
+  return [destino.address.trim(), destino.city?.trim()]
+    .filter((tros) => tros)
+    .join(", ");
+}
+
+/**
+ * La misma dirección escrita de dos maneras es la misma dirección.
+ *
+ * Se compara así, y no letra a letra, porque corregir "carrer" por "Carrer"
+ * o quitar un espacio de más no mueve el portal ni un metro: volver a
+ * geocodificar por eso es pagar una consulta a Google para acabar en el
+ * mismo sitio. Los acentos también caen: la oficina escribe "Cabreres" y
+ * "Cabrerés" el mismo día.
+ */
+export function normalitzaAdreca(adreca: string): string {
+  return adreca
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** Si dos direcciones llevan al mismo sitio. */
+export function mateixaAdreca(a: string, b: string): boolean {
+  return normalitzaAdreca(a) === normalitzaAdreca(b);
+}
 
 /**
  * Si el punto guardado es el sitio, o solo la zona.
@@ -40,29 +81,17 @@ function puntDeFiar(destino: Destino): boolean {
 }
 
 /**
- * La dirección entera, con el pueblo.
- *
- * Sin el pueblo, "Carrer Gran, 12" hay en media comarca y Maps escoge el que
- * le parece. La ciudad vive en su propia columna de la hoja, así que aquí se
- * juntan las dos.
- */
-function adreca(destino: Destino): string {
-  return destino.city ? `${destino.address}, ${destino.city}` : destino.address;
-}
-
-/**
  * El punto, en coordenadas si las hay.
  *
  * Se prefieren a la dirección en texto: evita que Maps reinterprete la
- * dirección y mande al transportista a otro sitio. Y las que hay guardadas
- * son del portal: las que solo sitúan el pueblo no se guardan —ver
- * `fillMissingCoordinates`—, justamente para que aquí se caiga al texto,
- * que Maps sí busca, en vez de navegar al centro del pueblo.
+ * dirección y mande al transportista a otro sitio. Cuando no las hay —o
+ * cuando las que hay solo sitúan el pueblo— va la dirección entera, con
+ * población, que Maps al menos busca.
  */
 function punt(destino: Destino): string {
   return puntDeFiar(destino)
     ? `${destino.lat},${destino.lng}`
-    : adreca(destino) || `${destino.lat},${destino.lng}`;
+    : adrecaCompleta(destino) || `${destino.lat},${destino.lng}`;
 }
 
 /**
@@ -126,7 +155,7 @@ export function navUrlFor(order: Destino): string {
       pantalla —Google exige que vaya, pero manda el identificador—. Se pone
       la dirección para que el transportista vea a dónde va.
     */
-    url.searchParams.set("destination", adreca(order));
+    url.searchParams.set("destination", adrecaCompleta(order));
     url.searchParams.set("destination_place_id", order.placeId);
   } else {
     url.searchParams.set("destination", punt(order));
@@ -223,7 +252,7 @@ export function wazeNavUrlFor(order: Destino): string {
   if (puntDeFiar(order)) {
     return `https://waze.com/ul?ll=${order.lat},${order.lng}&navigate=yes`;
   }
-  return `https://waze.com/ul?q=${encodeURIComponent(adreca(order))}&navigate=yes`;
+  return `https://waze.com/ul?q=${encodeURIComponent(adrecaCompleta(order))}&navigate=yes`;
 }
 
 /**

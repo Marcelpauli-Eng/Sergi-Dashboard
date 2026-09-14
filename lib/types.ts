@@ -24,8 +24,32 @@ export type EstatFactura = "emesa" | "enviada" | "cobrada";
 
 /** Una fila del Sheet, ya normalizada. */
 export interface Order {
-  /** Identificador único e inmutable del pedido (nº de comanda). */
+  /**
+   * Clave única del pedido dentro de la app.
+   *
+   * Normalmente es el nº de comanda tal cual. Pero una comanda se puede
+   * entregar en dos veces —una parte hoy y el resto cuando llegue— y la
+   * oficina apunta cada parte en su fila, las dos con el mismo número. Son
+   * dos entregas: cada una tiene su día, su hora y lo que se cobra por
+   * hacerla. Antes la segunda se descartaba al leer la hoja.
+   *
+   * Por eso la segunda parte lleva la clave "748#2": para que marcar una
+   * entregada no marque la otra y cada una lleve su propio importe. Es lo
+   * que viaja por la cola, la API y la pestaña de importes.
+   *
+   * Lo que se enseña y lo que va a una factura es `codi`, nunca esto.
+   */
   id: string;
+  /**
+   * El nº de comanda tal cual está escrito en la hoja, para enseñar y para
+   * facturar. Las dos partes del 748 tienen aquí "748": para la empresa y
+   * para el cliente es una sola comanda.
+   */
+  codi: string;
+  /** Qué parte de la comanda es esta entrega. 1 cuando no está partida. */
+  part: number;
+  /** En cuántas partes está partida la comanda. 1 cuando no lo está. */
+  parts: number;
   /** Código del transportista al que está asignado. Vacío si el Sheet no tiene esa columna. */
   driverId: string;
   /** Fecha de creación o de registro en el Sheet por parte de la empresa. */
@@ -47,19 +71,8 @@ export interface Order {
    */
   billingClient: string | null;
   phone: string | null;
-  /** Medidas de los bultos, separadas por " · " cuando hay más de uno. */
+  /** Medidas de lo que se lleva en esta entrega, tal cual están en su fila. */
   measures: string | null;
-  /**
-   * Cuántos bultos lleva la comanda.
-   *
-   * La oficina escribe un bulto por FILA, todas con el mismo nº de comanda y
-   * solo las medidas rellenas. Esas filas se fusionan aquí en una sola
-   * parada —es una única entrega, en una única dirección— pero hay que
-   * saber cuántos paquetes hay que cargar: en la hoja real hay comandas de
-   * cuatro. Antes esas filas se descartaban y el transportista salía del
-   * almacén con uno.
-   */
-  bultos: number;
   notes: string | null;
   /**
    * A qué hora se entregó, "HH:MM". `null` mientras no se haya entregado.
@@ -84,24 +97,36 @@ export interface Order {
   lat: number | null;
   lng: number | null;
   /**
+   * La dirección de la que salieron esas coordenadas.
+   *
+   * Es lo que permite saber si siguen valiendo: cuando no coincide con la
+   * dirección que hay hoy en la fila, alguien la ha corregido y las
+   * coordenadas ya no llevan donde hay que ir. Ver `construirComandes`, que
+   * las tira en ese caso, y `geocodificarPendents`, que las rehace.
+   *
+   * Apuntada SIN coordenadas significa que Google no reconoció esa
+   * dirección: no se le vuelve a preguntar hasta que cambie.
+   */
+  geoAddress: string | null;
+  /**
+   * El identificador del portal en Google, al lado de las coordenadas.
+   *
+   * Es lo que hace que navegar caiga en el portal y no donde Maps crea: con
+   * él no vuelve a interpretar la dirección. `null` cuando el punto no salió
+   * de una ficha de Google —lo pegó una persona del mapa— o cuando se
+   * geocodificó antes de guardarlo.
+   */
+  placeId: string | null;
+  /**
    * Hasta dónde afina el punto guardado: el portal, la ficha del negocio,
    * la calle sin número o el centro del pueblo.
    *
-   * Se guarda para poder avisar al transportista cuando el punto NO es el
-   * portal —que es justo cuando la navegación "no marca exacto"— y para
+   * `geoAddress` dice si el punto está caducado; esto dice si el punto es la
+   * casa o solo la zona. Se guarda para avisar al transportista cuando NO es
+   * el portal —que es justo cuando la navegación "no marca exacto"— y para
    * volver a intentarlo otro día a ver si Google ya lo sabe.
    */
   geoLevel: "portal" | "negoci" | "carrer" | "poble" | null;
-  /**
-   * El identificador del portal en Google, cacheado junto a las coordenadas.
-   *
-   * Es lo que hace que navegar caiga en la calle exacta y no en el centro
-   * del pueblo: con él, Maps no vuelve a interpretar la dirección.
-   *
-   * `null` en las comandas geocodificadas antes de guardarlo, que se
-   * vuelven a resolver la próxima vez que se calcula la ruta.
-   */
-  placeId: string | null;
   /**
    * Fila real dentro de la hoja (1-indexed, tal y como la numera Sheets).
    * Se usa para escribir el estado de vuelta. Nunca se envía al cliente:

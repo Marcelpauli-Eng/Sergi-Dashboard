@@ -69,14 +69,18 @@ export function crearComandaDemo(dades: {
   city?: string;
   phone?: string;
   notes?: string;
+  afegirPart?: boolean;
 }): boolean {
-  const jaHiEs = [...TODAY_SAMPLES, ...TOMORROW_SAMPLES, ...creadesDemo].some(
-    (s) => s.id === dades.id,
-  );
-  if (jaHiEs) return false;
+  const totes = [...TODAY_SAMPLES, ...TOMORROW_SAMPLES, ...creadesDemo];
+  // Cuántas veces está ya ese número: la clave interna de la segunda parte
+  // es "748#2", igual que al leer la hoja de verdad. Ver `construirComandes`.
+  const partsJa = totes.filter((s) => s.id.split("#")[0] === dades.id).length;
+  if (partsJa > 0 && !dades.afegirPart) return false;
+
+  const clau = partsJa > 0 ? `${dades.id}#${partsJa + 1}` : dades.id;
 
   creadesDemo.push({
-    id: dades.id,
+    id: clau,
     customer: dades.customer ?? "",
     address: [dades.address, dades.city].filter(Boolean).join(", "),
     // Sin coordenadas, como una comanda recién creada de verdad: la hoja
@@ -87,7 +91,7 @@ export function crearComandaDemo(dades: {
     phone: dades.phone,
     notes: dades.notes,
   });
-  demoDates.set(dades.id, "");
+  demoDates.set(clau, "");
   return true;
 }
 
@@ -237,16 +241,31 @@ const TOMORROW_SAMPLES: Sample[] = [
 
 const DEMO_DEPOT = "Carrer de Mallorca 401, 08013 Barcelona";
 
-function toStop(sample: Sample, date: string, sequence: number, timezone: string): Stop {
+/**
+ * `parts` es cuántas partes tiene la comanda en total, y eso solo se sabe
+ * mirando todas las del día: por eso entra de fuera y no se calcula aquí.
+ */
+function toStop(
+  sample: Sample,
+  date: string,
+  sequence: number,
+  timezone: string,
+  parts = 1,
+): Stop {
   const recorded = demoDeliveries.get(sample.id);
+  // La clave de una segunda parte es "748#2"; el número de la comanda es el
+  // de delante, que es lo que se enseña. Igual que al leer la hoja de verdad.
+  const [codi, sufix] = sample.id.split("#");
   return {
     id: sample.id,
+    codi,
+    part: sufix ? Number(sufix) : 1,
+    parts,
     driverId: DEMO_DRIVER.id,
     creationDate: null,
     // El día que se le haya puesto durante la demo manda sobre el del lote.
     date: demoDates.get(sample.id) ?? date,
     priority: sample.priority,
-    bultos: 1,
     customer: sample.customer,
     address: sample.address,
     city: null,
@@ -268,8 +287,10 @@ function toStop(sample: Sample, date: string, sequence: number, timezone: string
     price: recorded?.price ?? null,
     lat: sample.lat,
     lng: sample.lng,
+    // En la demo no se geocodifica nada: no se habla con Google.
+    geoAddress: null,
     placeId: null,
-  geoLevel: null,
+    geoLevel: null,
     sequence,
     navUrl: navUrlFor(sample),
     legDistanceMeters: sample.legDistanceMeters ?? null,
@@ -281,9 +302,19 @@ function buildDay(samples: Sample[], date: string, timezone: string): RouteDay {
   const pending = samples.filter((s) => !demoDeliveries.has(s.id));
   const done = samples.filter((s) => demoDeliveries.has(s.id));
 
+  /** Cuántas partes tiene cada comanda entre todas las del día. */
+  const partsPerCodi = new Map<string, number>();
+  for (const sample of samples) {
+    const codi = sample.id.split("#")[0];
+    partsPerCodi.set(codi, (partsPerCodi.get(codi) ?? 0) + 1);
+  }
+  const partsDe = (sample: Sample) => partsPerCodi.get(sample.id.split("#")[0]) ?? 1;
+
   const stops = [
-    ...pending.map((sample, index) => toStop(sample, date, index + 1, timezone)),
-    ...done.map((sample) => toStop(sample, date, 0, timezone)),
+    ...pending.map((sample, index) =>
+      toStop(sample, date, index + 1, timezone, partsDe(sample)),
+    ),
+    ...done.map((sample) => toStop(sample, date, 0, timezone, partsDe(sample))),
   ];
 
   return {

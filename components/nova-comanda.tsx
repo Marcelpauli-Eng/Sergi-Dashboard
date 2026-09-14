@@ -76,8 +76,17 @@ export default function NovaComanda() {
   const [lloc, setLloc] = useState<LlocTriat | null>(null);
   const [desant, setDesant] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /*
+    El número ya está en el full y hay que preguntar qué es.
 
-  const crear = async () => {
+    Casi siempre es un número mal tecleado y por eso no se crea a la primera.
+    Pero una comanda que se entrega en dos veces son dos filas con el mismo
+    número —una parte hoy, el resto cuando llegue—, y eso solo lo sabe quien
+    la está creando. Se le pregunta y se reenvía con `afegirPart`.
+  */
+  const [repetida, setRepetida] = useState(false);
+
+  const crear = async (afegirPart = false) => {
     if (id.trim() === "" || desant) return;
     setDesant(true);
     setError(null);
@@ -92,9 +101,19 @@ export default function NovaComanda() {
           // se ha retocado a mano, el punto ya no es de esa dirección.
           ...(lloc && lloc.address === camps.address ? { lloc } : {}),
           ...(full ? { sheetTab: full } : {}),
+          ...(afegirPart ? { afegirPart: true } : {}),
         }),
       });
-      const cos = (await resposta.json().catch(() => null)) as { error?: string } | null;
+      const cos = (await resposta.json().catch(() => null)) as {
+        error?: string;
+        repetida?: boolean;
+      } | null;
+      if (resposta.status === 409 && cos?.repetida) {
+        setRepetida(true);
+        setError(cos.error ?? null);
+        setDesant(false);
+        return;
+      }
       if (!resposta.ok) throw new Error(cos?.error ?? "No s'ha pogut crear");
       // A la bossa, que es donde acaba de caer: el calendario la descarga al
       // entrar y desde allí se le pone día.
@@ -141,7 +160,13 @@ export default function NovaComanda() {
           <input
             id="comanda"
             value={id}
-            onChange={(e) => setId(e.target.value)}
+            onChange={(e) => {
+              setId(e.target.value);
+              // Otro número, otra pregunta: lo que se contestó del anterior
+              // no vale para este.
+              setRepetida(false);
+              setError(null);
+            }}
             autoFocus
             autoCapitalize="characters"
             autoCorrect="off"
@@ -211,9 +236,31 @@ export default function NovaComanda() {
         </p>
 
         {error && (
-          <p className="rounded-xl bg-warning-surface px-4 py-2.5 text-sm text-warning-foreground">
-            {error}
-          </p>
+          <div className="rounded-xl bg-warning-surface px-4 py-2.5 text-sm text-warning-foreground">
+            <p>{error}</p>
+            {repetida && (
+              <>
+                <p className="mt-1">
+                  Si és una altra part de la mateixa comanda —el que no cap en
+                  un sol viatge— es pot afegir igualment: serà una entrega a
+                  part, amb el seu dia i el seu import, amb el mateix número.
+                  El client, l&apos;adreça i el telèfon es copien de la part
+                  anterior; les mides i les notes, no, que són d&apos;aquest
+                  viatge.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  disabled={desant}
+                  onClick={() => void crear(true)}
+                >
+                  Afegir com a altra part del {id.trim()}
+                </Button>
+              </>
+            )}
+          </div>
         )}
       </form>
 
