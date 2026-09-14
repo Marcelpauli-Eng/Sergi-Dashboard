@@ -15,6 +15,7 @@ import {
   formatearNumero,
   paginar,
   clientePara,
+  etiquetaComanda,
   type ClienteFacturacion,
   type DatosFacturacion,
   type LineaFactura,
@@ -194,7 +195,7 @@ export default function Factura({
   );
 
   const lineas: LineaFactura[] = useMemo(
-    () => seleccionades.map((s) => ({ comanda: s.id, importe: s.price as number })),
+    () => seleccionades.map((s) => ({ comanda: etiquetaComanda(s), importe: s.price as number })),
     [seleccionades],
   );
   const totales = useMemo(() => calcularTotales(lineas), [lineas]);
@@ -449,10 +450,10 @@ export default function Factura({
                         disabled={!teImport}
                         onChange={() => alternar(stop.id)}
                         className="size-[18px] shrink-0 accent-[var(--primary)]"
-                        aria-label={`Incloure la comanda ${stop.id} a la factura`}
+                        aria-label={`Incloure la comanda ${etiquetaComanda(stop)} a la factura`}
                       />
                       <span className="min-w-0 flex-1 truncate text-sm">
-                        <span className="tabular-nums">{stop.id}</span>
+                        <span className="tabular-nums">{etiquetaComanda(stop)}</span>
                         {stop.customer && (
                           <span className="text-muted-foreground"> · {stop.customer}</span>
                         )}
@@ -476,7 +477,7 @@ export default function Factura({
                         type="text"
                         inputMode="decimal"
                         placeholder="0,00"
-                        aria-label={`Import de la comanda ${stop.id}`}
+                        aria-label={`Import de la comanda ${etiquetaComanda(stop)}`}
                         aria-invalid={malament || undefined}
                         className={cn(
                           "w-24 rounded-lg px-2 py-1.5 text-right text-base tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring/50",

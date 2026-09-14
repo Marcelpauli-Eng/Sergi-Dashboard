@@ -124,8 +124,32 @@ export function formatearNumero(numero: number): string {
 /** Cuántas líneas caben en el recuadro de una hoja antes de pasar a la siguiente. */
 export const LINEAS_POR_PAGINA = 24;
 
+/**
+ * Cómo se nombra una comanda en la factura.
+ *
+ * Una comanda partida en varios viajes son varias entregas, y cada una va a
+ * su línea con lo que se cobró por hacerla. Si las tres dijeran solo "748",
+ * el cliente vería tres líneas idénticas con importes distintos y la
+ * pregunta sería inevitable. Con "748 (1/3)" se lee de un vistazo que es la
+ * misma comanda repartida en tres veces.
+ *
+ * La comanda entera se queda como estaba: "748", sin paréntesis ni nada.
+ */
+export function etiquetaComanda(comanda: {
+  codi: string;
+  part: number;
+  parts: number;
+}): string {
+  if (comanda.parts <= 1) return comanda.codi;
+  return `${comanda.codi} (${comanda.part}/${comanda.parts})`;
+}
+
 export interface LineaFactura {
-  /** Nº de comanda, tal cual está en la hoja. */
+  /**
+   * Nº de comanda tal cual está en la hoja, y con qué parte es cuando la
+   * comanda va partida en varios viajes: "748" o "748 (1/3)". Ver
+   * `etiquetaComanda`.
+   */
   comanda: string;
   /** Lo cobrado por esa entrega, sin IVA. */
   importe: number;

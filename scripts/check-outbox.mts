@@ -19,11 +19,12 @@ import type { Manifest, Stop } from "../lib/types.ts";
 
 const parada = (extra: Partial<Stop> = {}): Stop => ({
   id: "ALB-1",
+  codi: "ALB-1",
+  part: 1, parts: 1,
   driverId: "sergi",
   creationDate: null,
   date: "2026-08-26",
   priority: 1,
-  bultos: 1,
   customer: "Farmàcia Sant Pau",
   address: "Carrer Gran 1",
   city: null,

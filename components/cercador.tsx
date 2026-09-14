@@ -60,7 +60,7 @@ export default function Cercador({
     const paraules = q.split(/\s+/);
     return stops
       .filter((s) => {
-        const heno = [s.id, s.customer, s.address, s.city, s.notes]
+        const heno = [s.codi, s.customer, s.address, s.city, s.notes]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
@@ -148,7 +148,7 @@ export default function Cercador({
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">
-                        <span className="tabular-nums">{stop.id}</span>
+                        <span className="tabular-nums">{stop.codi}</span>
                         {stop.customer && (
                           <span className="text-muted-foreground"> · {stop.customer}</span>
                         )}

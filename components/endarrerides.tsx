@@ -96,9 +96,9 @@ export default function Endarrerides({
         <div className="min-h-0 flex-1 overflow-y-auto border-t border-border">
           {stops.map((stop) => (
             <div key={stop.id} className="border-b border-border px-5 py-4 last:border-b-0">
-              <p className="truncate font-medium">{stop.customer || stop.id}</p>
+              <p className="truncate font-medium">{stop.customer || stop.codi}</p>
               <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                {stop.id}
+                {stop.codi}
                 {stop.date && (
                   <>
                     {" · "}

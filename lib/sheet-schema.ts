@@ -134,6 +134,7 @@ export const COLUMNS = {
    */
   lat: ["_lat", "lat", "latitud"],
   lng: ["_lng", "lng", "longitud"],
+
 } as const;
 
 export type ColumnKey = keyof typeof COLUMNS;

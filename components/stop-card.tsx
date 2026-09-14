@@ -76,7 +76,7 @@ function data(valor: string | null | undefined): string | null {
  * En fila y no en rejilla. Con la rejilla de dos columnas, una ficha de tres
  * datos dejaba el tercero solo con medio hueco al lado, y los valores largos
  * —el teléfono con el nombre de quien recoge delante, las medidas de cuatro
- * bultos— partían por donde les tocaba. En fila cada dato ocupa lo que
+ * medidas— partían por donde les tocaba. En fila cada dato ocupa lo que
  * necesita, la ficha se lee de arriba abajo y queda como la fila del
  * importe de abajo, que es una más.
  *
@@ -227,7 +227,7 @@ function ImportEditable({
           type="text"
           inputMode="decimal"
           placeholder="0,00"
-          aria-label={`Import de la comanda ${stop.id}`}
+          aria-label={`Import de la comanda ${stop.codi}`}
           aria-invalid={malament || undefined}
           className={cn(
             "w-32 rounded-lg px-3 py-1.5 text-right text-base font-semibold tabular-nums outline-none ring-1",
@@ -449,7 +449,11 @@ export default function StopCard({
                la tarjeta de lista esto no cabe y por eso allí va apretado en
                una línea de letra pequeña. */
             <dl className="mt-4 border-t border-border pt-2 sm:grid sm:grid-cols-2 sm:gap-x-10">
-              <Camp etiqueta="Comanda" valor={stop.id} mono />
+              <Camp
+                etiqueta="Comanda"
+                valor={stop.parts > 1 ? `${stop.codi} · part ${stop.part} de ${stop.parts}` : stop.codi}
+                mono
+              />
               {/*
                 El día solo cuando ya está hecha, y entonces es el día en que
                 se hizo.
@@ -466,13 +470,9 @@ export default function StopCard({
                 />
               )}
               <Camp etiqueta="Telèfon" valor={stop.phone} />
-              {/* Cuántos paquetes hay que cargar. Una comanda son varias
-                  filas en la hoja, una por bulto, y hasta ahora solo se veía
-                  la primera. Ver `bultos` en lib/types.ts. */}
-              <Camp
-                etiqueta={stop.bultos > 1 ? `Mides · ${stop.bultos} bultos` : "Mides"}
-                valor={stop.measures}
-              />
+              {/* Lo que se lleva en ESTE viaje. Cada fila del full es una
+                  entrega y trae las suyas. Ver `construirComandes`. */}
+              <Camp etiqueta="Mides" valor={stop.measures} />
               {leg && isOpen && <Camp etiqueta="Des de l'anterior" valor={leg} />}
             </dl>
           ) : (
@@ -482,18 +482,21 @@ export default function StopCard({
                   ella. Sigue sirviendo para ORDENAR la bossa —primero lo que
                   lleva más tiempo esperando—, que es para lo único que se
                   usa. */}
-              <p className="mt-1 font-mono text-xs text-tertiary-foreground">{stop.id}</p>
+              <p className="mt-1 font-mono text-xs text-tertiary-foreground">
+                {stop.codi}
+                {/* Una comanda partida en dos entregas sale dos veces en la
+                    bossa, las dos con el mismo número. Hay que poder saber
+                    cuál se está mirando sin abrir las dos. */}
+                {stop.parts > 1 && (
+                  <span className="ml-2 rounded bg-warning/15 px-1.5 py-0.5 font-sans text-[10px] font-medium text-warning">
+                    part {stop.part} de {stop.parts}
+                  </span>
+                )}
+              </p>
 
-              {(stop.measures || stop.bultos > 1) && (
+              {stop.measures && (
                 <p className="mt-1 text-xs text-tertiary-foreground">
-                  📦{" "}
-                  {stop.bultos > 1 && (
-                    <span className="font-semibold text-foreground">
-                      {stop.bultos} bultos
-                    </span>
-                  )}
-                  {stop.bultos > 1 && stop.measures && " · "}
-                  {stop.measures}
+                  📦 {stop.measures}
                 </p>
               )}
 

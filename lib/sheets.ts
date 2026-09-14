@@ -1,7 +1,7 @@
 import "server-only";
 import { googleAccessToken } from "./google-auth";
 import { env, ErrorAccionable } from "./env";
-import { parseSheetDate, parseSheetTime, formatSheetTimestamp, today } from "./dates";
+import { parseSheetDate, formatSheetTimestamp, today } from "./dates";
 import { findMonthTab, findLatestTabUpTo, noTabFoundMessage } from "./sheet-tab";
 import { parseImportesFactura } from "./factura.ts";
 import {
@@ -28,21 +28,15 @@ import {
 import {
   columnLetter,
   filaNovaComanda,
-  fusionarBulto,
   parseNumber,
-  parsePriority,
-  parseStatus,
-  parseStatusCategory,
   text,
 } from "./sheet-cells.ts";
 import {
-  mapHeaders,
   canonicalHeader,
-  REQUIRED_COLUMNS,
   MANAGED_COLUMNS,
-  MissingColumnsError,
   type ColumnKey,
 } from "./sheet-schema";
+import { construirComandes } from "./sheet-rows.ts";
 import type {
   DeliveryRecord,
   EstatFactura,
@@ -174,136 +168,7 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
     );
   }
 
-  const headerRow = (rows[0] ?? []).map((cell) => String(cell ?? ""));
-  const headerMap = mapHeaders(headerRow);
-
-  const missing = REQUIRED_COLUMNS.filter((key) => headerMap[key] === undefined);
-  if (missing.length > 0) throw new MissingColumnsError(missing);
-
-  const cell = (row: unknown[], key: ColumnKey): unknown => {
-    const index = headerMap[key];
-    return index === undefined ? undefined : row[index];
-  };
-
-  const orders: Order[] = [];
-  const skipped: SheetSnapshot["skipped"] = [];
-  /** Dónde está cada comanda dentro de `orders`, para juntarle sus bultos. */
-  const porId = new Map<string, number>();
-
-  // Comprobar si hay columna driverId y date
-  const hasDriverId = headerMap["driverId"] !== undefined;
-  const hasDate = headerMap["date"] !== undefined;
-
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i] ?? [];
-    const rowNumber = i + 1; // Sheets numera desde 1 y la fila 1 es la cabecera.
-
-    const id = text(cell(row, "id"));
-    const address = text(cell(row, "address"));
-    const driverId = hasDriverId ? text(cell(row, "driverId")).toLowerCase() : "";
-    const rawCreation = cell(row, "creationDate");
-    const parsedCreation = parseSheetDate(rawCreation);
-    const creationDate = parsedCreation ?? (text(rawCreation) || null);
-    const date = hasDate ? parseSheetDate(cell(row, "date")) : null;
-
-    // Filas completamente vacías: se ignoran sin ruido.
-    if (!id && !address) continue;
-
-    if (!id) {
-      skipped.push({ rowNumber, reason: "sin ID de pedido (Nº Comanda)" });
-      continue;
-    }
-
-    // Construir dirección completa con la ciudad si existe
-    const city = text(cell(row, "city")) || null;
-
-    const fila: Order = {
-      id,
-      driverId,
-      creationDate,
-      date: date ?? "",
-      priority: parsePriority(cell(row, "priority")),
-      customer: text(cell(row, "customer")),
-      address,
-      city,
-      billingClient: text(cell(row, "billingClient")) || null,
-      phone: text(cell(row, "phone")) || null,
-      measures: text(cell(row, "measures")) || null,
-      notes: text(cell(row, "notes")) || null,
-      // La celda del día trae también la hora cuando la comanda se entregó:
-      // es la misma columna. Aquí solo se separa lo que ya hay escrito.
-      deliveredTime: hasDate ? parseSheetTime(cell(row, "date")) : null,
-      incidentNote: text(cell(row, "incidentNote")) || null,
-      status: parseStatus(cell(row, "status")),
-      rawStatus: text(cell(row, "status")),
-      statusCategory: parseStatusCategory(cell(row, "status")),
-      /*
-        El importe NO se lee de aquí.
-
-        La columna "Import" de la hoja de repartos ya no es de la app: los
-        precios viven en el documento privado. Y leerla "por si acaso" no es
-        gratis — la oficina escribe en esa hoja lo que quiere. En la hoja
-        real había dos celdas con formato de fecha y un "18/08/2026 13:41"
-        dentro, que Google devuelve como el número 46252,57: la app las leía
-        como 46.252,57 € y se habrían ido a una factura tal cual.
-
-        Los importes que quedaran escritos aquí se mudan con
-        `npm run migrar:imports`, que sí mira el formato de la celda y avisa
-        de las que no son un importe en vez de tragárselas.
-      */
-      price: null,
-      lat: parseNumber(cell(row, "lat")),
-      lng: parseNumber(cell(row, "lng")),
-      bultos: 1,
-      rowNumber,
-      rowNumbers: [rowNumber],
-    };
-
-    const yaEsta = porId.get(id);
-    if (yaEsta !== undefined) {
-      /*
-        Otra fila con el mismo nº de comanda. Si no trae dirección es un
-        bulto más de la misma entrega —así escribe la oficina las comandas
-        de varios paquetes— y se fusiona. Ver `fusionarBulto`.
-
-        Si SÍ trae dirección son dos entregas distintas compartiendo número,
-        que es un error de la hoja y no hay forma de adivinar cuál vale: en
-        la hoja real pasa con las comandas escritas a mano, como "RODES".
-        Esa se descarta, pero diciendo dónde está la otra, que es lo que
-        hace falta para arreglarlo.
-      */
-      if (address) {
-        skipped.push({
-          rowNumber,
-          reason: `nº de comanda "${id}" repetido con otra dirección (ya está en la fila ${orders[yaEsta].rowNumber})`,
-        });
-        continue;
-      }
-      orders[yaEsta] = fusionarBulto(orders[yaEsta], fila);
-      continue;
-    }
-
-    /*
-      Sin dirección también entra.
-
-      Antes se descartaba —"no se puede ir a ningún sitio"— y eso se comía
-      justo las comandas que se crean desde la app: allí el único campo
-      obligatorio es el número, así que una comanda apuntada al vuelo se
-      escribía en la hoja y no volvía nunca a la pantalla. Aparecía en el
-      Google Sheet y no en la bossa, que es lo peor de los dos mundos.
-
-      Una comanda sin dirección es trabajo pendiente igual: se le pone día,
-      se le pone importe y se factura. Lo único que no se puede es navegar
-      hasta ella, y de eso ya se encarga la tarjeta, que esconde el botón.
-
-      La fila vacía del todo sigue fuera, y los bultos —misma comanda sin
-      dirección— los ha cogido la rama de arriba antes de llegar aquí.
-    */
-
-    porId.set(id, orders.length);
-    orders.push(fila);
-  }
-
+  const { orders, headerMap, skipped } = construirComandes(rows);
   return { orders, headerMap, skipped, sheetTab: tab };
 }
 
@@ -468,12 +333,12 @@ export async function writeDeliveries(
     const type = record.type || "status";
 
     /*
-      Lo mismo en TODAS las filas de la comanda, no solo en la primera.
+      Las filas de ESTA entrega, que hoy es siempre una: cada fila del full
+      es una entrega y se marca la suya. Ver `construirComandes`.
 
-      Una comanda de cuatro bultos son cuatro filas en la hoja. Marcando solo
-      la primera, la oficina ve una comanda a medias —dos "Pendent" y una
-      "Entregat"—, que es exactamente lo que hay hoy en la hoja real y no hay
-      forma de saber desde fuera si está entregada o no. Ver `rowNumbers`.
+      Se escribe recorriendo `rowNumbers` y no `rowNumber` a secas porque es
+      lo que garantiza que marcar una entrega no toque la fila de otra, que
+      con el mismo número de comanda está a un despiste de distancia.
     */
     const enTodasLasFilas = (column: ColumnKey, value: string | number) => {
       for (const rowNumber of order.rowNumbers) {
@@ -557,6 +422,12 @@ export interface NovaComanda {
   phone?: string;
   measures?: string;
   notes?: string;
+  /**
+   * Crear la comanda aunque ese número ya esté en el full: es otra parte de
+   * la misma entrega. Sin esto, el número repetido se rechaza, que es lo que
+   * hay que hacer con un número mal tecleado.
+   */
+  afegirPart?: boolean;
 }
 
 /**
@@ -582,23 +453,47 @@ export async function crearComanda(
   const snapshot = await readSheet(sheetTab);
 
   /*
-    Dos filas con el mismo número rompen cosas que no se ven hasta mucho
-    después: el importe se guarda contra el número, así que se pisarían el
-    precio, y en la hoja la segunda se descarta al leer.
+    El mismo número otra vez es casi siempre un número mal tecleado, así que
+    por defecto no pasa. Pero a veces es adrede: una comanda que se entrega
+    en dos veces se apunta como dos filas con el mismo número, cada una con
+    su día y su importe. Eso lo dice quien la crea con `afegirPart`, y es
+    una decisión suya, no algo que se pueda adivinar aquí.
   */
-  if (snapshot.orders.some((order) => order.id === dades.id)) {
+  const partsJa = snapshot.orders.filter((order) => order.codi === dades.id).length;
+  if (partsJa > 0 && !dades.afegirPart) {
     throw new ErrorAccionable(
       `Ja hi ha una comanda amb el número "${dades.id}" al full ${snapshot.sheetTab}.`,
     );
   }
 
+  /*
+    Una parte hereda de la primera lo que no cambia entre viajes: el cliente,
+    la dirección, la población y el teléfono.
+
+    Es el mismo sitio —la comanda se parte porque no cabe todo en un viaje,
+    no porque vaya a dos lados—, y sin dirección la parte nueva no se puede
+    navegar: la tarjeta esconde el botón. Copiarla aquí es también no volver
+    a pagar geocoding por una dirección que la app ya resolvió: se traen las
+    coordenadas cacheadas con ella.
+
+    Lo que SÍ cambia en cada viaje —medidas y notas— no se hereda: es lo que
+    distingue una parte de otra.
+  */
+  const primera = snapshot.orders.find((order) => order.codi === dades.id);
+  const hereda = (propi: string | undefined, delPare: string | null | undefined) =>
+    propi && propi.trim() !== "" ? propi : (delPare ?? "");
+  const coords =
+    dades.address && dades.address.trim() !== "" ? null : primera;
+
   const valores = filaNovaComanda(
     {
       id: dades.id,
-      customer: dades.customer ?? "",
-      address: dades.address ?? "",
-      city: dades.city ?? "",
-      phone: dades.phone ?? "",
+      customer: hereda(dades.customer, primera?.customer),
+      address: hereda(dades.address, primera?.address),
+      city: hereda(dades.city, primera?.city),
+      phone: hereda(dades.phone, primera?.phone),
+      lat: coords?.lat !== null && coords?.lat !== undefined ? String(coords.lat) : "",
+      lng: coords?.lng !== null && coords?.lng !== undefined ? String(coords.lng) : "",
       measures: dades.measures ?? "",
       notes: dades.notes ?? "",
       // El día de hoy, como lo escribe la oficina: dd/mm/aaaa.
@@ -638,8 +533,8 @@ export type DadesComanda = Partial<
  * —un teléfono mal apuntado, un portal cambiado— que antes solo se podía
  * arreglar en la hoja.
  *
- * Escribe en la fila de la comanda, que con varios bultos es la primera: es
- * la que lleva la dirección y el cliente, las demás solo las medidas.
+ * Escribe en la fila de esa entrega y solo en esa: las otras filas con el
+ * mismo número son otros viajes y tienen sus propios datos.
  *
  * Necesita cobertura y no pasa por la cola. La cola es para lo que se marca
  * en la calle —entregado, incidencia, importe— y se sube tal cual llega.
