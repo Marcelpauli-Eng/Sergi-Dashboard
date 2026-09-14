@@ -497,7 +497,9 @@ function mapaColumnes(full) {
 function normalitzar(text) {
   return String(text || "")
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    // Los acentos, escritos con su código: este archivo se copia y se pega
+    // a mano, y unos acentos sueltos no sobreviven a todos los portapapeles.
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
 }
