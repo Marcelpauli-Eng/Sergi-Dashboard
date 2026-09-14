@@ -564,12 +564,31 @@ export async function actualitzarComanda(
   return true;
 }
 
+/** Lo que se guarda de una comanda ya geocodificada. */
+export interface CoordCacheada {
+  orderId: string;
+  /** La dirección que se le preguntó a Google, tal cual. */
+  address: string;
+  /** `null` las dos cuando Google no reconoció la dirección. */
+  lat: number | null;
+  lng: number | null;
+}
+
 /**
  * Persiste en el Sheet las coordenadas recién geocodificadas, para no volver
  * a pagar geocoding por la misma dirección nunca más.
+ *
+ * Junto a ellas va la dirección de la que salieron. Es lo que las caduca
+ * cuando alguien corrige el portal: al leer la hoja se comparan las dos y,
+ * si no coinciden, las coordenadas se tiran y se vuelven a buscar. Ver
+ * `construirComandes`.
+ *
+ * Las direcciones que Google no reconoce se guardan igual, sin coordenadas:
+ * dejan constancia de que ya se preguntó y evitan volver a preguntar lo
+ * mismo en cada sincronización.
  */
 export async function cacheCoordinates(
-  coords: { orderId: string; lat: number; lng: number }[],
+  coords: CoordCacheada[],
   snapshot: SheetSnapshot,
 ): Promise<void> {
   if (coords.length === 0) return;
@@ -581,8 +600,12 @@ export async function cacheCoordinates(
   for (const coord of coords) {
     const order = byId.get(coord.orderId);
     if (!order) continue;
-    updates.push({ rowNumber: order.rowNumber, column: "lat", value: coord.lat });
-    updates.push({ rowNumber: order.rowNumber, column: "lng", value: coord.lng });
+    // En todas las filas de la comanda, que es lo que dice `rowNumbers`.
+    for (const fila of order.rowNumbers) {
+      updates.push({ rowNumber: fila, column: "lat", value: coord.lat ?? "" });
+      updates.push({ rowNumber: fila, column: "lng", value: coord.lng ?? "" });
+      updates.push({ rowNumber: fila, column: "geoAddress", value: coord.address });
+    }
   }
 
   await writeCells(updates, headerMap, snapshot.sheetTab);

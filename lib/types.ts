@@ -97,6 +97,18 @@ export interface Order {
   lat: number | null;
   lng: number | null;
   /**
+   * La dirección de la que salieron esas coordenadas.
+   *
+   * Es lo que permite saber si siguen valiendo: cuando no coincide con la
+   * dirección que hay hoy en la fila, alguien la ha corregido y las
+   * coordenadas ya no llevan donde hay que ir. Ver `construirComandes`, que
+   * las tira en ese caso, y `geocodificarPendents`, que las rehace.
+   *
+   * Apuntada SIN coordenadas significa que Google no reconoció esa
+   * dirección: no se le vuelve a preguntar hasta que cambie.
+   */
+  geoAddress: string | null;
+  /**
    * Fila real dentro de la hoja (1-indexed, tal y como la numera Sheets).
    * Se usa para escribir el estado de vuelta. Nunca se envía al cliente:
    * se recalcula releyendo la hoja justo antes de escribir, porque la oficina

@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { Check, Navigation, Pencil, Phone, TriangleAlert, X } from "lucide-react";
 import type { Stop } from "@/lib/types";
 import { formatDistance, formatDuration, telHref } from "@/lib/format";
-import { appNavUrlFor, navUrlFor, obrirMaps } from "@/lib/maps";
+import { adrecaCompleta, appNavUrlFor, navUrlFor, obrirMaps } from "@/lib/maps";
 import EditarComanda from "@/components/editar-comanda";
 import { euros, parseImporte } from "@/lib/factura";
 import { cn } from "@/lib/utils";
@@ -581,9 +581,16 @@ export default function StopCard({
               )}
             </div>
 
-            {/* Selector de app de navegación, como el action sheet de iOS. */}
+            {/*
+              Selector de app de navegación, como el action sheet de iOS.
+
+              `z-[200]`, como el de editar: por debajo se quedaba tapado por
+              el velo de la previsualización (`z-[150]`), que también cuelga
+              del body. Desde la bossa el botón parecía muerto —la hoja se
+              abría detrás del velo— y el toque siguiente cerraba la ficha.
+            */}
             {showNav && mounted && createPortal(
-              <div className="fixed inset-0 z-50 flex flex-col justify-end">
+              <div className="fixed inset-0 z-[200] flex flex-col justify-end">
                 <div
                   className="absolute inset-0 animate-fade-in bg-black/40 backdrop-blur-sm"
                   onClick={() => setShowNav(false)}
@@ -602,7 +609,11 @@ export default function StopCard({
 
                   <div className="flex flex-col overflow-hidden rounded-xl bg-[#2c2c2e]">
                     <a
-                      href={stop.lat ? `http://maps.apple.com/?daddr=${stop.lat},${stop.lng}&dirflg=d` : `http://maps.apple.com/?daddr=${encodeURIComponent(stop.address)}&dirflg=d`}
+                      href={
+                        stop.lat !== null && stop.lng !== null
+                          ? `https://maps.apple.com/?daddr=${stop.lat},${stop.lng}&dirflg=d`
+                          : `https://maps.apple.com/?daddr=${encodeURIComponent(adrecaCompleta(stop))}&dirflg=d`
+                      }
                       target="_blank" rel="noopener noreferrer"
                       className="border-b border-white/10 px-4 py-3.5 text-[17px] text-[#0a84ff] transition-colors active:bg-[#3a3a3c]"
                     >
@@ -623,7 +634,11 @@ export default function StopCard({
                       Google Maps
                     </button>
                     <a
-                      href={stop.lat ? `https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes` : `https://waze.com/ul?q=${encodeURIComponent(stop.address)}&navigate=yes`}
+                      href={
+                        stop.lat !== null && stop.lng !== null
+                          ? `https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes`
+                          : `https://waze.com/ul?q=${encodeURIComponent(adrecaCompleta(stop))}&navigate=yes`
+                      }
                       target="_blank" rel="noopener noreferrer"
                       className="px-4 py-3.5 text-[17px] text-[#0a84ff] transition-colors active:bg-[#3a3a3c]"
                     >

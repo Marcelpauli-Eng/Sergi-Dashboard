@@ -143,4 +143,78 @@ const fila = (id: string, client = "", adreca = "", mides = "") => [
   assert.equal(skipped[0].rowNumber, 2);
 }
 
+// ── Coordenadas cacheadas: valen mientras la dirección sea la misma ──────
+//
+// Las coordenadas mandan sobre el texto al navegar. Si alguien corrige el
+// portal y se quedan las viejas, el transportista va al sitio de antes sin
+// que nada lo avise, así que al leer se comparan con la dirección de la que
+// salieron y se tiran cuando ya no coinciden.
+{
+  const CAP = ["Nº Comanda", "Client", "Adreça", "Població", "_lat", "_lng", "_geo"];
+  const geo = (adreca: string, poble: string, lat: string, lng: string, geoAdreca: string) =>
+    ["748", "CASA", adreca, poble, lat, lng, geoAdreca];
+
+  // La misma dirección: las coordenadas se quedan.
+  {
+    const { orders } = construirComandes([
+      CAP,
+      geo("Carrer Cabrerés, 2", "08500 Vic", "41.93", "2.25", "Carrer Cabrerés, 2, 08500 Vic"),
+    ]);
+    assert.equal(orders[0].lat, 41.93);
+    assert.equal(orders[0].lng, 2.25);
+  }
+
+  // Escrita de otra forma —acentos, mayúsculas, espacios— sigue siendo la
+  // misma: volver a geocodificar por eso es pagar por acabar en el mismo
+  // sitio.
+  {
+    const { orders } = construirComandes([
+      CAP,
+      geo("CARRER CABRERES, 2", "08500 VIC", "41.93", "2.25", "Carrer Cabrerés, 2, 08500 Vic"),
+    ]);
+    assert.equal(orders[0].lat, 41.93, "un acento no mueve el portal");
+  }
+
+  // Cambia el número del portal: caducadas.
+  {
+    const { orders } = construirComandes([
+      CAP,
+      geo("Carrer Cabrerés, 8", "08500 Vic", "41.93", "2.25", "Carrer Cabrerés, 2, 08500 Vic"),
+    ]);
+    assert.equal(orders[0].lat, null, "la dirección ha cambiado: las coordenadas no valen");
+    assert.equal(orders[0].lng, null);
+  }
+
+  // Cambia solo la población, que es la mitad que desambigua el pueblo.
+  {
+    const { orders } = construirComandes([
+      CAP,
+      geo("Carrer Cabrerés, 2", "08240 Manresa", "41.93", "2.25", "Carrer Cabrerés, 2, 08500 Vic"),
+    ]);
+    assert.equal(orders[0].lat, null, "otro pueblo es otro sitio");
+  }
+
+  // Filas de antes de la columna: sin dirección apuntada, sus coordenadas se
+  // respetan. Nadie ha tocado nada y no hay con qué comparar.
+  {
+    const { orders } = construirComandes([
+      ["Nº Comanda", "Client", "Adreça", "Població", "_lat", "_lng"],
+      ["748", "CASA", "Carrer Cabrerés, 2", "08500 Vic", "41.93", "2.25"],
+    ]);
+    assert.equal(orders[0].lat, 41.93);
+    assert.equal(orders[0].geoAddress, null);
+  }
+
+  // La dirección apuntada sin coordenadas es "ya se preguntó y Google no la
+  // conoce": queda a la vista para que no se vuelva a preguntar.
+  {
+    const { orders } = construirComandes([
+      CAP,
+      geo("Carrer Inventat, 99", "08500 Vic", "", "", "Carrer Inventat, 99, 08500 Vic"),
+    ]);
+    assert.equal(orders[0].lat, null);
+    assert.equal(orders[0].geoAddress, "Carrer Inventat, 99, 08500 Vic");
+  }
+}
+
 console.log("✓ lib/sheet-rows.ts — cada fila del full és una entrega");
