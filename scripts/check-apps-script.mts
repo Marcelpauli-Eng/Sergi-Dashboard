@@ -101,6 +101,31 @@ assert.equal(
   "una adreça normal no pot semblar un punt",
 );
 
+/* ── Y que el panel no tenga la sintaxis rota ────────────────────────────── */
+/*
+  El HTML del panel no lo compila nadie: si le falta una llave, Apps Script
+  no dice nada y el panel sale EN BLANCO, sin error, sin pista. Esto lo lee,
+  saca el javascript de dentro y comprueba que al menos se puede parsear.
+*/
+{
+  const html = readFileSync(join(arrel, "apps-script/Barra.html"), "utf8");
+  const dins = html.match(/<script>([\s\S]*)<\/script>/);
+  assert.ok(dins, "el panell ha de portar el seu <script>");
+
+  assert.doesNotThrow(
+    () => new Function(dins![1]),
+    "el javascript del panell no es pot ni parsejar: sortiria en blanc",
+  );
+
+  // Y que estén las piezas que el .gs llama por su nombre.
+  for (const funcio of ["filaActual", "buscarAdreces", "desarAdreca", "desarPunt"]) {
+    assert.ok(
+      dins![1].includes("." + funcio + "("),
+      `el panell ha de cridar ${funcio}, que és al .gs`,
+    );
+  }
+}
+
 console.log(
   `✓ apps-script/Coordenades.gs — ${CASOS.length} casos, igual que lib/coordenades.ts`,
 );
