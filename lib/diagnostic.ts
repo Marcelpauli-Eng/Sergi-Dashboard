@@ -189,20 +189,46 @@ export async function comprobarConfiguracion(timezone: string): Promise<Comproba
           ? ` ${bultos.length} comandas llevan más de un bulto (${deMas} filas juntadas).`
           : "";
 
+      /*
+        Las comandas partidas en varias entregas, con la fila de cada parte.
+
+        Es la pregunta que no se puede contestar mirando la pantalla: "en la
+        hoja hay dos 748 y a mí solo me sale uno". Aquí se ve si la app leyó
+        las dos partes o si juntó la segunda como un bulto de la primera,
+        que es lo que pasa cuando la fila no trae ni dirección ni la marca
+        `_part`. Ver `construirComandes` en lib/sheet-rows.ts.
+      */
+      const partides = new Map<string, number[]>();
+      for (const order of hoja.orders) {
+        if (order.parts <= 1) continue;
+        const files = partides.get(order.codi) ?? [];
+        files.push(order.rowNumber);
+        partides.set(order.codi, files);
+      }
+      const resumenPartides =
+        partides.size > 0
+          ? ` ${partides.size} ${partides.size === 1 ? "comanda va partida" : "comandas van partidas"} en varias entregas: ` +
+            [...partides]
+              .slice(0, 6)
+              .map(([codi, files]) => `${codi} (${files.length} partes, filas ${files.join(" y ")})`)
+              .join("; ") +
+            (partides.size > 6 ? "…" : ".")
+          : "";
+
       salida.push(
         hoja.skipped.length === 0
           ? {
               id: "filas",
               titulo: `Filas de "${hoja.sheetTab}"`,
               estado: "ok",
-              detalle: `Se leen las ${hoja.orders.length} comandas.${resumenBultos}`,
+              detalle: `Se leen las ${hoja.orders.length} comandas.${resumenBultos}${resumenPartides}`,
             }
           : {
               id: "filas",
               titulo: `Filas de "${hoja.sheetTab}"`,
               estado: "aviso",
               detalle:
-                `${hoja.orders.length} comandas leídas.${resumenBultos} ` +
+                `${hoja.orders.length} comandas leídas.${resumenBultos}${resumenPartides} ` +
                 `${hoja.skipped.length} filas no se pueden leer: ` +
                 hoja.skipped
                   .slice(0, 12)
@@ -211,8 +237,9 @@ export async function comprobarConfiguracion(timezone: string): Promise<Comproba
                 (hoja.skipped.length > 12 ? "…" : "."),
               arreglo:
                 "Son filas de la hoja de la oficina, no de la app. Cada una dice " +
-                "qué le falta: normalmente un nº de comanda repetido en dos " +
-                "entregas distintas, o una fila sin dirección.",
+                "qué le falta: normalmente un nº de comanda vacío. Un número " +
+                "repetido ya NO se descarta: es una comanda partida en varias " +
+                "entregas y sale como tal.",
             },
       );
     } catch {
