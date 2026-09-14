@@ -53,6 +53,33 @@ corre dentro del script (14/09/2026, 1.259 filas).
 - 1.037 filas no tienen `_lat`: el punto está por calcular en casi toda la
   hoja.
 
+## ¿Y sin API?
+
+Sí. El panel tiene dos vías y **la segunda no necesita ninguna clave**:
+
+| | Necesita | Cuándo |
+|---|---|---|
+| Escribir y elegir de la lista | Places API (New) | Lo normal: es un campo y ya está. |
+| **Pegar de Google Maps** | **Nada** | Siempre, y sobre todo cuando Google no encuentra el sitio. |
+
+Pegar significa: abrir Google Maps como siempre, buscar el sitio, copiar el
+enlace (o botón derecho sobre el mapa → copiar las coordenadas) y pegarlo en
+el recuadro de abajo del panel. Se guarda `_lat`, `_lng` y `_geo = portal`.
+**La dirección escrita no se toca**: quien pega un punto está diciendo dónde
+está la casa, no cómo se llama la calle.
+
+Lo único que el script le pide a Google en esta vía es seguir el enlace corto
+(`maps.app.goo.gl`) hasta el largo, que es una visita normal a una página, no
+una llamada a ninguna API.
+
+Esto **ya se estaba haciendo a mano**: en la hoja hay filas con las
+coordenadas escritas dentro de la columna de la dirección, donde no las lee
+nadie. Ver `lib/coordenades.ts`, que también las sabe separar.
+
+Si activas Places, ten en cuenta que ya tienes una clave de Google con
+facturación —la app geocodifica y calcula rutas con ella—: activar Places es
+marcar una API más en el mismo proyecto, no montar nada nuevo.
+
 ## Cómo probarlo
 
 1. **Haz una copia de la hoja**: Archivo → Hacer una copia. Trabaja en la
@@ -60,16 +87,21 @@ corre dentro del script (14/09/2026, 1.259 filas).
 2. En la copia: Extensiones → Apps Script.
 3. Pega `Codi.gs` en el archivo `Código.gs` que sale por defecto.
 4. Archivo nuevo → HTML, llámalo `Barra` (sin `.html`), y pega `Barra.html`.
-5. Configuración del proyecto → Propiedades del script → añade
-   `PLACES_API_KEY` con una clave de Google Cloud que tenga activada la
-   **Places API (New)**.
+5. Archivo nuevo → Script, llámalo `Coordenades`, y pega `Coordenades.gs`.
+   Esto es lo que lee lo que se pega de Maps: **sin esto, la vía sin API no
+   funciona**.
+6. *(Solo para la búsqueda con lista.)* Configuración del proyecto →
+   Propiedades del script → añade `PLACES_API_KEY` con una clave de Google
+   Cloud que tenga activada la **Places API (New)**.
    - Que sea **otra clave** que la de la app, restringida a Places: así, si
      un día hay que revocarla, no se cae la app.
-6. Activadores (el reloj de la izquierda) → Añadir activador:
+   - Sin esta clave el panel sigue sirviendo: la lista avisa de que no está
+     activada y se usa la vía de pegar.
+7. Activadores (el reloj de la izquierda) → Añadir activador:
    - Función: `alEditar`
    - Evento: *En editar* (de hoja de cálculo)
    - Esto es lo que marca en ámbar las direcciones escritas a mano.
-7. Recarga la hoja. Sale el menú **Adreces**.
+8. Recarga la hoja. Sale el menú **Adreces**.
 
 La primera vez pedirá permisos: son para leer y escribir en esa hoja y para
 llamar a Google Maps.
@@ -95,5 +127,8 @@ marca desaparece.
   la que lleva la dirección.
 - Escribir a mano y ver que se marca en ámbar y que se vacía el punto viejo.
 
+- La vía de pegar, con un enlace corto (`maps.app.goo.gl`) y con unas
+  coordenadas copiadas del mapa.
+
 Cuando esto esté probado, pegarlo en la hoja de verdad es repetir los pasos
-3 a 7 allí.
+3 a 8 allí.

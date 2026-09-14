@@ -17,13 +17,15 @@
     "check:schema": "node --no-warnings scripts/check-schema.mts",
     "check:format": "node --no-warnings scripts/check-format.mts",
     "check:ajustes": "node --no-warnings scripts/check-ajustes.mts",
-    "test": "npm run check:dates --silent && npm run check:format --silent && npm run check:cells --silent && npm run check:schema --silent && npm run check:factura --silent && npm run check:ajustes --silent && npm run check:outbox --silent && npm run check:importes --silent && npm run check:facturacio --silent && npm run check:informes --silent && npm run check:maps --silent && npm run check:llocs --silent && npm run check:pdf --silent",
+    "test": "npm run check:dates --silent && npm run check:format --silent && npm run check:cells --silent && npm run check:schema --silent && npm run check:factura --silent && npm run check:ajustes --silent && npm run check:outbox --silent && npm run check:importes --silent && npm run check:facturacio --silent && npm run check:informes --silent && npm run check:maps --silent && npm run check:llocs --silent && npm run check:coordenades --silent && npm run check:apps-script --silent && npm run check:pdf --silent",
     "migrar:imports": "node --no-warnings --env-file=.env.local scripts/migrar-imports.mts",
     "check:importes": "node --no-warnings scripts/check-importes.mts",
     "check:facturacio": "node --no-warnings scripts/check-facturacio.mts",
     "check:informes": "node --no-warnings scripts/check-informes.mts",
     "check:maps": "node --no-warnings scripts/check-maps.mts",
-    "check:llocs": "node --no-warnings scripts/check-llocs.mts"
+    "check:llocs": "node --no-warnings scripts/check-llocs.mts",
+    "check:coordenades": "node --no-warnings scripts/check-coordenades.mts",
+    "check:apps-script": "node --no-warnings scripts/check-apps-script.mts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.3.3",

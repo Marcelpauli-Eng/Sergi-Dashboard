@@ -23,8 +23,18 @@
  * Lo que NO hace: escribir en ninguna otra columna, borrar nada, ni tocar
  * filas que no sean la que está seleccionada.
  *
- * Hace falta una clave de Google con la "Places API (New)" activada, en
- * Configuració del projecte → Propietats de l'script → PLACES_API_KEY.
+ * Dos formas de poner el punto, y la segunda NO necesita ninguna API:
+ *
+ *   a) Buscar aquí dentro. Necesita una clave con la "Places API (New)"
+ *      activada, en Configuració del projecte → Propietats de l'script →
+ *      PLACES_API_KEY.
+ *
+ *   b) Pegar de Google Maps. Se abre Maps como siempre, se busca el sitio,
+ *      se copia el enlace (o las coordenadas con el botón derecho) y se
+ *      pega en el panel. Sin clave, sin facturación y sin activar nada:
+ *      esto solo lee lo que se pega. Y es lo que la oficina ya hacía a mano
+ *      —hay filas con las coordenadas escritas dentro de la dirección—,
+ *      pero yendo a parar a su columna.
  */
 
 /** El nombre del menú y del panel, en un sitio para no repetirlo. */
@@ -50,12 +60,29 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu(TITOL)
     .addItem("Cercar adreça…", "obrirPanell")
+    .addItem("Ajuda: com posar un punt", "ajuda")
     .addToUi();
 }
 
 function obrirPanell() {
   var panell = HtmlService.createHtmlOutputFromFile("Barra").setTitle(TITOL);
   SpreadsheetApp.getUi().showSidebar(panell);
+}
+
+/** Qué es cada cosa, para quien abre el menú y no sabe por dónde empezar. */
+function ajuda() {
+  SpreadsheetApp.getUi().alert(
+    TITOL,
+    "Per deixar una adreça exacta hi ha dues maneres, totes dues al panell " +
+      '"Cercar adreça…":\n\n' +
+      "1. ESCRIURE I TRIAR de la llista de Google.\n\n" +
+      "2. ENGANXAR de Google Maps: obre Maps, busca el lloc, copia l'enllaç " +
+      "(o fes botó dret al mapa → copia les coordenades) i enganxa'l a baix " +
+      "del panell. Aquesta no necessita cap clau ni cap API.\n\n" +
+      "La casella ambre vol dir que l'adreça està escrita a mà i encara no " +
+      "és un punt.",
+    SpreadsheetApp.getUi().ButtonSet.OK,
+  );
 }
 
 /**
@@ -211,6 +238,73 @@ function desarAdreca(fila, placeId, sessionToken) {
   if (columnes.geo) full.getRange(fila, columnes.geo).setValue("portal");
 
   return lloc;
+}
+
+/**
+ * Guarda el punto que se ha pegado de Google Maps. Sin API.
+ *
+ * Lo único que se le pide a Google es seguir el enlace corto cuando lo hay
+ * —`maps.app.goo.gl` no lleva las coordenadas dentro—, y eso es una visita
+ * normal a una página, no una llamada a ninguna API: no hace falta clave ni
+ * que nadie active nada.
+ *
+ * La dirección escrita NO se toca: quien pega un punto está diciendo dónde
+ * está la casa, no cómo se llama la calle. Lo que sí se hace es marcar la
+ * fila como comprobada y quitarle el ámbar.
+ */
+function desarPunt(fila, enganxat) {
+  var full = SpreadsheetApp.getActiveSheet();
+  var columnes = mapaColumnes(full);
+  if (!columnes.address) throw new Error('Aquest full no té columna "Adreça".');
+  if (!fila || fila < 2) throw new Error("Posa el cursor a la fila de la comanda.");
+
+  var text = String(enganxat || "").trim();
+  if (text === "") throw new Error("Enganxa l'enllaç o les coordenades de Google Maps.");
+
+  if (esEnllacCurt(text)) text = seguirEnllac(text);
+
+  var punt = puntDe(text);
+  if (!punt) {
+    throw new Error(
+      "Aquí no hi ha cap punt. Copia l'enllaç de Google Maps, o fes botó dret al mapa i copia les coordenades.",
+    );
+  }
+
+  columnes = assegurarColumnes(full, columnes);
+  full.getRange(fila, columnes.lat).setValue(punt.lat);
+  full.getRange(fila, columnes.lng).setValue(punt.lng);
+  // Sin ficha de Google no hay identificador de portal: se vacía, que quede
+  // claro que el punto viene de una persona y no de una dirección.
+  full.getRange(fila, columnes.placeId).setValue("");
+  /*
+    "portal" igual que si se hubiera elegido de la lista.
+
+    Lo ha señalado una persona en el mapa, que es tan exacto como se puede
+    ser. La app lo respeta y no lo vuelve a buscar — si pusiera otra cosa,
+    lo sustituiría por lo que dijera el geocodificador, que es justo lo que
+    se está corrigiendo.
+  */
+  full.getRange(fila, columnes.geo).setValue("portal");
+
+  var cel = full.getRange(fila, columnes.address);
+  netejarMarca(cel);
+
+  return { lat: punt.lat, lng: punt.lng, address: String(cel.getValue() || "") };
+}
+
+/**
+ * Sigue un enlace corto hasta el largo, que es el que lleva el punto.
+ *
+ * Sin seguir los redirecciones: lo que hace falta es la dirección a la que
+ * apunta, que viene en la cabecera, no la página entera.
+ */
+function seguirEnllac(url) {
+  var resposta = UrlFetchApp.fetch(url, {
+    followRedirects: false,
+    muteHttpExceptions: true,
+  });
+  var desti = (resposta.getHeaders()["Location"] || resposta.getHeaders()["location"] || "");
+  return desti || url;
 }
 
 /* ── Fontanería ─────────────────────────────────────────────────────────── */

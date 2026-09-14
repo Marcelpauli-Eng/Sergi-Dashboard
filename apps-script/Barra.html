@@ -66,6 +66,31 @@
       casella es marca en ambre fins que la triïs d'aquí.
     </p>
 
+    <!-- La segunda vía, y la única que no necesita clave de Google: pegar
+         lo que ya se tiene abierto en Maps. Va debajo y no arriba porque
+         buscar aquí es menos trabajo cuando funciona; esto es la salida
+         para cuando Google no encuentra el sitio —o cuando no hay API—. -->
+    <hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 16px 0 12px" />
+
+    <label for="enganxar" style="font-weight: 500">O enganxa de Google Maps</label>
+    <input
+      id="enganxar"
+      type="text"
+      placeholder="https://maps.app.goo.gl/… o 41.5719, 1.7834"
+      autocomplete="off"
+      style="margin-top: 6px"
+    />
+    <button id="desaPunt" style="
+      margin-top: 8px; width: 100%; padding: 8px; border: 0; border-radius: 6px;
+      background: #1a73e8; color: #fff; font-size: 13px; cursor: pointer;">
+      Desar el punt en aquesta fila
+    </button>
+    <p class="ajuda" style="margin-top: 8px">
+      Obre Google Maps, busca el lloc i copia l'enllaç — o fes botó dret
+      sobre el mapa i copia les coordenades. <b>Això no gasta cap API.</b>
+      L'adreça escrita no es toca: només es desa on és.
+    </p>
+
     <script>
       var cerca = document.getElementById("cerca");
       var llista = document.getElementById("llista");
@@ -160,6 +185,27 @@
           })
           .desarAdreca(fila, s.placeId, token);
       }
+
+      /* La otra vía: pegar. */
+      document.getElementById("desaPunt").onclick = function () {
+        if (!fila) return dir("Posa el cursor a la fila de la comanda", "error");
+        var text = document.getElementById("enganxar").value.trim();
+        if (!text) return dir("Enganxa l'enllaç o les coordenades", "error");
+
+        dir("Desant el punt…");
+        google.script.run
+          .withSuccessHandler(function (punt) {
+            document.getElementById("enganxar").value = "";
+            dir(
+              "Punt desat a la fila " + fila + ": " + punt.lat + ", " + punt.lng,
+              "fet",
+            );
+          })
+          .withFailureHandler(function (e) {
+            dir(e.message || "No s'ha pogut desar el punt", "error");
+          })
+          .desarPunt(fila, text);
+      };
 
       /* Lo que devuelve Google se mete como HTML para poder poner la segunda
          línea en gris: hay que escaparlo, que son nombres de sitios escritos
