@@ -135,11 +135,12 @@
             infoFila.textContent = info.resum;
             infoFila.style.background = info.aAdreca ? "#e6f4ea" : "#e8f0fe";
 
-            // Solo al CAMBIAR de casilla: si no, cada segundo borraría lo
-            // que se está escribiendo.
-            var clau = info.fila + "|" + info.aAdreca;
-            if (clau === ultimaFila) return;
-            ultimaFila = clau;
+            /* Solo cuando la información es NUEVA: si no, cada segundo
+               borraría lo que alguien esté escribiendo aquí. Una dirección
+               recién escrita en la casilla cuenta como nueva aunque sea la
+               misma fila, porque lleva su hora dentro. */
+            if (info.versio === ultimaFila) return;
+            ultimaFila = info.versio;
 
             llista.innerHTML = "";
             dir("");
@@ -148,6 +149,10 @@
               cerca.value = info.adreca || "";
               cerca.focus();
               cerca.select();
+              /* Y si viene de escribir en la casilla, se busca sola: es lo
+                 que hace que al teclear la dirección en la hoja salgan aquí
+                 las sugerencias sin tener que repetirla. */
+              if (info.buscar) buscar(cerca.value);
             }
           })
           .filaActual();
@@ -159,13 +164,18 @@
       // preguntas. Es lo único que corre en bucle aquí.
       setInterval(mirarFila, 1000);
 
-      cerca.addEventListener("input", function () {
+      /**
+       * Pregunta a Google por lo que hay escrito.
+       *
+       * Medio segundo de espera: cada búsqueda se paga y cada tecla
+       * dispararía una, así que se espera a que quien escribe pare.
+       */
+      function buscar(text) {
         clearTimeout(espera);
         llista.innerHTML = "";
-        var text = cerca.value.trim();
+        text = String(text || "").trim();
         if (text.length < 3) return dir("");
 
-        // Medio segundo: cada llamada se paga y cada tecla dispararía una.
         espera = setTimeout(function () {
           dir("Buscant…");
           google.script.run
@@ -175,6 +185,10 @@
             })
             .buscarAdreces(text, token);
         }, 500);
+      }
+
+      cerca.addEventListener("input", function () {
+        buscar(cerca.value);
       });
 
       function pintar(suggeriments) {

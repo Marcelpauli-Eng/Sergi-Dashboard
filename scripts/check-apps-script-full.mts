@@ -193,18 +193,35 @@ function carregar(full: ReturnType<typeof fullFals>) {
   const PropertiesService = {
     getScriptProperties: () => ({ getProperty: () => "CLAU-DE-MENTIDA" }),
   };
+  /* La caché del documento: es donde el disparador deja apuntada la
+     dirección recién escrita para que el panel la recoja. */
+  const memoria = new Map<string, string>();
+  const CacheService = {
+    getDocumentCache: () => ({
+      put: (clau: string, valor: string) => memoria.set(clau, valor),
+      get: (clau: string) => memoria.get(clau) ?? null,
+    }),
+  };
 
   return new Function(
     "SpreadsheetApp",
     "PropertiesService",
     "UrlFetchApp",
     "HtmlService",
+    "CacheService",
     `${codi}\nreturn { desarAdreca, desarPunt, alEditar, filaActual, mapaColumnes, buscarAdreces };`,
-  )(SpreadsheetApp, PropertiesService, googleFals(), {}) as {
+  )(SpreadsheetApp, PropertiesService, googleFals(), {}, CacheService) as {
     desarAdreca: (fila: number, placeId: string, token: string) => { address: string };
     desarPunt: (fila: number, text: string) => { lat: number; lng: number };
     alEditar: (e: unknown) => void;
-    filaActual: () => { fila: number; resum: string; adreca: string; aAdreca: boolean };
+    filaActual: () => {
+      fila: number;
+      resum: string;
+      adreca: string;
+      aAdreca: boolean;
+      buscar?: boolean;
+      versio: string;
+    };
     mapaColumnes: (full: unknown) => Record<string, number>;
     buscarAdreces: (text: string, token: string) => { placeId: string }[];
   };
@@ -371,6 +388,49 @@ function carregar(full: ReturnType<typeof fullFals>) {
 
   full._seleccionar(1, 3); // en la cabecera
   assert.equal(gs.filaActual().fila, 0, "la capçalera no és cap comanda");
+}
+
+/* ── Escribir en la casilla: el panel se queda en ESA fila ──────────────── */
+/*
+  El caso que fallaba de verdad: al dar Enter, el cursor baja una fila. Si
+  el panel solo mirara el cursor, cargaría la fila de abajo —vacía— y la
+  dirección recién escrita se quedaría sin comprobar, que es justo la que
+  hay que dejar exacta.
+*/
+{
+  const full = fullFals();
+  const gs = carregar(full);
+
+  // Escribe en la dirección de la fila 3 y da Enter: el cursor baja a la 4.
+  full._cel(3, 3).valor = "Carrer Nou, 12";
+  gs.alEditar({ range: full.getRange(3, 3) });
+  full._seleccionar(4, 3);
+
+  const despres = gs.filaActual();
+  assert.equal(despres.fila, 3, "el panell es queda a la fila que s'acaba d'escriure");
+  assert.equal(despres.adreca, "Carrer Nou, 12", "amb el text que s'hi ha posat");
+  assert.equal(despres.aAdreca, true, "i es posa en marxa sol");
+  assert.equal(despres.buscar, true, "i busca sense esperar que ningú teclegi al panell");
+  assert.ok(despres.resum.includes("SAVELIY LABUTIN"), "dient de quin client és");
+
+  /*
+    Y la versión cambia con cada edición, aunque sea la misma fila: es lo
+    que hace que el panel se entere. Sin esto, escribir dos direcciones
+    seguidas en la misma casilla solo recargaría el panel la primera vez.
+  */
+  const abans = despres.versio;
+  full._cel(3, 3).valor = "Carrer Nou, 14";
+  gs.alEditar({ range: full.getRange(3, 3) });
+  assert.notEqual(gs.filaActual().versio, abans, "cada edició és informació nova");
+
+  /*
+    Pero si el cursor se va a OTRA casilla de dirección, manda el cursor:
+    es que alguien ha ido allí a propósito.
+  */
+  full._seleccionar(2, 3);
+  const altra = gs.filaActual();
+  assert.equal(altra.fila, 2, "el cursor mana quan és a una altra adreça");
+  assert.equal(altra.buscar, false, "i aquí no es busca sol: ningú ho ha demanat");
 }
 
 /* ── La lista de sugerencias ────────────────────────────────────────────── */

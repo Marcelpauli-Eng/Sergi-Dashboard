@@ -162,10 +162,58 @@ function alEditar(e) {
     puede —depende de quién esté editando—, y si no se puede, lo que NO debe
     pasar es que se pierda el ámbar, que es lo importante de esta función.
   */
+  apuntarEdicio(e.range.getRow(), text);
+
   try {
     obrirPanell();
   } catch (error) {
     // Sin ruido: el menú "Adreces" sigue estando para abrirlo a mano.
+  }
+}
+
+/**
+ * Cuántos segundos vale una dirección recién escrita.
+ *
+ * Lo justo para que el panel la recoja al abrirse. Pasado ese rato, manda
+ * otra vez el cursor: si no, el panel se quedaría clavado en una fila que
+ * ya nadie está mirando.
+ */
+var SEGONS_EDICIO = 30;
+
+/**
+ * Apunta lo que se acaba de escribir, para que el panel lo recoja.
+ *
+ * Hace falta porque al dar Enter el cursor SALTA a la fila de abajo: sin
+ * esto, el panel cargaba la fila siguiente —vacía— en vez de la que se
+ * acaba de escribir, que es justo la que hay que dejar exacta.
+ *
+ * En la caché del documento y no en las propiedades del script porque esto
+ * lo escribe el disparador —que corre a nombre de quien lo instaló— y lo
+ * lee el panel —que corre a nombre de quien está mirando la hoja—. La
+ * caché del documento la comparten los dos; las propiedades de usuario, no.
+ */
+function apuntarEdicio(fila, text) {
+  try {
+    CacheService.getDocumentCache().put(
+      "ultimaEdicio",
+      JSON.stringify({ fila: fila, text: text, quan: Date.now() }),
+      SEGONS_EDICIO,
+    );
+  } catch (error) {
+    // Sin caché el panel sigue yendo detrás del cursor, como antes.
+  }
+}
+
+/** Lo último que se escribió en la columna de dirección, si es reciente. */
+function edicioRecent() {
+  try {
+    var cru = CacheService.getDocumentCache().get("ultimaEdicio");
+    if (!cru) return null;
+    var dades = JSON.parse(cru);
+    if (Date.now() - dades.quan > SEGONS_EDICIO * 1000) return null;
+    return dades;
+  } catch (error) {
+    return null;
   }
 }
 
@@ -189,11 +237,35 @@ function netejarMarca(rang) {
 function filaActual() {
   var full = SpreadsheetApp.getActiveSheet();
   var rang = full.getActiveRange();
-  var fila = rang.getRow();
   var columnes = mapaColumnes(full);
+  if (!columnes.address) {
+    return { fila: 0, resum: "Aquest full no té columna d'Adreça", aAdreca: false, versio: "cap" };
+  }
 
-  if (fila < 2 || !columnes.address) {
-    return { fila: 0, resum: "Posa el cursor a la fila de la comanda", aAdreca: false };
+  var fila = rang.getRow();
+  var alCursor = rang.getColumn() === columnes.address && fila >= 2;
+
+  /*
+    Manda lo que se acaba de escribir, no dónde está el cursor.
+
+    Al dar Enter el cursor baja una fila —y cae en OTRA casilla de
+    dirección—, así que mirando solo el cursor el panel cargaba la fila de
+    abajo, vacía, y la dirección recién escrita se quedaba sin comprobar:
+    justo la que hay que dejar exacta.
+
+    Cómo se distingue el salto del Enter de irse a otra fila a propósito:
+    por dónde ha caído el cursor. Justo debajo de lo que se acaba de
+    escribir —o sin moverse— es el salto. En cualquier otro sitio es que
+    alguien ha ido allí queriendo, y entonces manda el cursor.
+  */
+  var recent = edicioRecent();
+  var esElSalt =
+    recent && (fila === recent.fila || fila === recent.fila + 1 || !alCursor);
+  var edicio = esElSalt ? recent : null;
+  if (edicio) fila = edicio.fila;
+
+  if (fila < 2) {
+    return { fila: 0, resum: "Posa el cursor a la fila de la comanda", aAdreca: false, versio: "cap" };
   }
 
   var valors = full.getRange(fila, 1, 1, full.getLastColumn()).getValues()[0];
@@ -206,10 +278,24 @@ function filaActual() {
     // cuando lo que se está comprobando es "¿es esta la fila?".
     resum: "Fila " + fila + (client ? " — " + client : "") + (adreca ? " · " + adreca : " · sense adreça"),
     adreca: adreca,
-    /* Si el cursor está justo en la casilla de la dirección. Entonces el
-       panel se pone en marcha solo; si está en otra columna, se queda
-       quieto para no robar el teclado a quien está escribiendo medidas. */
-    aAdreca: rang.getColumn() === columnes.address,
+    /* Si el panel se tiene que poner en marcha: el cursor está en la casilla
+       de la dirección, o se acaba de escribir una. En otra columna se queda
+       quieto, que no le robe el teclado a quien escribe medidas. */
+    aAdreca: alCursor || !!edicio,
+    /* Si hay que buscar solo, sin esperar a que nadie teclee en el panel.
+       Es lo que hace que al escribir la dirección en la casilla salgan las
+       sugerencias sin más. */
+    buscar: !!edicio,
+    /*
+      Qué versión de la información es esta.
+
+      El panel solo se recarga cuando cambia: así no borra lo que alguien
+      esté escribiendo en él cada vez que pregunta. Una edición nueva lleva
+      dentro su hora Y el texto, así que cuenta como información distinta
+      aunque sea la misma fila —y aunque las dos se escriban en el mismo
+      segundo, que la hora sola no las distinguiría—.
+    */
+    versio: edicio ? "e" + edicio.quan + "|" + edicio.text : "c" + fila,
   };
 }
 
