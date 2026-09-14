@@ -41,6 +41,43 @@ export function haversine(a: Coord, b: Coord): number {
 // Geocoding
 // ─────────────────────────────────────────────────────────────────────────
 
+/** Lo que Google sabe de una dirección, con lo fino que hila cada respuesta. */
+export interface GeocodeResult extends Coord {
+  /**
+   * Si el punto es el portal y no el centro del pueblo.
+   *
+   * Google siempre contesta algo: cuando no encuentra el número, o la calle,
+   * devuelve el centroide de la población y lo marca como aproximado. Ese
+   * punto es el que mandaba al transportista "al pueblo" en vez de a la
+   * calle, así que aquí se distingue para no guardarlo como si fuera bueno.
+   */
+  precise: boolean;
+  /**
+   * El identificador del sitio en Google. Es lo único que señala un portal
+   * sin ambigüedad posible: navegando con él, Maps no vuelve a interpretar
+   * la dirección por su cuenta.
+   */
+  placeId: string | null;
+}
+
+/**
+ * Qué tipos de resultado son "el pueblo" y no "la calle".
+ *
+ * Google los devuelve en `results[].types`. Si el más específico que sabe
+ * decir es uno de estos, no tiene el portal.
+ */
+const TIPOS_IMPRECISOS = new Set([
+  "locality",
+  "sublocality",
+  "postal_code",
+  "administrative_area_level_1",
+  "administrative_area_level_2",
+  "administrative_area_level_3",
+  "political",
+  "country",
+  "neighborhood",
+]);
+
 /**
  * Convierte una dirección en coordenadas.
  *
@@ -48,7 +85,9 @@ export function haversine(a: Coord, b: Coord): number {
  * apareciendo en la lista (el transportista puede navegar por texto) pero
  * queda fuera del cálculo de ruta.
  */
-export async function geocodeAddress(address: string): Promise<Coord | null> {
+export async function geocodeAddress(
+  address: string,
+): Promise<GeocodeResult | null> {
   const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
   url.searchParams.set("address", address);
   url.searchParams.set("key", env.google.mapsApiKey);
@@ -61,12 +100,37 @@ export async function geocodeAddress(address: string): Promise<Coord | null> {
 
   const data = (await response.json()) as {
     status: string;
-    results?: { geometry: { location: { lat: number; lng: number } } }[];
+    results?: {
+      geometry: { location: { lat: number; lng: number }; location_type?: string };
+      place_id?: string;
+      types?: string[];
+      partial_match?: boolean;
+    }[];
   };
 
   if (data.status !== "OK" || !data.results?.length) return null;
-  const { lat, lng } = data.results[0].geometry.location;
-  return { lat, lng };
+
+  const result = data.results[0];
+  const { lat, lng } = result.geometry.location;
+
+  /*
+    Tres señales, y basta con que falle una para no fiarse:
+
+     - `partial_match`: Google ha tenido que inventarse parte de lo que se le
+       pidió (típico cuando el número no existe en esa calle).
+     - `location_type: APPROXIMATE`: el punto es un centroide, no un portal.
+       "ROOFTOP" es el tejado; "RANGE_INTERPOLATED" y "GEOMETRIC_CENTER" son
+       el tramo de calle, que para repartir sirve.
+     - `types`: si lo más fino que sabe decir es "locality", lo que ha
+       devuelto es el pueblo entero.
+  */
+  const tipoMasEspecifico = result.types?.[0];
+  const precise =
+    result.partial_match !== true &&
+    result.geometry.location_type !== "APPROXIMATE" &&
+    (tipoMasEspecifico === undefined || !TIPOS_IMPRECISOS.has(tipoMasEspecifico));
+
+  return { lat, lng, precise, placeId: result.place_id ?? null };
 }
 
 // ─────────────────────────────────────────────────────────────────────────

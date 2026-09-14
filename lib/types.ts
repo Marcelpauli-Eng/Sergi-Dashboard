@@ -84,6 +84,16 @@ export interface Order {
   lat: number | null;
   lng: number | null;
   /**
+   * El identificador del portal en Google, cacheado junto a las coordenadas.
+   *
+   * Es lo que hace que navegar caiga en la calle exacta y no en el centro
+   * del pueblo: con él, Maps no vuelve a interpretar la dirección.
+   *
+   * `null` en las comandas geocodificadas antes de guardarlo, que se
+   * vuelven a resolver la próxima vez que se calcula la ruta.
+   */
+  placeId: string | null;
+  /**
    * Fila real dentro de la hoja (1-indexed, tal y como la numera Sheets).
    * Se usa para escribir el estado de vuelta. Nunca se envía al cliente:
    * se recalcula releyendo la hoja justo antes de escribir, porque la oficina

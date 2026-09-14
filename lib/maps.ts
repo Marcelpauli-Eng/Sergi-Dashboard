@@ -22,25 +22,56 @@ import type { Order } from "./types.ts";
  */
 
 /** Lo que hace falta de una parada para poder llevar a alguien hasta ella. */
-type Destino = Pick<Order, "lat" | "lng" | "address">;
+type Destino = Pick<Order, "lat" | "lng" | "address"> &
+  Partial<Pick<Order, "city" | "placeId">>;
+
+/**
+ * La dirección entera, con el pueblo.
+ *
+ * Sin el pueblo, "Carrer Gran, 12" hay en media comarca y Maps escoge el que
+ * le parece. La ciudad vive en su propia columna de la hoja, así que aquí se
+ * juntan las dos.
+ */
+function adreca(destino: Destino): string {
+  return destino.city ? `${destino.address}, ${destino.city}` : destino.address;
+}
 
 /**
  * El punto, en coordenadas si las hay.
  *
  * Se prefieren a la dirección en texto: evita que Maps reinterprete la
- * dirección y mande al transportista a otro sitio.
+ * dirección y mande al transportista a otro sitio. Y las que hay guardadas
+ * son del portal: las que solo sitúan el pueblo no se guardan —ver
+ * `fillMissingCoordinates`—, justamente para que aquí se caiga al texto,
+ * que Maps sí busca, en vez de navegar al centro del pueblo.
  */
 function punt(destino: Destino): string {
   return destino.lat !== null && destino.lng !== null
     ? `${destino.lat},${destino.lng}`
-    : destino.address;
+    : adreca(destino);
 }
 
-/** Navegar hasta una parada, en el navegador. */
+/**
+ * Navegar hasta una parada, en el navegador.
+ *
+ * Cuando se sabe el `placeId` se manda ese, con la dirección de etiqueta:
+ * es el portal exacto de Google y con él Maps no vuelve a interpretar nada.
+ * Sin él, las coordenadas; y sin coordenadas, la dirección con su pueblo.
+ */
 export function navUrlFor(order: Destino): string {
   const url = new URL("https://www.google.com/maps/dir/");
   url.searchParams.set("api", "1");
-  url.searchParams.set("destination", punt(order));
+  if (order.placeId) {
+    /*
+      Con `destination_place_id`, `destination` es solo lo que se lee en
+      pantalla —Google exige que vaya, pero manda el identificador—. Se pone
+      la dirección para que el transportista vea a dónde va.
+    */
+    url.searchParams.set("destination", adreca(order));
+    url.searchParams.set("destination_place_id", order.placeId);
+  } else {
+    url.searchParams.set("destination", punt(order));
+  }
   url.searchParams.set("travelmode", "driving");
   return url.toString();
 }

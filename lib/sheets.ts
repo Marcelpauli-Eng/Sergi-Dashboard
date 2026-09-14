@@ -254,6 +254,7 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
       price: null,
       lat: parseNumber(cell(row, "lat")),
       lng: parseNumber(cell(row, "lng")),
+      placeId: text(cell(row, "placeId")) || null,
       bultos: 1,
       rowNumber,
       rowNumbers: [rowNumber],
@@ -674,7 +675,7 @@ export async function actualitzarComanda(
  * a pagar geocoding por la misma dirección nunca más.
  */
 export async function cacheCoordinates(
-  coords: { orderId: string; lat: number; lng: number }[],
+  coords: { orderId: string; lat: number; lng: number; placeId: string | null }[],
   snapshot: SheetSnapshot,
 ): Promise<void> {
   if (coords.length === 0) return;
@@ -688,6 +689,17 @@ export async function cacheCoordinates(
     if (!order) continue;
     updates.push({ rowNumber: order.rowNumber, column: "lat", value: coord.lat });
     updates.push({ rowNumber: order.rowNumber, column: "lng", value: coord.lng });
+    /*
+      El place_id se guarda siempre que lo haya, aunque sea una cadena vacía
+      cuando no: así se distingue "esta dirección ya se resolvió y Google no
+      da más de sí" de "esta fila es de antes de que se guardara el portal",
+      que es la que hay que volver a geocodificar.
+    */
+    updates.push({
+      rowNumber: order.rowNumber,
+      column: "placeId",
+      value: coord.placeId ?? "",
+    });
   }
 
   await writeCells(updates, headerMap, snapshot.sheetTab);

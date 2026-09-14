@@ -20,6 +20,16 @@ import type { Manifest, Order, Stop } from "./types";
  */
 let depotCoord: Coord | null = null;
 
+/**
+ * Cuántas direcciones ya cacheadas se revisan en cada ronda.
+ *
+ * Revisar es volver a preguntarle a Google por una dirección que ya tenía
+ * coordenadas, para ver si las que hay son el portal o el centro del pueblo.
+ * Con tope porque la ruta se calcula cada vez que el transportista abre la
+ * app, y sin él la primera del día sería una ráfaga de llamadas.
+ */
+const MAX_REVISIONES_POR_RONDA = 15;
+
 export async function getDepotCoord(): Promise<Coord> {
   if (!depotCoord) {
     const coord = await geocodeAddress(env.depotAddress);
@@ -53,12 +63,34 @@ export async function fillMissingCoordinates(
     dirección, y preguntarle a Google por una cadena vacía es una llamada
     tirada y un aviso en el log por cada una, cada vez que se sincroniza.
   */
-  const pending = orders.filter(
-    (o) => (o.lat === null || o.lng === null) && o.address.trim() !== "",
+  const conDireccion = orders.filter((o) => o.address.trim() !== "");
+
+  const sinCoordenadas = conDireccion.filter(
+    (o) => o.lat === null || o.lng === null,
   );
+  /*
+    Las que tienen coordenadas pero no portal son de antes de guardarlo, y
+    entre ellas están las que mandaban al transportista al centro del pueblo:
+    en su día se guardó lo que Google contestara, fuera el portal o el
+    centroide, y como ya había coordenadas no se volvía a preguntar nunca.
+
+    Se vuelven a resolver, pero con tope: son las comandas del día, y un día
+    con la hoja entera por estrenar no debe convertirse en cien llamadas a
+    Google de golpe. Las que queden se arreglan al día siguiente.
+  */
+  const sinPortal = conDireccion
+    .filter((o) => o.lat !== null && o.lng !== null && o.placeId === null)
+    .slice(0, MAX_REVISIONES_POR_RONDA);
+
+  const pending = [...sinCoordenadas, ...sinPortal];
   if (pending.length === 0) return;
 
-  const resolved: { orderId: string; lat: number; lng: number }[] = [];
+  const resolved: {
+    orderId: string;
+    lat: number;
+    lng: number;
+    placeId: string | null;
+  }[] = [];
 
   // En serie a propósito: son pocas direcciones nuevas al día y así no se
   // dispara el rate limit de la Geocoding API en un pico.
@@ -74,9 +106,37 @@ export async function fillMissingCoordinates(
       );
       continue;
     }
+
+    if (!coord.precise) {
+      /*
+        Google ha contestado el centro del pueblo, no el portal.
+
+        Ese punto NO se guarda como si fuera la dirección: guardarlo es lo
+        que hacía que el botón de navegar llevara al pueblo y se quedara así
+        para siempre. Sin coordenadas, la tarjeta navega con la dirección en
+        texto —que al menos la busca Maps— y la parada queda fuera del
+        cálculo de ruta, que es lo mismo que pasa con una dirección que
+        Google no reconoce.
+
+        Se sigue usando como referencia para ordenar la ruta solo si ya
+        venía de la hoja; si no había nada, se deja a null.
+      */
+      console.warn(
+        `Google solo ha sabido situar el pueblo, no la calle (pedido ${order.id}): "${fullAddress}". ` +
+          `Revisa la dirección en la hoja; mientras tanto se navega por texto.`,
+      );
+      continue;
+    }
+
     order.lat = coord.lat;
     order.lng = coord.lng;
-    resolved.push({ orderId: order.id, lat: coord.lat, lng: coord.lng });
+    order.placeId = coord.placeId;
+    resolved.push({
+      orderId: order.id,
+      lat: coord.lat,
+      lng: coord.lng,
+      placeId: coord.placeId,
+    });
   }
 
   if (resolved.length > 0) {

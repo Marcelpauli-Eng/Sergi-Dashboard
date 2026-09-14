@@ -134,6 +134,15 @@ export const COLUMNS = {
    */
   lat: ["_lat", "lat", "latitud"],
   lng: ["_lng", "lng", "longitud"],
+
+  /**
+   * El identificador del portal en Google, cacheado con las coordenadas.
+   *
+   * Solo se escribe cuando Google ha dado con el portal de verdad: si lo que
+   * ha encontrado es el centro del pueblo, esta celda se queda vacía y la
+   * app lo vuelve a intentar otro día en vez de mandar allí al transportista.
+   */
+  placeId: ["_placeId", "placeid", "place_id"],
 } as const;
 
 export type ColumnKey = keyof typeof COLUMNS;
@@ -159,6 +168,7 @@ export const MANAGED_COLUMNS: ColumnKey[] = [
   "incidentNote",
   "lat",
   "lng",
+  "placeId",
   "date",
 ];
 

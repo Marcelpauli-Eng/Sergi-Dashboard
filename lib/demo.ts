@@ -268,6 +268,7 @@ function toStop(sample: Sample, date: string, sequence: number, timezone: string
     price: recorded?.price ?? null,
     lat: sample.lat,
     lng: sample.lng,
+    placeId: null,
     sequence,
     navUrl: navUrlFor(sample),
     legDistanceMeters: sample.legDistanceMeters ?? null,

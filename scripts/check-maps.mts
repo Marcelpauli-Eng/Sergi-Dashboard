@@ -94,4 +94,38 @@ const parada = (lat: number | null, lng: number | null, address = "Carrer Gran 1
   assert.equal(fullRouteUrlFor("41.0,2.0", moltes), null);
 }
 
+// ── El portal exacto, cuando se sabe ─────────────────────────────────────
+// Es lo que arregla el "me manda al pueblo, no a la calle": con el place_id
+// Google no vuelve a interpretar la dirección, va al portal que geocodificó.
+{
+  const web = navUrlFor({
+    lat: 41.9301,
+    lng: 2.2545,
+    address: "Carrer Cabrerés, 2",
+    city: "Vic",
+    placeId: "ChIJabc123",
+  });
+  const params = new URL(web).searchParams;
+  assert.equal(params.get("destination_place_id"), "ChIJabc123");
+  assert.equal(
+    params.get("destination"),
+    "Carrer Cabrerés, 2, Vic",
+    "la etiqueta del destino es la dirección entera, con el pueblo",
+  );
+}
+
+// ── Sin portal y sin coordenadas, la dirección CON el pueblo ─────────────
+// "Carrer Gran, 12" a secas lo hay en media comarca: sin el pueblo, Maps
+// escoge el que le parece y ahí empieza el viaje al sitio equivocado.
+{
+  const app = appNavUrlFor({
+    lat: null,
+    lng: null,
+    address: "Carrer Gran, 12",
+    city: "Torelló",
+    placeId: null,
+  });
+  assert.equal(new URL(app).searchParams.get("daddr"), "Carrer Gran, 12, Torelló");
+}
+
 console.log("✓ lib/maps.ts — els enllaços obren l'app de mapes, no el navegador");
