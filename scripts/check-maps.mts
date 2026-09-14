@@ -12,16 +12,23 @@
 
 import assert from "node:assert/strict";
 import {
+  adrecaCompleta,
   appNavUrlFor,
   appRouteUrlFor,
   fullRouteUrlFor,
   navUrlFor,
 } from "../lib/maps.ts";
 
-const parada = (lat: number | null, lng: number | null, address = "Carrer Gran 1") => ({
+const parada = (
+  lat: number | null,
+  lng: number | null,
+  address = "Carrer Gran 1",
+  city: string | null = null,
+) => ({
   lat,
   lng,
   address,
+  city,
 });
 
 // ── Una parada ───────────────────────────────────────────────────────────
@@ -47,6 +54,34 @@ const parada = (lat: number | null, lng: number | null, address = "Carrer Gran 1
     new URL(app).searchParams.get("daddr"),
     "Carrer Cabrerés, 2, 08500 Vic",
     "la dirección tiene que llegar entera",
+  );
+}
+
+// ── Sin coordenadas, la población va con la calle ────────────────────────
+// La calle sola es ambigua —"Carrer Cabrerés, 2" hay en varios pueblos— y
+// Maps se planta en la pantalla de resultados en vez de arrancar la ruta.
+{
+  const vic = parada(null, null, "Carrer Cabrerés, 2", "08500 Vic");
+
+  assert.equal(adrecaCompleta(vic), "Carrer Cabrerés, 2, 08500 Vic");
+  assert.equal(
+    new URL(appNavUrlFor(vic)).searchParams.get("daddr"),
+    "Carrer Cabrerés, 2, 08500 Vic",
+    "sin la población, Maps no sabe a qué pueblo va",
+  );
+  assert.equal(
+    new URL(navUrlFor(vic)).searchParams.get("destination"),
+    "Carrer Cabrerés, 2, 08500 Vic",
+  );
+
+  // Sin población, la calle tal cual y sin comas colgando.
+  assert.equal(adrecaCompleta(parada(null, null, "Carrer Gran 1")), "Carrer Gran 1");
+  assert.equal(adrecaCompleta(parada(null, null, "Carrer Gran 1", "  ")), "Carrer Gran 1");
+
+  // Con coordenadas mandan ellas: la población no las sustituye.
+  assert.equal(
+    new URL(appNavUrlFor(parada(41.9, 2.25, "Carrer Cabrerés, 2", "08500 Vic"))).searchParams.get("daddr"),
+    "41.9,2.25",
   );
 }
 

@@ -22,18 +22,38 @@ import type { Order } from "./types.ts";
  */
 
 /** Lo que hace falta de una parada para poder llevar a alguien hasta ella. */
-type Destino = Pick<Order, "lat" | "lng" | "address">;
+type Destino = Pick<Order, "lat" | "lng" | "address"> & {
+  city?: string | null;
+};
+
+/**
+ * La dirección tal y como hay que buscarla: calle Y población.
+ *
+ * La calle sola no basta. "Carrer Cabrerés, 2" hay en media Cataluña, así
+ * que Maps abre la pantalla de resultados —o se planta sin navegar— en vez
+ * de arrancar la ruta. La población es justo lo que lo desambigua, y en la
+ * comanda viene aparte de la calle: `address` es la calle, `city` el
+ * pueblo. Es la misma pareja que ya se junta para geocodificar en
+ * `fillMissingCoordinates`.
+ */
+export function adrecaCompleta(destino: Destino): string {
+  return [destino.address.trim(), destino.city?.trim()]
+    .filter((tros) => tros)
+    .join(", ");
+}
 
 /**
  * El punto, en coordenadas si las hay.
  *
  * Se prefieren a la dirección en texto: evita que Maps reinterprete la
- * dirección y mande al transportista a otro sitio.
+ * dirección y mande al transportista a otro sitio. Cuando no las hay
+ * —comanda recién apuntada, todavía sin geocodificar— va la dirección
+ * entera, con población.
  */
 function punt(destino: Destino): string {
   return destino.lat !== null && destino.lng !== null
     ? `${destino.lat},${destino.lng}`
-    : destino.address;
+    : adrecaCompleta(destino);
 }
 
 /** Navegar hasta una parada, en el navegador. */
