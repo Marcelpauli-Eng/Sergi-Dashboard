@@ -14,6 +14,7 @@ import {
   DATOS_POR_DEFECTO,
   calcularTotales,
   clientePara,
+  etiquetaComanda,
   euros,
   formatearNumero,
   paginar,
@@ -180,6 +181,16 @@ console.log("\x1b[32m✓\x1b[0m Los números de la factura cuadran");
   const importes = [1000, 1, 2000.5, 100, 3000, 0.05];
   const celda = importes.map((i) => i.toFixed(2).replace(".", ",")).join("; ");
   assert.deepEqual(parseImportesFactura(celda), importes, "la ida y vuelta no cuadra");
+}
+
+// Una comanda partida en varios viajes: cada parte va a su línea y se lee
+// de dónde sale. Tres líneas "748" con importes distintos no las entiende
+// nadie; "748 (1/3)" sí.
+{
+  assert.equal(etiquetaComanda({ codi: "748", part: 1, parts: 3 }), "748 (1/3)");
+  assert.equal(etiquetaComanda({ codi: "748", part: 3, parts: 3 }), "748 (3/3)");
+  // La comanda entera se queda como estaba: sin paréntesis que explicar.
+  assert.equal(etiquetaComanda({ codi: "749", part: 1, parts: 1 }), "749");
 }
 
 console.log("✓ lib/factura.ts — totales, páginas, importes y clientes");
