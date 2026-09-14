@@ -149,9 +149,8 @@ const fila = (id: string, client = "", adreca = "", mides = "", part = "") => [
   assert.equal(orders[0].bultos, 1, "no s'ha comptat com un bulto de la primera");
 }
 
-// Y sin marca tampoco se pierde: una fila repetida que no dice ni medidas ni
-// cliente no es un bulto —un bulto existe para decir QUÉ paquete es—, así que
-// es otra parte. Es el caso de las creadas antes de que hubiera marca.
+// Sin marca y sin nada más tampoco se pierde: una fila más es una entrega
+// más. Es el caso de las partes creadas antes de que hubiera marca.
 {
   const { orders } = construirComandes([
     CABECERA,
@@ -164,7 +163,26 @@ const fila = (id: string, client = "", adreca = "", mides = "", part = "") => [
   assert.equal(orders[0].bultos, 1);
 }
 
-// Lo que sí es un bulto lo sigue siendo: trae medidas y nada más.
+// Una fila repetida con el cliente escrito y la dirección por confirmar es
+// una entrega, no un paquete: sale igual. Sin esto se quedaba dentro de la
+// primera y no aparecía en ninguna pantalla.
+{
+  const { orders } = construirComandes([
+    CABECERA,
+    fila("748", "CASA A", "Carrer Gran 1", "1 caixa"),
+    fila("748", "CASA A", "", "2 caixes"),
+  ]);
+
+  assert.equal(orders.length, 2, "porta dades pròpies: és una altra entrega");
+  assert.equal(orders[1].id, "748#2");
+  assert.equal(orders[1].customer, "CASA A");
+  assert.equal(orders[0].bultos, 1);
+}
+
+// Lo único que se sigue juntando: la fila que trae las medidas y NADA más,
+// que es como la oficina apunta los paquetes de una misma entrega. Sin esto,
+// una comanda de cuatro bultos serían cuatro paradas y el transportista
+// saldría del almacén con un paquete.
 {
   const { orders } = construirComandes([
     CABECERA,

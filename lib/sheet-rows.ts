@@ -162,23 +162,29 @@ export function construirComandes(rows: unknown[][]): {
         que marcar una entregada no toque la otra y cada una lleve su
         importe.
 
-        Se reconoce por tres cosas, y basta una:
+        Por defecto, una fila más es una entrega más. La única que NO lo es
+        es la fila de bulto, y se reconoce porque lo ÚNICO que trae son las
+        medidas: existe para decir qué paquete es, y nada más. En cuanto
+        lleva cualquier dato propio —cliente, dirección, teléfono, población
+        o notas— ya no está describiendo un paquete, está describiendo una
+        entrega, y sale como tal.
 
-        - Dirección propia: así lo escribe la oficina.
-        - La marca `_part`: así lo escribe la app, donde una parte nueva nace
-          solo con el número y la dirección llega después.
-        - Ni medidas ni cliente: no hay nada que la haga un bulto. Una fila
-          de bulto existe para decir QUÉ paquete es —lleva las medidas—, así
-          que una fila repetida que no dice nada de eso no lo es. Esto
-          recupera las partes creadas antes de que existiera la marca.
+        Antes bastaba con que le faltara la dirección para juntarla, y eso
+        se tragaba partes de verdad: la parte que se crea desde la app nace
+        sin dirección, y una que la oficina apunta con el cliente escrito y
+        la dirección por confirmar, también.
 
         El número que se enseña y el que va a la factura sigue siendo el de
         la hoja —`codi`—: para el cliente es una sola comanda.
       */
+      const nomesMides =
+        fila.measures !== null &&
+        fila.customer === "" &&
+        fila.city === null &&
+        fila.phone === null &&
+        fila.notes === null;
       const esBulto =
-        !address &&
-        (marcaPart === null || marcaPart <= 1) &&
-        (fila.measures !== null || fila.customer !== "");
+        !address && (marcaPart === null || marcaPart <= 1) && nomesMides;
 
       if (!esBulto) {
         const parte = (vecesVisto.get(id) ?? 1) + 1;
