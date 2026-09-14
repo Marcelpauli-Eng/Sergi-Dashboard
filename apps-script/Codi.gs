@@ -187,6 +187,17 @@ function desarAdreca(fila, placeId, sessionToken) {
   var lloc = repartir(detall);
   if (!lloc) throw new Error("Google no ha donat coordenades d'aquesta adreça.");
 
+  /*
+    Las columnas del punto puede que no estén.
+
+    En la hoja de verdad hay "_lat" y "_lng" —las creó la app— pero no
+    "_placeId" ni "_geo". Sin ellas, esto guardaba la dirección buena y
+    tiraba el punto exacto a la basura sin decir nada, y la app volvía a
+    buscar la dirección como si nadie la hubiera elegido. Se crean al final,
+    que es donde las pone la app.
+  */
+  columnes = assegurarColumnes(full, columnes);
+
   var cel = full.getRange(fila, columnes.address);
   cel.setValue(lloc.address);
   netejarMarca(cel);
@@ -274,6 +285,28 @@ function repartir(detall) {
     lat: lat,
     lng: lng,
   };
+}
+
+/**
+ * Crea las columnas del punto que falten, al final de la hoja.
+ *
+ * Con el nombre que usa la app (`_placeId`, `_geo`): si se llamaran de otra
+ * forma, la app no las encontraría y las crearía otra vez al lado.
+ *
+ * Solo añade cabeceras en la fila 1. No mueve ni borra nada de lo que hay.
+ */
+function assegurarColumnes(full, columnes) {
+  var CAPÇALERES = { lat: "_lat", lng: "_lng", placeId: "_placeId", geo: "_geo" };
+  var seguent = full.getLastColumn();
+
+  Object.keys(CAPÇALERES).forEach(function (clau) {
+    if (columnes[clau]) return;
+    seguent += 1;
+    full.getRange(1, seguent).setValue(CAPÇALERES[clau]);
+    columnes[clau] = seguent;
+  });
+
+  return columnes;
 }
 
 /** En qué columna está cada cosa, buscándolo por la cabecera de la fila 1. */

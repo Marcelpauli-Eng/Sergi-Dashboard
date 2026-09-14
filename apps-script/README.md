@@ -29,9 +29,29 @@ Solo en la fila donde está el cursor, y solo estas columnas:
 
 Nada más. No borra filas, no ordena, no toca ninguna otra columna.
 
-Las columnas `_lat`, `_lng`, `_placeId` y `_geo` las crea la app sola la
-primera vez que calcula una ruta. Si en la copia de pruebas no están, o las
-añades a mano al final, o abres la app una vez contra esa copia.
+Las columnas `_lat`, `_lng`, `_placeId` y `_geo` las crea el script solo, al
+final de la hoja, la primera vez que guardas una dirección desde el panel.
+No hace falta prepararlas.
+
+## Lo que ya se ha comprobado contra "Copia de Transports Winkaplast"
+
+Sin escribir en ella: se exportó y se le pasó por encima la misma lógica que
+corre dentro del script (14/09/2026, 1.259 filas).
+
+- Las columnas se reconocen: `Adreça` (C), `Població` (D), `_lat` (M),
+  `_lng` (N). **`_placeId` y `_geo` no existen** en esa hoja — por eso el
+  script las crea ahora; antes se guardaba la dirección buena y se tiraba el
+  punto exacto sin decir nada.
+- De las 1.103 filas con dirección escrita, **220 no llevan número de
+  portal**. Son exactamente las que acaban en el centro del pueblo, y las
+  que más ganan con el panel.
+- 13 llevan "S/N" y 93 llevan texto de más dentro de la dirección
+  ("Camino particular, llamar entes", "es una finca rustica concretar
+  dirección de entrega", coordenadas pegadas a mano). El geocodificador no
+  entiende esa prosa; eligiendo del panel deja de importar lo que hubiera
+  escrito.
+- 1.037 filas no tienen `_lat`: el punto está por calcular en casi toda la
+  hoja.
 
 ## Cómo probarlo
 

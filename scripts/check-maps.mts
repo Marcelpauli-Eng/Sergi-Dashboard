@@ -192,6 +192,19 @@ const parada = (lat: number | null, lng: number | null, address = "Carrer Gran 1
   assert.equal(nomDeCarrer("Ctra. de Vic, nº 12"), "Ctra. de Vic");
   // Sin número no hay nada que quitar, y un polígono no se toca.
   assert.equal(nomDeCarrer("Polígon Mas Galí"), "Polígon Mas Galí");
+
+  /*
+    Y lo que hay de verdad en la hoja de la oficina, que es más sucio: el
+    piso y la puerta pegados al número, el guión del "20 - 9D" —que antes
+    se quedaba colgando al final— y el "S/N", que no es parte del nombre de
+    la calle sino la forma de decir que no hay portal.
+  */
+  assert.equal(nomDeCarrer("Carrer Sicilia, 173 2º 1ª"), "Carrer Sicilia");
+  assert.equal(nomDeCarrer("Av. Catalunya, 20 - 9D"), "Av. Catalunya");
+  assert.equal(nomDeCarrer("Camí de la Serra, S/N"), "Camí de la Serra");
+  assert.equal(nomDeCarrer("PI Mas de les Animes, C/ Guerau de Liost, 3"), "PI Mas de les Animes, C/ Guerau de Liost");
+  // Un número que es del nombre no se toca: "Grup 12 de Setembre".
+  assert.equal(nomDeCarrer("Camí de la Serra"), "Camí de la Serra");
 }
 
 console.log("✓ lib/maps.ts — els enllaços obren l'app de mapes, no el navegador");

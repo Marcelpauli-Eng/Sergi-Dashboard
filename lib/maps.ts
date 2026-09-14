@@ -71,13 +71,43 @@ function punt(destino: Destino): string {
  * "Carrer Cabrerés, 2" → "Carrer Cabrerés". Sirve para el peldaño de la
  * calle: cuando el número no existe o Google no lo tiene, la calle entera
  * sí la conoce, y deja al transportista en el sitio correcto.
+ *
+ * Primero se va el piso y la puerta y después el número, en ese orden: en
+ * la hoja real hay "Carrer Sicilia, 173 2º 1ª" y "Av. Catalunya, 20 - 9D",
+ * y quitando solo lo último quedaba la calle con el número pegado —o peor,
+ * con el guión suelto al final—.
  */
 export function nomDeCarrer(address: string): string {
-  return address
-    // "nº 12", "num 12", "12" al final, con o sin letra de puerta.
-    .replace(/[,;]?\s*(n[.ºo]*|num(ero)?\.?)?\s*\d+\s*[a-zA-Z]?\s*$/u, "")
-    .replace(/[\s,;]+$/u, "")
-    .trim();
+  let carrer = address.trim();
+
+  /*
+    El piso y la puerta, tantas veces como haya.
+
+    Son las formas que se escriben de verdad: "2º 1ª", "3r 2a", "- 9D",
+    "bajos", "local", "esc B", "pta 4". Se repite porque van en cadena
+    —"173 2º 1ª" son dos— y una sola pasada dejaría la mitad.
+  */
+  const pisos =
+    /[\s,;-]+(\d+\s*[ºªoa°]\s*|\d+\s*[a-zA-Z]\b|(baixos|bajos|local|escala|esc|porta|pta|pis|planta|atico|àtic)\b\.?\s*[a-zA-Z0-9]*)$/iu;
+  let abans = "";
+  while (abans !== carrer) {
+    abans = carrer;
+    carrer = carrer.replace(pisos, "").trim();
+  }
+
+  /*
+    El "S/N" —sin número— también se va.
+
+    Es una forma de decir que no hay portal, no parte del nombre de la
+    calle, y dejándolo dentro Google busca un sitio que se llama así.
+  */
+  carrer = carrer.replace(/[\s,;-]+s\s*\/?\s*n\.?$/iu, "");
+
+  // Y ahora sí, el número del portal.
+  carrer = carrer.replace(/[,;]?\s*(n[.ºo]*|num(ero)?\.?)?\s*\d+\s*$/u, "");
+
+  // Lo que quede colgando: comas, guiones, puntos suspensivos de nada.
+  return carrer.replace(/[\s,;.\-]+$/u, "").trim();
 }
 
 /**
