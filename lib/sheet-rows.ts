@@ -3,14 +3,13 @@
  *
  * Vive fuera de `lib/sheets.ts` —que es solo de servidor y trae consigo las
  * credenciales— porque aquí está lo único que hay que poder comprobar sin
- * Google: qué filas se juntan como bultos, cuáles se descartan y qué pasa
- * cuando la oficina repite un número de comanda.
+ * Google: qué filas entran, cuáles se descartan y qué pasa cuando la oficina
+ * repite un número de comanda, que es una comanda partida en varios viajes.
  *
  * Ver `scripts/check-sheet-rows.mts`.
  */
 
 import {
-  fusionarBulto,
   parseNumber,
   parsePriority,
   parseStatus,
@@ -36,8 +35,8 @@ export interface FilaDescartada {
  * Las filas de la hoja, ya normalizadas en comandas.
  *
  * Está aparte de `readSheet` —y exportada— porque aquí vive lo que hay que
- * poder comprobar sin Google: qué filas se juntan como bultos, cuáles se
- * descartan y qué pasa cuando la oficina repite un número de comanda. Ver
+ * poder comprobar sin Google: qué filas entran, cuáles se descartan y qué
+ * pasa cuando la oficina repite un número de comanda. Ver
  * `scripts/check-sheet-rows.mts`.
  */
 export function construirComandes(rows: unknown[][]): {
@@ -59,9 +58,8 @@ export function construirComandes(rows: unknown[][]): {
   const orders: Order[] = [];
   const skipped: FilaDescartada[] = [];
   /**
-   * Dónde está cada comanda dentro de `orders`, para juntarle sus bultos.
-   * Con un número repetido apunta a la ÚLTIMA aparición: los bultos van
-   * siempre detrás de su entrega.
+   * Si un número de comanda ya ha salido. Cuando vuelve a salir es otro
+   * viaje de la misma comanda, no la misma entrega otra vez.
    */
   const porId = new Map<string, number>();
   /** Cuántas veces ha salido ya cada número de comanda con dirección propia. */
@@ -134,78 +132,39 @@ export function construirComandes(rows: unknown[][]): {
       price: null,
       lat: parseNumber(cell(row, "lat")),
       lng: parseNumber(cell(row, "lng")),
-      bultos: 1,
       rowNumber,
       rowNumbers: [rowNumber],
     };
 
     /*
-      La marca que escribe la app al crear otra parte desde el móvil. Ver
-      `part` en `lib/sheet-schema.ts`: sin ella, una parte recién creada
-      —que solo tiene el número— sería indistinguible de un bulto.
-    */
-    const marcaPart = parseNumber(cell(row, "part"));
+      Otra fila con el mismo nº de comanda es OTRA ENTREGA. Siempre.
 
+      La comanda grande no cabe en un viaje: el transportista va una vez con
+      lo que cabe y vuelve otro día con el resto, y cada viaje se apunta en
+      su fila con el mismo número. Cada uno tiene su día, su hora y lo que se
+      cobra por hacerlo, así que cada uno es una parada.
+
+      No se junta nada. Antes una fila repetida sin dirección se fusionaba
+      como un bulto más de la anterior, y eso se tragaba entregas de verdad:
+      quedaban dentro de la primera y no aparecían en ninguna pantalla. Si
+      hay una fila más, hay una entrega más, y punto.
+
+      La clave interna lleva el número de parte ("748#2") para que marcar una
+      entregada no toque las otras y cada una tenga su importe. El número que
+      se enseña y el que va a la factura sigue siendo el de la hoja —`codi`—:
+      para el cliente es una sola comanda, repartida en varios viajes.
+    */
     const yaEsta = porId.get(id);
     if (yaEsta !== undefined) {
-      /*
-        Otra fila con el mismo nº de comanda: o es un bulto más de la misma
-        entrega —así escribe la oficina las comandas de varios paquetes, y se
-        fusiona; ver `fusionarBulto`— o de la misma comanda: la entrega
-        se parte en dos cuando no cabe todo o cuando falta material, y la
-        oficina apunta cada parte en su fila con el mismo número. Son dos
-        entregas, cada una con su día, su hora y lo que se cobra por hacerla.
-
-        Antes la segunda se descartaba: la oficina la veía en su hoja y el
-        transportista no, así que esa parte ni se repartía ni se cobraba.
-        Ahora entra como una parada más, con su propia clave ("748#2") para
-        que marcar una entregada no toque la otra y cada una lleve su
-        importe.
-
-        Por defecto, una fila más es una entrega más. La única que NO lo es
-        es la fila de bulto, y se reconoce porque lo ÚNICO que trae son las
-        medidas: existe para decir qué paquete es, y nada más. En cuanto
-        lleva cualquier dato propio —cliente, dirección, teléfono, población
-        o notas— ya no está describiendo un paquete, está describiendo una
-        entrega, y sale como tal.
-
-        Antes bastaba con que le faltara la dirección para juntarla, y eso
-        se tragaba partes de verdad: la parte que se crea desde la app nace
-        sin dirección, y una que la oficina apunta con el cliente escrito y
-        la dirección por confirmar, también.
-
-        El número que se enseña y el que va a la factura sigue siendo el de
-        la hoja —`codi`—: para el cliente es una sola comanda.
-      */
-      const nomesMides =
-        fila.measures !== null &&
-        fila.customer === "" &&
-        fila.city === null &&
-        fila.phone === null &&
-        fila.notes === null;
-      const esBulto =
-        !address && (marcaPart === null || marcaPart <= 1) && nomesMides;
-
-      if (!esBulto) {
-        const parte = (vecesVisto.get(id) ?? 1) + 1;
-        vecesVisto.set(id, parte);
-        const otraParte: Order = {
-          ...fila,
-          id: `${id}#${parte}`,
-          part: parte,
-          parts: parte,
-        };
-        // Los siguientes bultos de este número son de ESTA parte, la última.
-        porId.set(id, orders.length);
-        orders.push(otraParte);
-        // Cuántas partes hay solo se sabe al final; las anteriores se ponen
-        // al día para que todas digan lo mismo ("part 1 de 2", "part 2 de 2").
-        for (const otra of orders) {
-          if (otra.codi === id) otra.parts = parte;
-        }
-        continue;
+      const parte = (vecesVisto.get(id) ?? 1) + 1;
+      vecesVisto.set(id, parte);
+      porId.set(id, orders.length);
+      orders.push({ ...fila, id: `${id}#${parte}`, part: parte, parts: parte });
+      // Cuántas partes hay solo se sabe al final; las anteriores se ponen al
+      // día para que todas digan lo mismo ("part 1 de 3", "part 2 de 3"…).
+      for (const otra of orders) {
+        if (otra.codi === id) otra.parts = parte;
       }
-      orders[yaEsta] = fusionarBulto(orders[yaEsta], fila);
       continue;
     }
 
@@ -222,8 +181,8 @@ export function construirComandes(rows: unknown[][]): {
       se le pone importe y se factura. Lo único que no se puede es navegar
       hasta ella, y de eso ya se encarga la tarjeta, que esconde el botón.
 
-      La fila vacía del todo sigue fuera, y los bultos —misma comanda sin
-      dirección— los ha cogido la rama de arriba antes de llegar aquí.
+      La fila vacía del todo sigue fuera, y las que repiten número las ha
+      cogido la rama de arriba antes de llegar aquí.
     */
 
     porId.set(id, orders.length);

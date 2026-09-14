@@ -135,21 +135,6 @@ export const COLUMNS = {
   lat: ["_lat", "lat", "latitud"],
   lng: ["_lng", "lng", "longitud"],
 
-  /**
-   * Qué parte de una comanda partida es esta fila. La app la ESCRIBE al
-   * crear una segunda parte desde el móvil.
-   *
-   * Hace falta porque las dos cosas que la oficina escribe con el número
-   * repetido se parecen demasiado: un BULTO más de la misma entrega (una
-   * fila con las medidas y nada más) y otra PARTE de la comanda (otra
-   * entrega distinta, con su día y su importe). Cuando la parte se crea
-   * desde la app solo se sabe el número —lo demás se completa después—, así
-   * que sin esta marca entraría como bulto y no saldría nunca a la bossa.
-   *
-   * Las filas de la oficina no la llevan y se siguen leyendo como siempre:
-   * con dirección propia es otra parte, sin ella es un bulto.
-   */
-  part: ["_part", "Part", "Parte"],
 } as const;
 
 export type ColumnKey = keyof typeof COLUMNS;
@@ -176,7 +161,6 @@ export const MANAGED_COLUMNS: ColumnKey[] = [
   "lat",
   "lng",
   "date",
-  "part",
 ];
 
 /**

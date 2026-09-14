@@ -76,7 +76,7 @@ function data(valor: string | null | undefined): string | null {
  * En fila y no en rejilla. Con la rejilla de dos columnas, una ficha de tres
  * datos dejaba el tercero solo con medio hueco al lado, y los valores largos
  * —el teléfono con el nombre de quien recoge delante, las medidas de cuatro
- * bultos— partían por donde les tocaba. En fila cada dato ocupa lo que
+ * medidas— partían por donde les tocaba. En fila cada dato ocupa lo que
  * necesita, la ficha se lee de arriba abajo y queda como la fila del
  * importe de abajo, que es una más.
  *
@@ -470,13 +470,9 @@ export default function StopCard({
                 />
               )}
               <Camp etiqueta="Telèfon" valor={stop.phone} />
-              {/* Cuántos paquetes hay que cargar. Una comanda son varias
-                  filas en la hoja, una por bulto, y hasta ahora solo se veía
-                  la primera. Ver `bultos` en lib/types.ts. */}
-              <Camp
-                etiqueta={stop.bultos > 1 ? `Mides · ${stop.bultos} bultos` : "Mides"}
-                valor={stop.measures}
-              />
+              {/* Lo que se lleva en ESTE viaje. Cada fila del full es una
+                  entrega y trae las suyas. Ver `construirComandes`. */}
+              <Camp etiqueta="Mides" valor={stop.measures} />
               {leg && isOpen && <Camp etiqueta="Des de l'anterior" valor={leg} />}
             </dl>
           ) : (
@@ -498,16 +494,9 @@ export default function StopCard({
                 )}
               </p>
 
-              {(stop.measures || stop.bultos > 1) && (
+              {stop.measures && (
                 <p className="mt-1 text-xs text-tertiary-foreground">
-                  📦{" "}
-                  {stop.bultos > 1 && (
-                    <span className="font-semibold text-foreground">
-                      {stop.bultos} bultos
-                    </span>
-                  )}
-                  {stop.bultos > 1 && stop.measures && " · "}
-                  {stop.measures}
+                  📦 {stop.measures}
                 </p>
               )}
 
