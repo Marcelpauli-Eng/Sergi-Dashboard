@@ -48,6 +48,14 @@ function errorDeGoogle(status: number, cos: string): NextResponse {
         status === 403
           ? 'El cercador d\'adreces no està activat: cal activar "Places API (New)" al projecte de Google Cloud.'
           : "El cercador d'adreces no respon",
+      /*
+        Que el buscador no esté activado no es un error del que escribe: es
+        configuración, y no va a cambiar mientras esté rellenando la
+        comanda. Con esto, el campo deja de preguntar y se queda como una
+        caja de texto normal en vez de repetirle el mismo aviso cada tres
+        letras.
+      */
+      desactivat: status === 403,
     },
     { status: 502 },
   );

@@ -56,10 +56,20 @@ export default function CampAdreca({
   /** Lo que se ha escrito desde la última vez que se eligió de la lista. */
   const teclejat = useRef(false);
 
+  /*
+    Si el buscador está apagado del todo.
+
+    Pasa cuando la Places API no está activada en el proyecto de Google. No
+    es un error de quien escribe y no se va a arreglar mientras rellena la
+    comanda, así que se avisa UNA vez y el campo se queda como una caja de
+    texto normal. Repetirle el mismo aviso cada tres letras es ruido.
+  */
+  const apagat = useRef(false);
+
   useEffect(() => {
     // Con menos de tres letras no se pregunta nada: cada llamada se paga y
     // "ca" no distingue nada. La lista que hubiera se vacía al buscar.
-    if (!teclejat.current || value.trim().length < 3) return;
+    if (apagat.current || !teclejat.current || value.trim().length < 3) return;
 
     /*
       Medio segundo de espera antes de preguntar.
@@ -80,8 +90,10 @@ export default function CampAdreca({
         const cos = (await resposta.json()) as {
           suggeriments?: Suggeriment[];
           error?: string;
+          desactivat?: boolean;
         };
         if (!resposta.ok) {
+          if (cos.desactivat) apagat.current = true;
           setAvis(cos.error ?? "El cercador d'adreces no respon");
           setSuggeriments([]);
         } else {
