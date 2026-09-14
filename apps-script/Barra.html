@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top" />
+    <style>
+      /* El panel de Sheets es estrecho (300px): todo a una columna, sin
+         adornos, y la letra del sistema para que no desentone con la hoja. */
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 13px;
+        margin: 0;
+        padding: 12px;
+        color: #202124;
+      }
+      #fila {
+        background: #e8f0fe;
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin-bottom: 10px;
+        font-weight: 500;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        font-size: 14px;
+        border: 1px solid #dadce0;
+        border-radius: 6px;
+        outline: none;
+      }
+      input:focus { border-color: #1a73e8; }
+      ul { list-style: none; margin: 8px 0 0; padding: 0; }
+      li button {
+        width: 100%;
+        text-align: left;
+        background: none;
+        border: 0;
+        border-radius: 6px;
+        padding: 8px 10px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+      li button:hover { background: #f1f3f4; }
+      .secundari { display: block; color: #5f6368; font-size: 11px; margin-top: 2px; }
+      #estat { margin-top: 10px; color: #5f6368; }
+      .error { color: #c5221f; }
+      .fet { color: #188038; font-weight: 500; }
+      .ajuda { margin-top: 14px; color: #5f6368; font-size: 11px; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <div id="fila">Carregant…</div>
+
+    <input
+      id="cerca"
+      type="text"
+      placeholder="Carrer Cabrerés, 2 Vic"
+      autocomplete="off"
+    />
+    <ul id="llista"></ul>
+    <div id="estat"></div>
+
+    <p class="ajuda">
+      Escriu i <b>tria de la llista</b>: així la fila es queda amb el punt
+      exacte i el transportista hi arriba al portal. Si l'escrius a mà, la
+      casella es marca en ambre fins que la triïs d'aquí.
+    </p>
+
+    <script>
+      var cerca = document.getElementById("cerca");
+      var llista = document.getElementById("llista");
+      var estat = document.getElementById("estat");
+      var infoFila = document.getElementById("fila");
+
+      /* El token junta todo lo tecleado con la elección: Google lo cobra
+         como una búsqueda, no como una llamada por letra. */
+      var token = nouToken();
+      var fila = 0;
+      var espera = null;
+
+      function nouToken() {
+        return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+      }
+
+      function dir(text, classe) {
+        estat.className = classe || "";
+        estat.textContent = text;
+      }
+
+      /* Qué fila está seleccionada. Se refresca al abrir y cada vez que se
+         vuelve al panel: en la hoja el cursor se mueve todo el rato, y
+         escribir la dirección en la fila de otra comanda es el peor error
+         posible. */
+      function mirarFila() {
+        google.script.run
+          .withSuccessHandler(function (info) {
+            fila = info.fila;
+            infoFila.textContent = info.resum;
+            if (info.adreca && !cerca.value) cerca.value = info.adreca;
+          })
+          .filaActual();
+      }
+
+      mirarFila();
+      window.addEventListener("focus", mirarFila);
+
+      cerca.addEventListener("input", function () {
+        clearTimeout(espera);
+        llista.innerHTML = "";
+        var text = cerca.value.trim();
+        if (text.length < 3) return dir("");
+
+        // Medio segundo: cada llamada se paga y cada tecla dispararía una.
+        espera = setTimeout(function () {
+          dir("Buscant…");
+          google.script.run
+            .withSuccessHandler(pintar)
+            .withFailureHandler(function (e) {
+              dir(e.message || "No s'ha pogut buscar", "error");
+            })
+            .buscarAdreces(text, token);
+        }, 500);
+      });
+
+      function pintar(suggeriments) {
+        llista.innerHTML = "";
+        if (!suggeriments || suggeriments.length === 0) {
+          return dir("Cap adreça trobada");
+        }
+        dir("");
+
+        suggeriments.forEach(function (s) {
+          var boto = document.createElement("button");
+          boto.innerHTML =
+            escapar(s.principal) +
+            (s.secundari ? '<span class="secundari">' + escapar(s.secundari) + "</span>" : "");
+          boto.onclick = function () {
+            triar(s);
+          };
+          var li = document.createElement("li");
+          li.appendChild(boto);
+          llista.appendChild(li);
+        });
+      }
+
+      function triar(s) {
+        if (!fila) return dir("Posa el cursor a la fila de la comanda", "error");
+        llista.innerHTML = "";
+        dir("Desant…");
+
+        google.script.run
+          .withSuccessHandler(function (lloc) {
+            cerca.value = lloc.address;
+            dir("Desat a la fila " + fila + ": " + lloc.address, "fet");
+            // Elegida una: la siguiente búsqueda es otra sesión para Google.
+            token = nouToken();
+          })
+          .withFailureHandler(function (e) {
+            dir(e.message || "No s'ha pogut desar", "error");
+          })
+          .desarAdreca(fila, s.placeId, token);
+      }
+
+      /* Lo que devuelve Google se mete como HTML para poder poner la segunda
+         línea en gris: hay que escaparlo, que son nombres de sitios escritos
+         por cualquiera. */
+      function escapar(text) {
+        var d = document.createElement("div");
+        d.textContent = text;
+        return d.innerHTML;
+      }
+    </script>
+  </body>
+</html>
