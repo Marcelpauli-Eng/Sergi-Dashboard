@@ -451,7 +451,7 @@ export default function StopCard({
             <dl className="mt-4 border-t border-border pt-2 sm:grid sm:grid-cols-2 sm:gap-x-10">
               <Camp
                 etiqueta="Comanda"
-                valor={stop.duplicats > 1 ? `${stop.codi} (nº repetit)` : stop.codi}
+                valor={stop.parts > 1 ? `${stop.codi} · part ${stop.part} de ${stop.parts}` : stop.codi}
                 mono
               />
               {/*
@@ -488,12 +488,12 @@ export default function StopCard({
                   usa. */}
               <p className="mt-1 font-mono text-xs text-tertiary-foreground">
                 {stop.codi}
-                {/* Dos entregas distintas con el mismo número: las dos salen
-                    en la bossa y hay que poder distinguirlas de un vistazo,
-                    porque en la hoja se llaman igual. */}
-                {stop.duplicats > 1 && (
+                {/* Una comanda partida en dos entregas sale dos veces en la
+                    bossa, las dos con el mismo número. Hay que poder saber
+                    cuál se está mirando sin abrir las dos. */}
+                {stop.parts > 1 && (
                   <span className="ml-2 rounded bg-warning/15 px-1.5 py-0.5 font-sans text-[10px] font-medium text-warning">
-                    nº repetit · {stop.duplicats} comandes
+                    part {stop.part} de {stop.parts}
                   </span>
                 )}
               </p>

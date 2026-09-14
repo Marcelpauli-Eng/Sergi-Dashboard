@@ -159,7 +159,7 @@ import type { ColumnKey } from "../lib/sheet-schema.ts";
   const comanda = (extra: Partial<Order>): Order => ({
     id: "C260601098",
     codi: "C260601098",
-    duplicats: 1,
+    part: 1, parts: 1,
     driverId: "",
     creationDate: null,
     date: "",
@@ -217,7 +217,7 @@ import type { ColumnKey } from "../lib/sheet-schema.ts";
 // Un bulto que trae un dato que a la comanda le falta, lo rellena.
 {
   const vacia = (extra: Partial<Order>): Order => ({
-    id: "C1", codi: "C1", duplicats: 1, driverId: "", creationDate: null, date: "", priority: NO_PRIORITY,
+    id: "C1", codi: "C1", part: 1, parts: 1, driverId: "", creationDate: null, date: "", priority: NO_PRIORITY,
     customer: "", address: "A", city: null, billingClient: null, phone: null,
     measures: null, notes: null, bultos: 1, deliveredTime: null, incidentNote: null,
     status: "pendiente", rawStatus: "", statusCategory: "pendent", price: null,

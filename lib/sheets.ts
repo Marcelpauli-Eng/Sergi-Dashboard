@@ -422,6 +422,12 @@ export interface NovaComanda {
   phone?: string;
   measures?: string;
   notes?: string;
+  /**
+   * Crear la comanda aunque ese número ya esté en el full: es otra parte de
+   * la misma entrega. Sin esto, el número repetido se rechaza, que es lo que
+   * hay que hacer con un número mal tecleado.
+   */
+  afegirPart?: boolean;
 }
 
 /**
@@ -447,11 +453,14 @@ export async function crearComanda(
   const snapshot = await readSheet(sheetTab);
 
   /*
-    Dos filas con el mismo número rompen cosas que no se ven hasta mucho
-    después: el importe se guarda contra el número, así que se pisarían el
-    precio, y en la hoja la segunda se descarta al leer.
+    El mismo número otra vez es casi siempre un número mal tecleado, así que
+    por defecto no pasa. Pero a veces es adrede: una comanda que se entrega
+    en dos veces se apunta como dos filas con el mismo número, cada una con
+    su día y su importe. Eso lo dice quien la crea con `afegirPart`, y es
+    una decisión suya, no algo que se pueda adivinar aquí.
   */
-  if (snapshot.orders.some((order) => order.codi === dades.id)) {
+  const jaHiEs = snapshot.orders.some((order) => order.codi === dades.id);
+  if (jaHiEs && !dades.afegirPart) {
     throw new ErrorAccionable(
       `Ja hi ha una comanda amb el número "${dades.id}" al full ${snapshot.sheetTab}.`,
     );

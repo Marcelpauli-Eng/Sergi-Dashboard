@@ -27,28 +27,29 @@ export interface Order {
   /**
    * Clave única del pedido dentro de la app.
    *
-   * Normalmente es el nº de comanda tal cual. Pero la oficina reutiliza el
-   * mismo número para dos entregas distintas —dos direcciones, dos portes,
-   * el mismo "748"— y las dos son trabajo real que hay que ver en pantalla.
-   * Antes la segunda se descartaba al leer la hoja. Ahora entra con la
-   * clave "748#2" (la segunda vez que aparece ese número en el full), para
-   * que marcar entregada una no toque la otra, y para que cada una tenga su
-   * propio importe en el documento privado.
+   * Normalmente es el nº de comanda tal cual. Pero una comanda se puede
+   * entregar en dos veces —una parte hoy y el resto cuando llegue— y la
+   * oficina apunta cada parte en su fila, las dos con el mismo número. Son
+   * dos entregas: cada una tiene su día, su hora y lo que se cobra por
+   * hacerla. Antes la segunda se descartaba al leer la hoja.
    *
-   * Es lo que viaja por la cola, la API y la pestaña de importes. Lo que se
-   * enseña y lo que va a una factura es `codi`, nunca esto.
+   * Por eso la segunda parte lleva la clave "748#2": para que marcar una
+   * entregada no marque la otra y cada una lleve su propio importe. Es lo
+   * que viaja por la cola, la API y la pestaña de importes.
+   *
+   * Lo que se enseña y lo que va a una factura es `codi`, nunca esto.
    */
   id: string;
   /**
    * El nº de comanda tal cual está escrito en la hoja, para enseñar y para
-   * facturar. Igual que `id` salvo en las comandas repetidas.
+   * facturar. Las dos partes del 748 tienen aquí "748": para la empresa y
+   * para el cliente es una sola comanda.
    */
   codi: string;
-  /**
-   * Cuántas comandas del full comparten este número. 1 es lo normal; 2 o más
-   * significa que la oficina ha repetido el número y conviene decirlo.
-   */
-  duplicats: number;
+  /** Qué parte de la comanda es esta entrega. 1 cuando no está partida. */
+  part: number;
+  /** En cuántas partes está partida la comanda. 1 cuando no lo está. */
+  parts: number;
   /** Código del transportista al que está asignado. Vacío si el Sheet no tiene esa columna. */
   driverId: string;
   /** Fecha de creación o de registro en el Sheet por parte de la empresa. */

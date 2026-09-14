@@ -97,7 +97,8 @@ export function construirComandes(rows: unknown[][]): {
     const fila: Order = {
       id,
       codi: id,
-      duplicats: 1,
+      part: 1,
+      parts: 1,
       driverId,
       creationDate,
       date: date ?? "",
@@ -145,25 +146,36 @@ export function construirComandes(rows: unknown[][]): {
         bulto más de la misma entrega —así escribe la oficina las comandas
         de varios paquetes— y se fusiona. Ver `fusionarBulto`.
 
-        Si SÍ trae dirección son dos entregas distintas compartiendo número.
-        Antes se descartaba la segunda: la oficina la veía en su hoja y el
-        transportista no, y esa entrega no se hacía ni se cobraba. Ahora
-        entra como una parada más, con su propia clave ("748#2") para que
-        marcar una entregada no toque la otra y cada una lleve su importe.
+        Si SÍ trae dirección es OTRA PARTE de la misma comanda: la entrega
+        se parte en dos cuando no cabe todo o cuando falta material, y la
+        oficina apunta cada parte en su fila con el mismo número. Son dos
+        entregas, cada una con su día, su hora y lo que se cobra por hacerla.
+
+        Antes la segunda se descartaba: la oficina la veía en su hoja y el
+        transportista no, así que esa parte ni se repartía ni se cobraba.
+        Ahora entra como una parada más, con su propia clave ("748#2") para
+        que marcar una entregada no toque la otra y cada una lleve su
+        importe.
 
         El número que se enseña y el que va a la factura sigue siendo el de
-        la hoja: `codi`.
+        la hoja —`codi`—: para el cliente es una sola comanda.
       */
       if (address) {
-        const veces = (vecesVisto.get(id) ?? 1) + 1;
-        vecesVisto.set(id, veces);
-        const duplicada: Order = { ...fila, id: `${id}#${veces}`, duplicats: veces };
-        // Los siguientes bultos de este número son de ESTA entrega, la última.
+        const parte = (vecesVisto.get(id) ?? 1) + 1;
+        vecesVisto.set(id, parte);
+        const otraParte: Order = {
+          ...fila,
+          id: `${id}#${parte}`,
+          part: parte,
+          parts: parte,
+        };
+        // Los siguientes bultos de este número son de ESTA parte, la última.
         porId.set(id, orders.length);
-        orders.push(duplicada);
-        // Todas las que comparten número lo dicen, también la primera.
+        orders.push(otraParte);
+        // Cuántas partes hay solo se sabe al final; las anteriores se ponen
+        // al día para que todas digan lo mismo ("part 1 de 2", "part 2 de 2").
         for (const otra of orders) {
-          if (otra.codi === id) otra.duplicats = veces;
+          if (otra.codi === id) otra.parts = parte;
         }
         continue;
       }
