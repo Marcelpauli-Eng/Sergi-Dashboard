@@ -171,7 +171,7 @@ export default function EditarComanda({
               Dades de la comanda
             </h2>
             <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-              {stop.id}
+              {stop.codi}
             </p>
           </div>
         </div>

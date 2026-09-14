@@ -24,8 +24,32 @@ export type EstatFactura = "emesa" | "enviada" | "cobrada";
 
 /** Una fila del Sheet, ya normalizada. */
 export interface Order {
-  /** Identificador único e inmutable del pedido (nº de comanda). */
+  /**
+   * Clave única del pedido dentro de la app.
+   *
+   * Normalmente es el nº de comanda tal cual. Pero una comanda se puede
+   * entregar en dos veces —una parte hoy y el resto cuando llegue— y la
+   * oficina apunta cada parte en su fila, las dos con el mismo número. Son
+   * dos entregas: cada una tiene su día, su hora y lo que se cobra por
+   * hacerla. Antes la segunda se descartaba al leer la hoja.
+   *
+   * Por eso la segunda parte lleva la clave "748#2": para que marcar una
+   * entregada no marque la otra y cada una lleve su propio importe. Es lo
+   * que viaja por la cola, la API y la pestaña de importes.
+   *
+   * Lo que se enseña y lo que va a una factura es `codi`, nunca esto.
+   */
   id: string;
+  /**
+   * El nº de comanda tal cual está escrito en la hoja, para enseñar y para
+   * facturar. Las dos partes del 748 tienen aquí "748": para la empresa y
+   * para el cliente es una sola comanda.
+   */
+  codi: string;
+  /** Qué parte de la comanda es esta entrega. 1 cuando no está partida. */
+  part: number;
+  /** En cuántas partes está partida la comanda. 1 cuando no lo está. */
+  parts: number;
   /** Código del transportista al que está asignado. Vacío si el Sheet no tiene esa columna. */
   driverId: string;
   /** Fecha de creación o de registro en el Sheet por parte de la empresa. */
