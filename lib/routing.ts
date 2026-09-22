@@ -1,6 +1,7 @@
 import "server-only";
 import { env } from "./env";
 import type { Order } from "./types";
+import { adrecaCompleta, nomDeCarrer } from "./maps.ts";
 
 /**
  * Cálculo de la ruta del día.
@@ -41,14 +42,67 @@ export function haversine(a: Coord, b: Coord): number {
 // Geocoding
 // ─────────────────────────────────────────────────────────────────────────
 
+/** Lo que Google sabe de una dirección, con lo fino que hila cada respuesta. */
+export interface GeocodeResult extends Coord {
+  /**
+   * Si el punto es el portal y no el centro del pueblo.
+   *
+   * Google siempre contesta algo: cuando no encuentra el número, o la calle,
+   * devuelve el centroide de la población y lo marca como aproximado. Ese
+   * punto es el que mandaba al transportista "al pueblo" en vez de a la
+   * calle, así que aquí se distingue para no guardarlo como si fuera bueno.
+   */
+  precise: boolean;
+  /**
+   * El identificador del sitio en Google. Es lo único que señala un portal
+   * sin ambigüedad posible: navegando con él, Maps no vuelve a interpretar
+   * la dirección por su cuenta.
+   */
+  placeId: string | null;
+}
+
 /**
- * Convierte una dirección en coordenadas.
+ * Qué tipos de resultado son "el pueblo" y no "la calle".
  *
- * Devuelve `null` si Google no la reconoce, en cuyo caso el pedido sigue
- * apareciendo en la lista (el transportista puede navegar por texto) pero
- * queda fuera del cálculo de ruta.
+ * Google los devuelve en `results[].types`. Si el más específico que sabe
+ * decir es uno de estos, no tiene el portal.
  */
-export async function geocodeAddress(address: string): Promise<Coord | null> {
+const TIPOS_IMPRECISOS = new Set([
+  "locality",
+  "sublocality",
+  "postal_code",
+  "administrative_area_level_1",
+  "administrative_area_level_2",
+  "administrative_area_level_3",
+  "political",
+  "country",
+  "neighborhood",
+]);
+
+/**
+ * Lo que contestó Google al preguntarle por una dirección.
+ *
+ * Hay tres respuestas y no dos, porque "no la encuentro" y "ahora no puedo
+ * contestarte" se arreglan de forma distinta: la primera es definitiva —esa
+ * dirección no existe tal y como está escrita, y volver a preguntar mañana
+ * dará lo mismo— y la segunda es de hoy: sin red, sin cuota o con la clave
+ * mal, y la misma pregunta mañana sí tiene respuesta.
+ *
+ * La diferencia importa porque las definitivas se apuntan en la hoja para no
+ * volver a preguntarlas nunca —cada consulta se paga— y las de hoy NO: si se
+ * apuntaran, un corte de red dejaría la comanda sin coordenadas para
+ * siempre.
+ */
+export type ResultatGeocodificacio =
+  | { estat: "ok"; coord: Coord; precise: boolean; placeId: string | null }
+  /** Google contestó, y esa dirección no la reconoce. */
+  | { estat: "desconeguda" }
+  /** No se le ha podido preguntar. Se reintenta más adelante. */
+  | { estat: "sense_resposta"; motiu: string };
+
+export async function geocodificar(
+  address: string,
+): Promise<ResultatGeocodificacio> {
   const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
   url.searchParams.set("address", address);
   url.searchParams.set("key", env.google.mapsApiKey);
@@ -56,17 +110,291 @@ export async function geocodeAddress(address: string): Promise<Coord | null> {
   url.searchParams.set("region", "es");
   url.searchParams.set("language", "es");
 
-  const response = await fetch(url, { cache: "no-store" });
-  if (!response.ok) return null;
-
-  const data = (await response.json()) as {
+  let data: {
     status: string;
-    results?: { geometry: { location: { lat: number; lng: number } } }[];
+    error_message?: string;
+    results?: {
+      geometry: { location: { lat: number; lng: number }; location_type?: string };
+      place_id?: string;
+      types?: string[];
+      partial_match?: boolean;
+    }[];
   };
+  try {
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) {
+      return { estat: "sense_resposta", motiu: `HTTP ${response.status}` };
+    }
+    data = await response.json();
+  } catch (error) {
+    return { estat: "sense_resposta", motiu: String(error) };
+  }
 
-  if (data.status !== "OK" || !data.results?.length) return null;
-  const { lat, lng } = data.results[0].geometry.location;
-  return { lat, lng };
+  if (data.status === "OK" && data.results?.length) {
+    const result = data.results[0];
+    const { lat, lng } = result.geometry.location;
+
+    /*
+      Tres señales, y basta con que falle una para no fiarse:
+
+       - `partial_match`: Google ha tenido que inventarse parte de lo que se
+         le pidió (típico cuando el número no existe en esa calle).
+       - `location_type: APPROXIMATE`: el punto es un centroide, no un
+         portal. "ROOFTOP" es el tejado; "RANGE_INTERPOLATED" y
+         "GEOMETRIC_CENTER" son el tramo de calle, que para repartir sirve.
+       - `types`: si lo más fino que sabe decir es "locality", lo que ha
+         devuelto es el pueblo entero.
+
+      Sin esto, el centroide del pueblo se guardaba como si fuera la
+      dirección y el transportista acababa allí, con toda la seguridad del
+      mundo.
+    */
+    const tipoMasEspecifico = result.types?.[0];
+    const precise =
+      result.partial_match !== true &&
+      result.geometry.location_type !== "APPROXIMATE" &&
+      (tipoMasEspecifico === undefined || !TIPOS_IMPRECISOS.has(tipoMasEspecifico));
+
+    return {
+      estat: "ok",
+      coord: { lat, lng },
+      precise,
+      placeId: result.place_id ?? null,
+    };
+  }
+
+  /*
+    ZERO_RESULTS es la única negativa que es de la dirección. El resto
+    —cuota agotada, clave mal, petición malformada, un error de Google— son
+    del servicio, y la misma dirección volverá a intentarse.
+  */
+  if (data.status === "ZERO_RESULTS" || (data.status === "OK" && !data.results?.length)) {
+    return { estat: "desconeguda" };
+  }
+  return {
+    estat: "sense_resposta",
+    motiu: data.error_message ? `${data.status}: ${data.error_message}` : data.status,
+  };
+}
+
+/** Las coordenadas a secas, para quien no necesita saber más. */
+export async function geocodeAddress(address: string): Promise<Coord | null> {
+  const resultat = await geocodificar(address);
+  return resultat.estat === "ok" ? resultat.coord : null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Buscar el sitio: portal, negocio, calle o pueblo
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Hasta dónde afina el punto que hemos encontrado.
+ *
+ *  - `portal`: la dirección exacta. Es lo que se quiere.
+ *  - `negoci`: la ficha del negocio en Google, encontrada por su nombre.
+ *    Se usa cuando la dirección escrita no da con el portal —polígonos,
+ *    carreteras, naves sin número—, y suele clavarla mejor que el número.
+ *  - `carrer`: la calle sin número. No es el portal, pero deja al
+ *    transportista en la calle correcta.
+ *  - `poble`: el centro del pueblo. El último recurso, y se avisa en la
+ *    tarjeta de que es eso.
+ */
+export type NivellUbicacio = "portal" | "negoci" | "carrer" | "poble";
+
+/** Un sitio ya resuelto, con lo fino que ha quedado. */
+export interface Ubicacio extends Coord {
+  placeId: string | null;
+  nivell: NivellUbicacio;
+}
+
+/**
+ * Lo que sale de buscar un sitio, con las mismas tres respuestas.
+ *
+ * "Desconeguda" significa que Google contestó que no a TODOS los peldaños:
+ * ni la dirección, ni el negocio, ni la calle, ni el pueblo. Solo entonces
+ * se apunta en la hoja para no volver a preguntar.
+ */
+export type ResultatUbicacio =
+  | { estat: "ok"; ubicacio: Ubicacio }
+  | { estat: "desconeguda" }
+  | { estat: "sense_resposta"; motiu: string };
+
+/**
+ * Cuánto se puede alejar del pueblo un negocio para creérselo, en metros.
+ *
+ * Buscar "Mobles Serra" por el nombre puede devolver una tienda que se llama
+ * igual a 200 km. Si el sitio que contesta Google no está cerca del pueblo
+ * de la comanda, no es ese: mejor la calle o el pueblo que mandar al
+ * transportista a otra provincia.
+ */
+const RADI_NEGOCI_M = 25_000;
+
+/**
+ * Busca un sitio por su nombre (Places API).
+ *
+ * Es OTRA API que la de geocodificar: el geocodificador solo entiende
+ * direcciones —"Carrer Gran 12"—, y no sabe nada de "Fusteria Vilalta". Hay
+ * que tener activada "Places API (New)" en el mismo proyecto de Google
+ * Cloud; si no lo está, Google contesta 403 y esto devuelve `null`, con lo
+ * que la búsqueda sigue por la calle como si el paso no existiera.
+ */
+export async function findPlaceByName(
+  nom: string,
+  aprop: Coord | null,
+): Promise<Ubicacio | null> {
+  const body: Record<string, unknown> = {
+    textQuery: nom,
+    languageCode: "ca",
+    regionCode: "ES",
+  };
+  if (aprop) {
+    // Sesga la búsqueda al pueblo de la comanda: sin esto, un nombre de
+    // negocio corriente devuelve el de la otra punta del país.
+    body.locationBias = {
+      circle: {
+        center: { latitude: aprop.lat, longitude: aprop.lng },
+        radius: RADI_NEGOCI_M,
+      },
+    };
+  }
+
+  let data: {
+    places?: { id?: string; location?: { latitude: number; longitude: number } }[];
+  };
+  try {
+    const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": env.google.mapsApiKey,
+        "X-Goog-FieldMask": "places.id,places.location,places.formattedAddress",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      // 403 = la Places API no está activada en el proyecto. Se avisa una
+      // vez y se sigue: la cascada tiene más peldaños por debajo.
+      avisarPlacesUnaVez(response.status, await response.text());
+      return null;
+    }
+    data = (await response.json()) as typeof data;
+  } catch {
+    return null;
+  }
+
+  const place = data.places?.[0];
+  if (!place?.location) return null;
+
+  const punt = { lat: place.location.latitude, lng: place.location.longitude };
+  // Lejos del pueblo: es otro negocio que se llama igual.
+  if (aprop && haversine(aprop, punt) > RADI_NEGOCI_M) return null;
+
+  return { ...punt, placeId: place.id ?? null, nivell: "negoci" };
+}
+
+/** El 403 de Places es siempre el mismo y es de configuración: una vez basta. */
+let placesAvisada = false;
+function avisarPlacesUnaVez(status: number, body: string): void {
+  if (placesAvisada) return;
+  placesAvisada = true;
+  console.warn(
+    `No se ha podido buscar por nombre de negocio (Places API respondió ${status}). ` +
+      `Si es un 403, activa "Places API (New)" en el proyecto de Google Cloud de GOOGLE_MAPS_API_KEY. ` +
+      `Mientras tanto se navega por calle o pueblo. ${body.slice(0, 200)}`,
+  );
+}
+
+/**
+ * Encuentra el mejor punto posible para una comanda, por este orden:
+ *
+ *   1. La dirección exacta, si Google da con el portal.
+ *   2. El negocio por su nombre, si la comanda es de una empresa.
+ *   3. La calle sin número.
+ *   4. El centro del pueblo.
+ *
+ * El nivel al que ha llegado va dentro, para que la pantalla pueda decir
+ * "esto es la calle, no el portal" en vez de fingir precisión.
+ */
+export async function resolveUbicacio(dades: {
+  address: string;
+  city: string | null;
+  customer: string | null;
+}): Promise<ResultatUbicacio> {
+  const adreca = adrecaCompleta({ ...dades, lat: null, lng: null });
+
+  /*
+    Si en algún momento Google no ha podido contestar, la comanda NO se
+    apunta como desconocida: se reintenta otro día. Apuntarla por un corte
+    de red la dejaría sin coordenadas para siempre.
+  */
+  let hiHaHagutFallada: string | null = null;
+
+  // 1. El portal.
+  let poble: { coord: Coord; placeId: string | null } | null = null;
+  if (adreca) {
+    const exacta = await geocodificar(adreca);
+    if (exacta.estat === "ok") {
+      if (exacta.precise) {
+        return {
+          estat: "ok",
+          ubicacio: { ...exacta.coord, placeId: exacta.placeId, nivell: "portal" },
+        };
+      }
+      /*
+        Impreciso: ESTO es el centroide del pueblo, y ya lo tenemos. Se
+        guarda para el final —es mejor que nada— y para sesgar la búsqueda
+        del negocio.
+      */
+      poble = { coord: exacta.coord, placeId: exacta.placeId };
+    } else if (exacta.estat === "sense_resposta") {
+      hiHaHagutFallada = exacta.motiu;
+    }
+  }
+
+  if (!poble && dades.city && !hiHaHagutFallada) {
+    const nomesPoble = await geocodificar(dades.city);
+    if (nomesPoble.estat === "ok") {
+      poble = { coord: nomesPoble.coord, placeId: nomesPoble.placeId };
+    } else if (nomesPoble.estat === "sense_resposta") {
+      hiHaHagutFallada = nomesPoble.motiu;
+    }
+  }
+
+  // 2. El negocio por su nombre.
+  if (dades.customer?.trim()) {
+    const consulta = [dades.customer, dades.address, dades.city]
+      .filter((tros) => tros && String(tros).trim())
+      .join(", ");
+    const negoci = await findPlaceByName(consulta, poble?.coord ?? null);
+    if (negoci) return { estat: "ok", ubicacio: negoci };
+  }
+
+  // 3. La calle sin número.
+  const carrer = nomDeCarrer(dades.address);
+  if (carrer && carrer !== dades.address.trim()) {
+    const nomes = dades.city ? `${carrer}, ${dades.city}` : carrer;
+    const trobat = await geocodificar(nomes);
+    if (trobat.estat === "ok" && trobat.precise) {
+      return {
+        estat: "ok",
+        ubicacio: { ...trobat.coord, placeId: trobat.placeId, nivell: "carrer" },
+      };
+    }
+    if (trobat.estat === "sense_resposta") hiHaHagutFallada = trobat.motiu;
+  }
+
+  // 4. El pueblo, que es mejor que nada.
+  if (poble) {
+    return {
+      estat: "ok",
+      ubicacio: { ...poble.coord, placeId: poble.placeId, nivell: "poble" },
+    };
+  }
+
+  return hiHaHagutFallada
+    ? { estat: "sense_resposta", motiu: hiHaHagutFallada }
+    : { estat: "desconeguda" };
 }
 
 // ─────────────────────────────────────────────────────────────────────────

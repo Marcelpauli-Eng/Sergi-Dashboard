@@ -128,6 +128,22 @@ export function parseStatusCategory(
 }
 
 /**
+ * Lo que dice la celda `_precisio`: hasta dónde afinó la búsqueda del sitio.
+ *
+ * La escribe la app, así que solo puede traer uno de cuatro valores. Lo que
+ * no sea uno de ellos —una celda tocada a mano, o de una versión anterior—
+ * se lee como "no lo sabemos", que hace que se vuelva a buscar.
+ */
+export function parseGeoLevel(
+  raw: unknown,
+): "portal" | "negoci" | "carrer" | "poble" | null {
+  const k = clave(raw);
+  return k === "portal" || k === "negoci" || k === "carrer" || k === "poble"
+    ? k
+    : null;
+}
+
+/**
  * La fila que se añade al crear una comanda a mano.
  *
  * Cada dato va a la columna que le toca según la cabecera de ESA pestaña, no

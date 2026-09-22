@@ -135,6 +135,50 @@ export const COLUMNS = {
   lat: ["_lat", "lat", "latitud"],
   lng: ["_lng", "lng", "longitud"],
 
+  /**
+   * La dirección que se geocodificó para obtener `lat`/`lng`.
+   *
+   * Sin esto, unas coordenadas cacheadas valían para siempre: se corregía el
+   * portal —o la oficina cambiaba la calle en la hoja— y el transportista
+   * seguía yendo al sitio de antes, porque las coordenadas mandan sobre el
+   * texto. Guardando junto a las coordenadas la dirección de la que salieron
+   * se sabe si siguen valiendo: si no coincide con la que hay hoy en la
+   * fila, están caducadas y se vuelve a geocodificar.
+   *
+   * También marca las que Google no reconoce: la dirección queda apuntada
+   * sin coordenadas, y así no se le vuelve a preguntar por la misma cada vez
+   * que alguien abre la app.
+   *
+   * Se llama `_geo` y no `_adreca` porque las cabeceras se comparan sin
+   * acentos ni signos: "_adreca" y la columna "Adreça" de la hoja acaban
+   * siendo la misma palabra, y esto habría leído la dirección de la fila
+   * creyendo que era la geocodificada —con lo cual nunca caducaría nada—.
+   */
+  geoAddress: ["_geo", "_geoadreca"],
+
+  /**
+   * El identificador del portal en Google, al lado de las coordenadas.
+   *
+   * Es lo único que señala un portal sin ambigüedad: navegando con él, Maps
+   * no vuelve a interpretar la dirección. Se guarda cuando alguien ELIGE la
+   * dirección de la lista de Google —desde la app o desde el panel del
+   * full— y también cuando la encuentra el geocodificador.
+   */
+  placeId: ["_placeId"],
+
+  /**
+   * Hasta dónde afinó la búsqueda: "portal", "negoci", "carrer" o "poble".
+   *
+   * `_geo` guarda QUÉ dirección se buscó; esto, CÓMO de fino se encontró.
+   * Son dos cosas distintas y las dos hacen falta: una dice si el punto está
+   * caducado, y la otra si el punto es el portal o el centro del pueblo.
+   *
+   * Se llama `_precisio` y no `_geonivell` por lo mismo que `_geo` no se
+   * llama `_adreca`: las cabeceras se comparan sin acentos ni signos, y hay
+   * que mirar que ninguna acabe chocando con otra. Ver `check:schema`.
+   */
+  precisio: ["_precisio"],
+
 } as const;
 
 export type ColumnKey = keyof typeof COLUMNS;
@@ -160,6 +204,9 @@ export const MANAGED_COLUMNS: ColumnKey[] = [
   "incidentNote",
   "lat",
   "lng",
+  "placeId",
+  "precisio",
+  "geoAddress",
   "date",
 ];
 

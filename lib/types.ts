@@ -97,6 +97,37 @@ export interface Order {
   lat: number | null;
   lng: number | null;
   /**
+   * La dirección de la que salieron esas coordenadas.
+   *
+   * Es lo que permite saber si siguen valiendo: cuando no coincide con la
+   * dirección que hay hoy en la fila, alguien la ha corregido y las
+   * coordenadas ya no llevan donde hay que ir. Ver `construirComandes`, que
+   * las tira en ese caso, y `geocodificarPendents`, que las rehace.
+   *
+   * Apuntada SIN coordenadas significa que Google no reconoció esa
+   * dirección: no se le vuelve a preguntar hasta que cambie.
+   */
+  geoAddress: string | null;
+  /**
+   * El identificador del portal en Google, al lado de las coordenadas.
+   *
+   * Es lo que hace que navegar caiga en el portal y no donde Maps crea: con
+   * él no vuelve a interpretar la dirección. `null` cuando el punto no salió
+   * de una ficha de Google —lo pegó una persona del mapa— o cuando se
+   * geocodificó antes de guardarlo.
+   */
+  placeId: string | null;
+  /**
+   * Hasta dónde afina el punto guardado: el portal, la ficha del negocio,
+   * la calle sin número o el centro del pueblo.
+   *
+   * `geoAddress` dice si el punto está caducado; esto dice si el punto es la
+   * casa o solo la zona. Se guarda para avisar al transportista cuando NO es
+   * el portal —que es justo cuando la navegación "no marca exacto"— y para
+   * volver a intentarlo otro día a ver si Google ya lo sabe.
+   */
+  geoLevel: "portal" | "negoci" | "carrer" | "poble" | null;
+  /**
    * Fila real dentro de la hoja (1-indexed, tal y como la numera Sheets).
    * Se usa para escribir el estado de vuelta. Nunca se envía al cliente:
    * se recalcula releyendo la hoja justo antes de escribir, porque la oficina

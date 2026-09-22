@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top" />
+    <style>
+      /* El panel de Sheets es estrecho (300px): todo a una columna, sin
+         adornos, y la letra del sistema para que no desentone con la hoja. */
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 13px;
+        margin: 0;
+        padding: 12px;
+        color: #202124;
+      }
+      #fila {
+        background: #e8f0fe;
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin-bottom: 10px;
+        font-weight: 500;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        font-size: 14px;
+        border: 1px solid #dadce0;
+        border-radius: 6px;
+        outline: none;
+      }
+      input:focus { border-color: #1a73e8; }
+      ul { list-style: none; margin: 8px 0 0; padding: 0; }
+      li button {
+        width: 100%;
+        text-align: left;
+        background: none;
+        border: 0;
+        border-radius: 6px;
+        padding: 8px 10px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+      li button:hover { background: #f1f3f4; }
+      .secundari { display: block; color: #5f6368; font-size: 11px; margin-top: 2px; }
+      #estat { margin-top: 10px; color: #5f6368; }
+      .error { color: #c5221f; }
+      .fet { color: #188038; font-weight: 500; }
+      .ajuda { margin-top: 14px; color: #5f6368; font-size: 11px; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <div id="fila">Carregant…</div>
+
+    <input
+      id="cerca"
+      type="text"
+      placeholder="Carrer Cabrerés, 2 Vic"
+      autocomplete="off"
+    />
+    <ul id="llista"></ul>
+    <div id="estat"></div>
+
+    <p class="ajuda">
+      Pica una casella de <b>Adreça</b> i aquest quadre s'omple sol amb
+      aquella fila. Escriu i <b>tria de la llista</b>: així la fila es queda amb el punt
+      exacte i el transportista hi arriba al portal. Si l'escrius a mà, la
+      casella es marca en ambre fins que la triïs d'aquí.
+    </p>
+
+    <!-- La segunda vía, y la única que no necesita clave de Google: pegar
+         lo que ya se tiene abierto en Maps. Va debajo y no arriba porque
+         buscar aquí es menos trabajo cuando funciona; esto es la salida
+         para cuando Google no encuentra el sitio —o cuando no hay API—. -->
+    <hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 16px 0 12px" />
+
+    <label for="enganxar" style="font-weight: 500">O enganxa de Google Maps</label>
+    <input
+      id="enganxar"
+      type="text"
+      placeholder="https://maps.app.goo.gl/… o 41.5719, 1.7834"
+      autocomplete="off"
+      style="margin-top: 6px"
+    />
+    <button id="desaPunt" style="
+      margin-top: 8px; width: 100%; padding: 8px; border: 0; border-radius: 6px;
+      background: #1a73e8; color: #fff; font-size: 13px; cursor: pointer;">
+      Desar el punt en aquesta fila
+    </button>
+    <p class="ajuda" style="margin-top: 8px">
+      Obre Google Maps, busca el lloc i copia l'enllaç — o fes botó dret
+      sobre el mapa i copia les coordenades. <b>Això no gasta cap API.</b>
+      L'adreça escrita no es toca: només es desa on és.
+    </p>
+
+    <script>
+      var cerca = document.getElementById("cerca");
+      var llista = document.getElementById("llista");
+      var estat = document.getElementById("estat");
+      var infoFila = document.getElementById("fila");
+
+      /* El token junta todo lo tecleado con la elección: Google lo cobra
+         como una búsqueda, no como una llamada por letra. */
+      var token = nouToken();
+      var fila = 0;
+      var espera = null;
+
+      function nouToken() {
+        return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+      }
+
+      function dir(text, classe) {
+        estat.className = classe || "";
+        estat.textContent = text;
+      }
+
+      /*
+        El panel sigue al cursor.
+
+        Se pregunta cada segundo dónde está: en la hoja el cursor se mueve
+        todo el rato, y escribir la dirección de una comanda en la fila de
+        otra es el peor error posible.
+
+        Y cuando el cursor CAE en la casilla de la dirección, el panel se
+        pone en marcha solo: carga esa fila, escribe lo que ya hubiera y
+        deja el cursor dentro para escribir. Eso es lo más parecido a que se
+        abra Google al entrar en la casilla — dentro de la casilla no se
+        puede dibujar nada, Sheets no lo permite.
+      */
+      var ultimaFila = null;
+
+      function mirarFila() {
+        google.script.run
+          .withSuccessHandler(function (info) {
+            fila = info.fila;
+            infoFila.textContent = info.resum;
+            infoFila.style.background = info.aAdreca ? "#e6f4ea" : "#e8f0fe";
+
+            // Solo al CAMBIAR de casilla: si no, cada segundo borraría lo
+            // que se está escribiendo.
+            var clau = info.fila + "|" + info.aAdreca;
+            if (clau === ultimaFila) return;
+            ultimaFila = clau;
+
+            llista.innerHTML = "";
+            dir("");
+
+            if (info.aAdreca) {
+              cerca.value = info.adreca || "";
+              cerca.focus();
+              cerca.select();
+            }
+          })
+          .filaActual();
+      }
+
+      mirarFila();
+      window.addEventListener("focus", mirarFila);
+      // Un segundo: se nota inmediato al pinchar y no machaca la hoja a
+      // preguntas. Es lo único que corre en bucle aquí.
+      setInterval(mirarFila, 1000);
+
+      cerca.addEventListener("input", function () {
+        clearTimeout(espera);
+        llista.innerHTML = "";
+        var text = cerca.value.trim();
+        if (text.length < 3) return dir("");
+
+        // Medio segundo: cada llamada se paga y cada tecla dispararía una.
+        espera = setTimeout(function () {
+          dir("Buscant…");
+          google.script.run
+            .withSuccessHandler(pintar)
+            .withFailureHandler(function (e) {
+              dir(e.message || "No s'ha pogut buscar", "error");
+            })
+            .buscarAdreces(text, token);
+        }, 500);
+      });
+
+      function pintar(suggeriments) {
+        llista.innerHTML = "";
+        if (!suggeriments || suggeriments.length === 0) {
+          return dir("Cap adreça trobada");
+        }
+        dir("");
+
+        suggeriments.forEach(function (s) {
+          var boto = document.createElement("button");
+          boto.innerHTML =
+            escapar(s.principal) +
+            (s.secundari ? '<span class="secundari">' + escapar(s.secundari) + "</span>" : "");
+          boto.onclick = function () {
+            triar(s);
+          };
+          var li = document.createElement("li");
+          li.appendChild(boto);
+          llista.appendChild(li);
+        });
+      }
+
+      function triar(s) {
+        if (!fila) return dir("Posa el cursor a la fila de la comanda", "error");
+        llista.innerHTML = "";
+        dir("Desant…");
+
+        google.script.run
+          .withSuccessHandler(function (lloc) {
+            cerca.value = lloc.address;
+            dir("Desat a la fila " + fila + ": " + lloc.address, "fet");
+            // Elegida una: la siguiente búsqueda es otra sesión para Google.
+            token = nouToken();
+          })
+          .withFailureHandler(function (e) {
+            dir(e.message || "No s'ha pogut desar", "error");
+          })
+          .desarAdreca(fila, s.placeId, token);
+      }
+
+      /* La otra vía: pegar. */
+      document.getElementById("desaPunt").onclick = function () {
+        if (!fila) return dir("Posa el cursor a la fila de la comanda", "error");
+        var text = document.getElementById("enganxar").value.trim();
+        if (!text) return dir("Enganxa l'enllaç o les coordenades", "error");
+
+        dir("Desant el punt…");
+        google.script.run
+          .withSuccessHandler(function (punt) {
+            document.getElementById("enganxar").value = "";
+            dir(
+              "Punt desat a la fila " + fila + ": " + punt.lat + ", " + punt.lng,
+              "fet",
+            );
+          })
+          .withFailureHandler(function (e) {
+            dir(e.message || "No s'ha pogut desar el punt", "error");
+          })
+          .desarPunt(fila, text);
+      };
+
+      /* Lo que devuelve Google se mete como HTML para poder poner la segunda
+         línea en gris: hay que escaparlo, que son nombres de sitios escritos
+         por cualquiera. */
+      function escapar(text) {
+        var d = document.createElement("div");
+        d.textContent = text;
+        return d.innerHTML;
+      }
+    </script>
+  </body>
+</html>

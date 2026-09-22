@@ -463,6 +463,8 @@ export interface NovaComanda {
 export async function crearComanda(
   dades: NovaComanda,
   sheetTab?: string | null,
+  /** La dirección elegida del buscador, si se eligió: se guarda ya resuelta. */
+  lloc?: LlocGuardat | null,
 ): Promise<{ sheetTab: string }> {
   const snapshot = await readSheet(sheetTab);
 
@@ -520,8 +522,25 @@ export async function crearComanda(
         transportista la escondería: creas la comanda y no aparece.
       */
       driverId: dades.driverId ?? "",
+      /*
+        La dirección elegida se guarda ya con su punto: la comanda nace con
+        la ubicación exacta y no hay nada que buscar después. Sin elegir,
+        estas celdas van vacías y se resuelven al calcular la ruta.
+      */
+      ...(lloc
+        ? {
+            lat: String(lloc.lat),
+            lng: String(lloc.lng),
+            placeId: lloc.placeId,
+            geoLevel: "portal",
+          }
+        : {}),
     },
-    snapshot.headerMap,
+    // Las columnas del punto puede que no existan todavía en la hoja: se
+    // crean antes de escribir, o el valor no tendría dónde ir.
+    lloc
+      ? await ensureManagedColumns(snapshot.headerMap, snapshot.sheetTab)
+      : snapshot.headerMap,
   );
 
   await sheetsFetch(
@@ -531,6 +550,13 @@ export async function crearComanda(
   );
 
   return { sheetTab: snapshot.sheetTab ?? "" };
+}
+
+/** Una dirección ya elegida en el buscador, tal y como se guarda. */
+export interface LlocGuardat {
+  placeId: string;
+  lat: number;
+  lng: number;
 }
 
 /** Los datos de una comanda que se pueden corregir desde la app. */
@@ -559,6 +585,14 @@ export async function actualitzarComanda(
   id: string,
   dades: DadesComanda,
   sheetTab?: string | null,
+  /**
+   * La dirección elegida del buscador de Google, si se eligió.
+   *
+   * Trae el portal con su identificador, así que se guarda como buena y ya
+   * no hay que buscarla al calcular la ruta: es la única forma de que el
+   * punto sea exacto seguro.
+   */
+  lloc?: LlocGuardat | null,
 ): Promise<boolean> {
   const snapshot = await readSheet(sheetTab);
   const order = snapshot.orders.find((o) => o.id === id);
@@ -574,16 +608,67 @@ export async function actualitzarComanda(
     });
   }
 
-  await writeCells(updates, snapshot.headerMap, snapshot.sheetTab);
+  /*
+    Si cambia la dirección, el punto de antes ya no vale.
+
+    Sin esto, corregir una dirección mal escrita dejaba las coordenadas
+    viejas en su sitio —la app solo busca las filas que no tienen— y el
+    botón de navegar seguía llevando al sitio equivocado, ahora además con
+    la dirección buena escrita al lado.
+  */
+  const canviaAdreca =
+    (dades.address !== undefined && dades.address.trim() !== order.address) ||
+    (dades.city !== undefined && (dades.city.trim() || null) !== order.city);
+
+  if (lloc) {
+    updates.push({ rowNumber: order.rowNumber, column: "lat", value: lloc.lat });
+    updates.push({ rowNumber: order.rowNumber, column: "lng", value: lloc.lng });
+    updates.push({ rowNumber: order.rowNumber, column: "placeId", value: lloc.placeId });
+    updates.push({ rowNumber: order.rowNumber, column: "precisio", value: "portal" });
+  } else if (canviaAdreca) {
+    for (const columna of ["lat", "lng", "placeId", "precisio", "geoAddress"] as const) {
+      updates.push({ rowNumber: order.rowNumber, column: columna, value: "" });
+    }
+  }
+
+  const headerMap =
+    lloc || canviaAdreca
+      ? await ensureManagedColumns(snapshot.headerMap, snapshot.sheetTab)
+      : snapshot.headerMap;
+
+  await writeCells(updates, headerMap, snapshot.sheetTab);
   return true;
+}
+
+/** Lo que se guarda de una comanda ya geocodificada. */
+export interface CoordCacheada {
+  orderId: string;
+  /** La dirección que se le preguntó a Google, tal cual. */
+  address: string;
+  /** `null` las dos cuando Google no reconoció la dirección. */
+  lat: number | null;
+  lng: number | null;
+  /** El portal en Google, si el punto salió de una ficha suya. */
+  placeId: string | null;
+  /** Hasta dónde se afinó: el portal, el negocio, la calle o el pueblo. */
+  geoLevel: "portal" | "negoci" | "carrer" | "poble" | null;
 }
 
 /**
  * Persiste en el Sheet las coordenadas recién geocodificadas, para no volver
  * a pagar geocoding por la misma dirección nunca más.
+ *
+ * Junto a ellas va la dirección de la que salieron. Es lo que las caduca
+ * cuando alguien corrige el portal: al leer la hoja se comparan las dos y,
+ * si no coinciden, las coordenadas se tiran y se vuelven a buscar. Ver
+ * `construirComandes`.
+ *
+ * Las direcciones que Google no reconoce se guardan igual, sin coordenadas:
+ * dejan constancia de que ya se preguntó y evitan volver a preguntar lo
+ * mismo en cada sincronización.
  */
 export async function cacheCoordinates(
-  coords: { orderId: string; lat: number; lng: number }[],
+  coords: CoordCacheada[],
   snapshot: SheetSnapshot,
 ): Promise<void> {
   if (coords.length === 0) return;
@@ -595,8 +680,22 @@ export async function cacheCoordinates(
   for (const coord of coords) {
     const order = byId.get(coord.orderId);
     if (!order) continue;
-    updates.push({ rowNumber: order.rowNumber, column: "lat", value: coord.lat });
-    updates.push({ rowNumber: order.rowNumber, column: "lng", value: coord.lng });
+    // En todas las filas de la comanda, que es lo que dice `rowNumbers`.
+    for (const fila of order.rowNumbers) {
+      updates.push({ rowNumber: fila, column: "lat", value: coord.lat ?? "" });
+      updates.push({ rowNumber: fila, column: "lng", value: coord.lng ?? "" });
+      updates.push({ rowNumber: fila, column: "geoAddress", value: coord.address });
+      /*
+        El portal y lo fino que se ha hilado van al lado del punto.
+
+        Vacíos cuando no los hay —una dirección que Google no reconoce, o un
+        punto que puso una persona— y por eso se escriben siempre: dejarlos
+        sin tocar mantendría los de la dirección anterior, que es de lo que
+        iba todo esto.
+      */
+      updates.push({ rowNumber: fila, column: "placeId", value: coord.placeId ?? "" });
+      updates.push({ rowNumber: fila, column: "precisio", value: coord.geoLevel ?? "" });
+    }
   }
 
   await writeCells(updates, headerMap, snapshot.sheetTab);
