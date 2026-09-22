@@ -153,6 +153,13 @@ import { decodePolyline } from "../lib/polyline.ts";
   assert.equal(telHref("Xavi Pare Duba: +34 932 91 90 00"), "tel:+34932919000");
   // El nombre antes de un guion suelto no es un número: se salta al que sí.
   assert.equal(telHref("· Montse - +34 932 91 90 00"), "tel:+34932919000");
+
+  // La nota entre paréntesis tiene números suyos y se le pegaban al final.
+  assert.equal(
+    telHref("Isaac: +34 670 99 39 86 (TRUCAR AMB 5 DIES D'ANTELACIÓ)"),
+    "tel:+34670993986",
+  );
+  assert.equal(telHref("112 (URGÈNCIES 24 H)"), "tel:112");
 }
 
 // ── Geometría del recorrido ──────────────────────────────────────────────

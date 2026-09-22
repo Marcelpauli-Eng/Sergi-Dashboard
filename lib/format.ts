@@ -43,13 +43,20 @@ export function formatRelativeTime(iso: string): string {
  * Se parte por los separadores de verdad —la barra, la coma, el punto y
  * coma y el guion SUELTO— y se coge el primer trozo que tenga números. El
  * guion pegado no separa: "977-33-22-11" es un número, no dos.
+ *
+ * Antes se tira el paréntesis que lleve letras: la nota "(TRUCAR AMB 5 DIES
+ * D'ANTELACIÓ)" le pegaba su 5 al final del número y marcaba una cifra de
+ * más. El paréntesis sin letras es prefijo —"(977) 33 22 11"— y se queda.
+ * ponytail: solo el paréntesis; una nota suelta con números al lado seguiría
+ * pegándose — arreglar si aparece en la hoja.
  */
 export function telHref(phone: string): string {
+  const limpio = phone.replace(/\([^)]*\p{L}[^)]*\)/gu, " ");
   const marcable =
-    phone
+    limpio
       .split(/[/;,]|\s+[-–—]\s+/)
       .map((trozo) => trozo.replace(/[^\d+]/g, ""))
       .find((trozo) => trozo.replace(/\D/g, "").length >= 6) ??
-    phone.replace(/[^\d+]/g, "");
+    limpio.replace(/[^\d+]/g, "");
   return `tel:${marcable}`;
 }

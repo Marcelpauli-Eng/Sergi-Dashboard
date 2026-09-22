@@ -313,7 +313,21 @@ export async function writeDeliveries(
   if (records.length === 0) return { applied: [], notFound: [] };
 
   const snapshot = await readSheet(sheetTab);
-  const headerMap = await ensureManagedColumns(snapshot.headerMap, sheetTab);
+  /*
+    Se escribe en el full que se ACABA DE LEER, no en el que pidió el móvil.
+
+    Cuando el móvil no manda ninguno —que es lo normal hasta que alguien
+    elige uno a mano en el menú— `readSheet` resuelve el del mes y escribir
+    con el parámetro crudo caía en `env.google.sheetTab`, que está vacío: el
+    rango se quedaba sin nombre de pestaña y Google escribe entonces en la
+    PRIMERA del documento. La comanda se encontraba (se había leído bien),
+    así que la respuesta decía "entregado" y la barra "actualizado ahora
+    mismo"; pero la celda se iba a otra pestaña, el full del mes seguía
+    vacío, y al minuto —cuando caduca `TRUST_LOCAL_MS`— la parada volvía a
+    pendiente sin un solo error por ninguna parte.
+  */
+  const full = snapshot.sheetTab;
+  const headerMap = await ensureManagedColumns(snapshot.headerMap, full);
   const byId = new Map(snapshot.orders.map((order) => [order.id, order]));
 
   const updates: CellUpdate[] = [];
@@ -406,7 +420,7 @@ export async function writeDeliveries(
     Al revés, un fallo al escribir el importe dejaría sin marcar una entrega
     ya hecha, que es el peor error posible en esta app.
   */
-  await writeCells(updates, headerMap, sheetTab);
+  await writeCells(updates, headerMap, full);
   await writeImportes(importes);
   return { applied, notFound };
 }
