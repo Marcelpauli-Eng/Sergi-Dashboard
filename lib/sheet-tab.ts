@@ -238,14 +238,44 @@ export function findLatestTabUpTo(tabs: string[], month: string): string | null 
   return best?.tab ?? null;
 }
 
+/**
+ * Qué pestaña hay que crear en el segundo documento para apuntar ahí una
+ * comanda del mes de `full` (una pestaña del documento de siempre).
+ *
+ * La otra empresa no crea sus meses al ritmo de la oficina: estás en
+ * "SET 26", creas una comanda suya y en su hoja no hay septiembre. Se crea
+ * con el MISMO nombre que el full de siempre, para que los dos documentos
+ * se lean igual.
+ *
+ * La cabecera, de su propio mes anterior si tiene alguno —que sus pestañas
+ * sigan pareciéndose entre ellas—; si no tiene ninguno (`cabeceraDe` es
+ * `null`), la del full de siempre.
+ *
+ * `null`: no hay que crear nada. O ya está ese mes, o `full` no dice de qué
+ * mes es —una pestaña "Resum" no se copia a ningún sitio—.
+ */
+export function pestanyaACrear(
+  tabs: string[],
+  full: string,
+): { titol: string; cabeceraDe: string | null } | null {
+  const mes = parseTabMonth(full);
+  if (!mes || findMonthTab(tabs, mes)) return null;
+  return { titol: full, cabeceraDe: findLatestTabUpTo(tabs, mes) };
+}
+
 /** Mensaje de error con la lista de pestañas, para que se vea qué hay. */
-export function noTabFoundMessage(tabs: string[], month: string): string {
+export function noTabFoundMessage(
+  tabs: string[],
+  month: string,
+  /** La variable que fuerza la pestaña de ESE documento. */
+  variable = "GOOGLE_SHEET_TAB",
+): string {
   return (
     `No se ha encontrado ninguna pestaña para ${month} en el documento,\n` +
     "ni ninguna anterior de la que tirar.\n" +
     `Pestañas disponibles: ${tabs.map((t) => `"${t}"`).join(", ")}\n\n` +
     "Crea la pestaña de este mes con un nombre que lo incluya " +
-    '(por ejemplo "Agost 2026" o "08/2026"), o define GOOGLE_SHEET_TAB ' +
+    `(por ejemplo "Agost 2026" o "08/2026"), o define ${variable} ` +
     "con el nombre exacto de la pestaña que quieras usar."
   );
 }

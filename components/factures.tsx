@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Download, FileCheck, Printer, Trash2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Factura, { Hoja } from "@/components/factura";
-import type { FacturaEmitida, Stop } from "@/lib/types";
+import type { FacturaEmitida, OrigenManifest, Stop } from "@/lib/types";
 import {
   clientePara,
   euros,
@@ -71,6 +71,7 @@ function esUltimaEmesa(
  */
 export default function Factures({
   entregats,
+  origens,
   mes,
   datos,
   online,
@@ -78,6 +79,8 @@ export default function Factures({
 }: {
   /** Entregados de la hoja que esté seleccionada ahora mismo. */
   entregats: Stop[];
+  /** Los documentos de comandas: con más de uno, la factura los separa. */
+  origens: OrigenManifest[];
   mes: string;
   datos: DatosFacturacion;
   online: boolean;
@@ -197,6 +200,7 @@ export default function Factures({
       {facturant && (
         <Factura
           entregats={entregats}
+          origens={origens}
           mes={mes}
           datos={datos}
           online={online}

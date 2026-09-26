@@ -2,7 +2,13 @@ import "server-only";
 import { googleAccessToken } from "./google-auth";
 import { env, ErrorAccionable } from "./env";
 import { parseSheetDate, formatSheetTimestamp, today } from "./dates";
-import { findMonthTab, findLatestTabUpTo, noTabFoundMessage } from "./sheet-tab";
+import {
+  findMonthTab,
+  findLatestTabUpTo,
+  noTabFoundMessage,
+  parseTabMonth,
+  pestanyaACrear,
+} from "./sheet-tab";
 import { parseImportesFactura } from "./factura.ts";
 import {
   CABECERA_CLIENTS,
@@ -106,6 +112,42 @@ export async function listSheetTabs(spreadsheetId?: string): Promise<string[]> {
     .filter((title) => title.length > 0);
 }
 
+/* ── De dónde salen las comandas ────────────────────────────────────────── */
+
+/**
+ * Un documento de comandas.
+ *
+ * El de siempre (`GOOGLE_SHEET_ID`) y, si está puesto, un segundo
+ * (`GOOGLE_SHEET_ID_2`) de otra empresa con su propia numeración. Cada uno
+ * es una bossa en el calendario; los dos van a la misma ruta y a la misma
+ * factura.
+ */
+export interface Origen {
+  /**
+   * "" el de siempre, "2" el segundo. Va delante del id de sus comandas
+   * —"2:748"— para que no choquen con las del primero. Ver `Order.origen`.
+   */
+  id: string;
+  nom: string;
+  sheetId: string;
+  /** Pestaña forzada por entorno. `null`: la del mes, como siempre. */
+  sheetTab: string | null;
+}
+
+/** Los documentos configurados, el de siempre primero. */
+export function origens(): Origen[] {
+  const { sheetId, sheetTab, nom, segon } = env.google;
+  const llista: Origen[] = [{ id: "", nom, sheetId, sheetTab }];
+  if (segon) llista.push({ id: "2", ...segon });
+  return llista;
+}
+
+/** El documento de una comanda, por el prefijo de su id. */
+export function origenDe(orderId: string): Origen {
+  const [principal, ...altres] = origens();
+  return altres.find((o) => orderId.startsWith(`${o.id}:`)) ?? principal;
+}
+
 export interface SheetSnapshot {
   /** Todos los pedidos válidos de la hoja. */
   orders: Order[];
@@ -115,6 +157,8 @@ export interface SheetSnapshot {
   skipped: { rowNumber: number; reason: string }[];
   /** Nombre de la pestaña que se leyó. */
   sheetTab: string | null;
+  /** De qué documento. Todo lo que se escriba a partir de aquí va a ese. */
+  origen: Origen;
 }
 
 /**
@@ -128,12 +172,17 @@ export interface SheetSnapshot {
  *
  * `GOOGLE_SHEET_TAB` sigue mandando por encima de todo: es la vía de escape
  * para apuntar a una pestaña concreta. Si no está puesta, esto se encarga.
+ *
+ * `full` es la pestaña elegida en la app, que es siempre una del documento
+ * de siempre. El segundo documento tiene las suyas con otros nombres, así
+ * que de ella solo se aprovecha el MES: mirando "JUL 26" se lee el julio
+ * del segundo, se llame como se llame allí.
  */
-async function resolverPestanya(): Promise<string> {
-  if (env.google.sheetTab) return env.google.sheetTab;
+async function resolverPestanya(origen: Origen, full?: string | null): Promise<string> {
+  if (origen.sheetTab) return origen.sheetTab;
 
-  const tabs = await listSheetTabs();
-  const mes = today(env.timezone).slice(0, 7);
+  const tabs = await listSheetTabs(origen.sheetId);
+  const mes = (full && parseTabMonth(full)) || today(env.timezone).slice(0, 7);
 
   const delMes = findMonthTab(tabs, mes);
   if (delMes) return delMes;
@@ -141,7 +190,72 @@ async function resolverPestanya(): Promise<string> {
   const anterior = findLatestTabUpTo(tabs, mes);
   if (anterior) return anterior;
 
+  /*
+    El segundo documento sin ningún mes todavía —una hoja recién estrenada,
+    con su "Full 1" vacío— no es un fallo: es lo normal hasta la primera
+    comanda, que crea el mes ella sola (ver `assegurarPestanya`). Se dice
+    así en su bossa, que es donde está el "+".
+  */
+  if (origen.id) {
+    throw new Error(
+      `Encara no hi ha el full de ${full && parseTabMonth(full) ? full : mes} a ${origen.nom}. ` +
+        `Es crearà sol quan hi afegeixis la primera comanda amb el «+» d'aquesta bossa.`,
+    );
+  }
   throw new Error(noTabFoundMessage(tabs, mes));
+}
+
+/**
+ * Crea en el segundo documento la pestaña del mes de `full`, si no la tiene.
+ *
+ * Con el mismo nombre que la del documento de siempre y su misma fila de
+ * cabecera —o la de su propio mes anterior, si tiene—. Solo la cabecera:
+ * copiar la pestaña entera se llevaría las comandas de una empresa a la
+ * hoja de la otra. Qué crear lo decide `pestanyaACrear`.
+ */
+async function assegurarPestanya(origen: Origen, full: string): Promise<void> {
+  const pla = pestanyaACrear(await listSheetTabs(origen.sheetId), full);
+  if (!pla) return;
+
+  const [de, pestanya] = pla.cabeceraDe
+    ? [origen, pla.cabeceraDe]
+    : [origens()[0], full];
+  const cabecera = (await sheetsFetch(
+    `/values/${encodeURIComponent(range("1:1", pestanya))}`,
+    undefined,
+    de.sheetId,
+  )) as { values?: unknown[][] };
+
+  try {
+    await sheetsFetch(
+      ":batchUpdate",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          requests: [
+            {
+              addSheet: {
+                // La cabecera fija arriba, como en la de la oficina.
+                properties: { title: pla.titol, gridProperties: { frozenRowCount: 1 } },
+              },
+            },
+          ],
+        }),
+      },
+      origen.sheetId,
+    );
+  } catch (error) {
+    // Otra petición la acaba de crear: ya está, que es lo que se quería.
+    if (String(error).includes("already exists")) return;
+    throw error;
+  }
+
+  await sheetsFetch(
+    `/values/${encodeURIComponent(range("A1", pla.titol))}?valueInputOption=RAW`,
+    { method: "PUT", body: JSON.stringify({ values: [cabecera.values?.[0] ?? []] }) },
+    origen.sheetId,
+  );
+  console.warn(`Creado el full "${pla.titol}" en "${origen.nom}".`);
 }
 
 /**
@@ -150,15 +264,22 @@ async function resolverPestanya(): Promise<string> {
  * Se piden los valores sin formatear y las fechas como número de serie:
  * así el parseo no depende del locale con el que esté configurada la hoja.
  *
- * @param sheetTab - Nombre de la pestaña a leer. Si no se pasa, se elige la
+ * @param sheetTab - La pestaña elegida en la app. Si no se pasa, se elige la
  *                   del mes en curso (ver `resolverPestanya`).
+ * @param origen - De qué documento. Por defecto, el de siempre.
  */
-export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot> {
-  const tab = sheetTab ?? (await resolverPestanya());
+export async function readSheet(
+  sheetTab?: string | null,
+  origen: Origen = origens()[0],
+): Promise<SheetSnapshot> {
+  const tab =
+    origen.id === "" && sheetTab ? sheetTab : await resolverPestanya(origen, sheetTab);
 
   const data = (await sheetsFetch(
     `/values/${encodeURIComponent(range("A1:ZZ", tab))}` +
       `?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
+    undefined,
+    origen.sheetId,
   )) as { values?: unknown[][] };
 
   const rows = data.values ?? [];
@@ -169,7 +290,13 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
   }
 
   const { orders, headerMap, skipped } = construirComandes(rows);
-  return { orders, headerMap, skipped, sheetTab: tab };
+  if (origen.id) {
+    for (const order of orders) {
+      order.id = `${origen.id}:${order.id}`;
+      order.origen = origen.id;
+    }
+  }
+  return { orders, headerMap, skipped, sheetTab: tab, origen };
 }
 
 /**
@@ -180,10 +307,9 @@ export async function readSheet(sheetTab?: string | null): Promise<SheetSnapshot
  * Devuelve el headerMap actualizado.
  */
 export async function ensureManagedColumns(
-  headerMap: Partial<Record<ColumnKey, number>>,
-  sheetTab?: string | null,
+  snapshot: SheetSnapshot,
 ): Promise<Partial<Record<ColumnKey, number>>> {
-  const tab = sheetTab ?? env.google.sheetTab;
+  const { headerMap, sheetTab: tab, origen } = snapshot;
   const missing = MANAGED_COLUMNS.filter((key) => headerMap[key] === undefined);
   if (missing.length === 0) return headerMap;
 
@@ -223,6 +349,7 @@ export async function ensureManagedColumns(
     `/values/${encodeURIComponent(range(`${startCell}:${endCell}`, tab))}` +
       `?valueInputOption=RAW`,
     { method: "PUT", body: JSON.stringify({ values: [newHeaders] }) },
+    origen.sheetId,
   );
 
   return updated;
@@ -235,12 +362,13 @@ interface CellUpdate {
   value: string | number;
 }
 
+/** Escribe en la pestaña y el documento de los que salió `snapshot`. */
 async function writeCells(
   updates: CellUpdate[],
   headerMap: Partial<Record<ColumnKey, number>>,
-  sheetTab?: string | null,
+  snapshot: SheetSnapshot,
 ): Promise<void> {
-  const tab = sheetTab ?? env.google.sheetTab;
+  const tab = snapshot.sheetTab;
   const data = updates
     .map((update) => {
       const columnIndex = headerMap[update.column];
@@ -252,14 +380,18 @@ async function writeCells(
 
   if (data.length === 0) return;
 
-  await sheetsFetch(`/values:batchUpdate`, {
-    method: "POST",
-    body: JSON.stringify({ valueInputOption: "USER_ENTERED", data }),
-  });
+  await sheetsFetch(
+    `/values:batchUpdate`,
+    {
+      method: "POST",
+      body: JSON.stringify({ valueInputOption: "USER_ENTERED", data }),
+    },
+    snapshot.origen.sheetId,
+  );
 }
 
 /** Cuál de los dos documentos. Solo para etiquetar comprobaciones. */
-export type SheetDoc = "repartos" | "privado";
+export type SheetDoc = "repartos" | "segon" | "privado";
 
 /**
  * ¿Se puede ESCRIBIR en ese documento?
@@ -310,9 +442,38 @@ export async function writeDeliveries(
   records: DeliveryRecord[],
   sheetTab?: string | null,
 ): Promise<WriteResult> {
-  if (records.length === 0) return { applied: [], notFound: [] };
+  /*
+    Cada comanda a su documento, que lo dice el prefijo de su id.
 
-  const snapshot = await readSheet(sheetTab);
+    Una tanda de la cola lleva mezcladas las de las dos bosses —se agrupa
+    por el full elegido, no por documento— y escribirlas todas en el primero
+    las daba por "no encontradas": entregas perdidas sin un error. Uno detrás
+    de otro, y si uno falla el error sube y la cola reintenta la tanda
+    entera: lo ya escrito se reescribe igual, como en cualquier reintento.
+  */
+  const perOrigen = new Map<string, DeliveryRecord[]>();
+  for (const record of records) {
+    const clau = origenDe(record.orderId).id;
+    perOrigen.set(clau, [...(perOrigen.get(clau) ?? []), record]);
+  }
+
+  const result: WriteResult = { applied: [], notFound: [] };
+  for (const [clau, delOrigen] of perOrigen) {
+    const origen = origens().find((o) => o.id === clau)!;
+    const escrit = await escriureEntregues(delOrigen, sheetTab, origen);
+    result.applied.push(...escrit.applied);
+    result.notFound.push(...escrit.notFound);
+  }
+  return result;
+}
+
+/** `writeDeliveries` para las comandas de un solo documento. */
+async function escriureEntregues(
+  records: DeliveryRecord[],
+  sheetTab: string | null | undefined,
+  origen: Origen,
+): Promise<WriteResult> {
+  const snapshot = await readSheet(sheetTab, origen);
   /*
     Se escribe en el full que se ACABA DE LEER, no en el que pidió el móvil.
 
@@ -326,8 +487,7 @@ export async function writeDeliveries(
     vacío, y al minuto —cuando caduca `TRUST_LOCAL_MS`— la parada volvía a
     pendiente sin un solo error por ninguna parte.
   */
-  const full = snapshot.sheetTab;
-  const headerMap = await ensureManagedColumns(snapshot.headerMap, full);
+  const headerMap = await ensureManagedColumns(snapshot);
   const byId = new Map(snapshot.orders.map((order) => [order.id, order]));
 
   const updates: CellUpdate[] = [];
@@ -420,7 +580,7 @@ export async function writeDeliveries(
     Al revés, un fallo al escribir el importe dejaría sin marcar una entrega
     ya hecha, que es el peor error posible en esta app.
   */
-  await writeCells(updates, headerMap, full);
+  await writeCells(updates, headerMap, snapshot);
   await writeImportes(importes);
   return { applied, notFound };
 }
@@ -465,8 +625,22 @@ export async function crearComanda(
   sheetTab?: string | null,
   /** La dirección elegida del buscador, si se eligió: se guarda ya resuelta. */
   lloc?: LlocGuardat | null,
+  /** En qué documento: la bossa desde la que se ha pulsado "+". */
+  origen: Origen = origens()[0],
 ): Promise<{ sheetTab: string }> {
-  const snapshot = await readSheet(sheetTab);
+  /*
+    En el segundo documento, el mes que estás mirando se crea si no está.
+    Sin esto, una comanda de la otra empresa en SET 26 caía en su último
+    mes —o en ningún sitio si su hoja estaba recién estrenada—. Con la
+    pestaña forzada por entorno no se toca nada: esa manda.
+  */
+  let full = sheetTab;
+  if (origen.id && !origen.sheetTab) {
+    full ??= await resolverPestanya(origens()[0]);
+    await assegurarPestanya(origen, full);
+  }
+
+  const snapshot = await readSheet(full, origen);
 
   /*
     El mismo número otra vez es casi siempre un número mal tecleado, así que
@@ -538,15 +712,14 @@ export async function crearComanda(
     },
     // Las columnas del punto puede que no existan todavía en la hoja: se
     // crean antes de escribir, o el valor no tendría dónde ir.
-    lloc
-      ? await ensureManagedColumns(snapshot.headerMap, snapshot.sheetTab)
-      : snapshot.headerMap,
+    lloc ? await ensureManagedColumns(snapshot) : snapshot.headerMap,
   );
 
   await sheetsFetch(
     `/values/${encodeURIComponent(range("A:ZZ", snapshot.sheetTab))}:append` +
       `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     { method: "POST", body: JSON.stringify({ values: [valores] }) },
+    origen.sheetId,
   );
 
   return { sheetTab: snapshot.sheetTab ?? "" };
@@ -594,7 +767,7 @@ export async function actualitzarComanda(
    */
   lloc?: LlocGuardat | null,
 ): Promise<boolean> {
-  const snapshot = await readSheet(sheetTab);
+  const snapshot = await readSheet(sheetTab, origenDe(id));
   const order = snapshot.orders.find((o) => o.id === id);
   if (!order) return false;
 
@@ -632,11 +805,9 @@ export async function actualitzarComanda(
   }
 
   const headerMap =
-    lloc || canviaAdreca
-      ? await ensureManagedColumns(snapshot.headerMap, snapshot.sheetTab)
-      : snapshot.headerMap;
+    lloc || canviaAdreca ? await ensureManagedColumns(snapshot) : snapshot.headerMap;
 
-  await writeCells(updates, headerMap, snapshot.sheetTab);
+  await writeCells(updates, headerMap, snapshot);
   return true;
 }
 
@@ -673,7 +844,7 @@ export async function cacheCoordinates(
 ): Promise<void> {
   if (coords.length === 0) return;
 
-  const headerMap = await ensureManagedColumns(snapshot.headerMap, snapshot.sheetTab);
+  const headerMap = await ensureManagedColumns(snapshot);
   const byId = new Map(snapshot.orders.map((order) => [order.id, order]));
 
   const updates: CellUpdate[] = [];
@@ -698,7 +869,7 @@ export async function cacheCoordinates(
     }
   }
 
-  await writeCells(updates, headerMap, snapshot.sheetTab);
+  await writeCells(updates, headerMap, snapshot);
 }
 
 /* ── Registro de facturas emitidas ──────────────────────────────────────── */
@@ -790,10 +961,13 @@ const CABECERA_FACTURAS = [
   // llevaba el cobro desde aquí.
   "Client",
   "Estat",
+  // De qué documento sale cada línea, en el orden de "Comandes". Vacía en
+  // las facturas de un solo documento, que son todas las de antes.
+  "Grups",
 ];
 
 /** Última columna de la pestaña de facturas. Va con `CABECERA_FACTURAS`. */
-const ULTIMA_COLUMNA_FACTURAS = "K";
+const ULTIMA_COLUMNA_FACTURAS = "L";
 
 /** Cómo se escribe cada estado de cobro en la hoja, para que se lea a ojo. */
 const ESTAT_FACTURA_SHEET: Record<EstatFactura, string> = {
@@ -870,6 +1044,7 @@ function filaAFactura(fila: unknown[]): FacturaEmitida | null {
   // NO vale partir por comas: la coma también es el separador decimal de
   // cada importe. Ver `parseImportesFactura`.
   const importes = parseImportesFactura(text(fila[4]));
+  const grups = text(fila[11]).split(";").map((g) => g.trim());
 
   return {
     numero,
@@ -877,7 +1052,11 @@ function filaAFactura(fila: unknown[]): FacturaEmitida | null {
     // y vuelven como número de serie; `parseSheetDate` las devuelve a ISO.
     fecha: parseSheetDate(fila[1]) ?? text(fila[1]),
     periodo: text(fila[2]),
-    lineas: comandas.map((comanda, i) => ({ comanda, importe: importes[i] ?? 0 })),
+    lineas: comandas.map((comanda, i) => ({
+      comanda,
+      importe: importes[i] ?? 0,
+      ...(grups[i] ? { grup: grups[i] } : {}),
+    })),
     base: parseNumber(fila[5]) ?? 0,
     iva: parseNumber(fila[6]) ?? 0,
     irpf: parseNumber(fila[7]) ?? 0,
@@ -922,7 +1101,7 @@ export async function readFacturas(): Promise<FacturaEmitida[]> {
 export async function emitirFactura(datos: {
   fecha: string;
   periodo: string;
-  lineas: { comanda: string; importe: number }[];
+  lineas: { comanda: string; importe: number; grup?: string }[];
   base: number;
   iva: number;
   irpf: number;
@@ -964,6 +1143,11 @@ export async function emitirFactura(datos: {
     importeSheet(datos.total),
     datos.client ?? "",
     ESTAT_FACTURA_SHEET.emesa,
+    // Con apóstrofo, como la fecha: un nombre no se interpreta. Sin ";"
+    // dentro, que es el separador.
+    datos.lineas.some((l) => l.grup)
+      ? `'${datos.lineas.map((l) => (l.grup ?? "").replace(/;/g, ",")).join("; ")}`
+      : "",
   ];
 
   await sheetsFetch(

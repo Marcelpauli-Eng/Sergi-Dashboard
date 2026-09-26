@@ -199,6 +199,35 @@ con la más reciente anterior y lo avisa en los logs, así que el transportista
 ve los pedidos que quedaran sin entregar allí. En cuanto se cree la nueva la
 coge sola, sin redesplegar.
 
+#### Un segundo documento de comandas (opcional)
+
+Si otra empresa también te pasa portes en su propia hoja, pon su ID en
+`GOOGLE_SHEET_ID_2` y compártela como Editor con la cuenta de servicio.
+
+- **Calendario:** sale una bossa por documento (`Bossa · <nombre>`). Cada
+  una se asigna a los días igual que siempre; en el calendario las del
+  segundo llevan un filo de color a la izquierda.
+- **Ruta y entregas:** van juntas. La app escribe cada entrega en el
+  documento del que salió.
+- **Factura:** todas las entregas en la misma factura, agrupadas por
+  documento con su nombre como separador, en pantalla, en el papel y en el
+  PDF. El separador se guarda con la factura (columna `Grups` de
+  `Factures`), así que una reimpresión sale igual.
+- **Pestañas:** del full que tengas elegido solo se aprovecha el mes; en la
+  segunda hoja se busca la pestaña de ese mes por su cuenta. Si no la tiene,
+  **se crea sola al crear la primera comanda** desde su bossa: con el mismo
+  nombre que la tuya (`SET 26`) y la misma fila de cabecera (la de su mes
+  anterior si tiene alguno; si no, la tuya). Solo la cabecera: tus comandas
+  no pasan a su hoja. Si esa hoja no va por meses, fija la pestaña con
+  `GOOGLE_SHEET_TAB_2` y no se crea nada.
+- Los nombres de las bosses: `GOOGLE_SHEET_NOM` y `GOOGLE_SHEET_NOM_2`.
+
+Las comandas del segundo llevan `2:` delante de su identificador interno
+(no del número que se enseña ni del que va a la factura), para que un `748`
+de cada empresa no se pisen. Si no se puede leer, el primero sigue
+funcionando y su bossa dice por qué; Ajustes → Diagnòstic también lo
+comprueba.
+
 Las columnas donde la app **escribe** (`Estado`, `Hora Entrega`,
 `Incidencia`) y las de caché de coordenadas (`_lat`, `_lng`) **se crean
 solas** la primera vez si no existen. Las de coordenadas se pueden ocultar.

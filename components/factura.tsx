@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Download, FileCheck, Printer, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { Stop } from "@/lib/types";
+import type { OrigenManifest, Stop } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
   IRPF,
@@ -115,10 +115,16 @@ export function Hoja(opciones: HojaOpciones) {
 
 /* ── La pantalla de repaso ──────────────────────────────────────────────── */
 
+/** El nombre del documento de una comanda, que es el título de su grupo. */
+function nomOrigen(origens: OrigenManifest[], s: Stop): string {
+  return origens.find((o) => o.id === (s.origen ?? ""))?.nom ?? "";
+}
+
 
 
 export default function Factura({
   entregats,
+  origens,
   mes,
   datos,
   online,
@@ -128,6 +134,12 @@ export default function Factura({
 }: {
   /** Pedidos entregados del mes, tal cual salen de la hoja. */
   entregats: Stop[];
+  /**
+   * Los documentos de comandas. Con más de uno, las líneas van agrupadas
+   * por documento y cada grupo con su nombre delante, en pantalla y en el
+   * papel. Ver `LineaFactura.grup`.
+   */
+  origens: OrigenManifest[];
   /** Nombre de la pestaña del Sheet, que es el mes de trabajo. */
   mes: string;
   datos: DatosFacturacion;
@@ -171,15 +183,20 @@ export default function Factura({
    * esto no filtra nada y la pantalla se comporta igual que antes. En cuanto
    * alguien empieza a rellenarla, las de OTRO cliente desaparecen de aquí.
    */
-  const delClient = useMemo(
-    () =>
-      entregats.filter(
-        (s) =>
-          !s.billingClient ||
-          clientePara(datos, s.billingClient).codigo === client.codigo,
-      ),
-    [entregats, datos, client.codigo],
-  );
+  const agrupar = origens.length > 1;
+
+  const delClient = useMemo(() => {
+    const llista = entregats.filter(
+      (s) =>
+        !s.billingClient ||
+        clientePara(datos, s.billingClient).codigo === client.codigo,
+    );
+    if (!agrupar) return llista;
+    // Por documento, en el orden de las bosses; dentro, como venían (el
+    // `sort` es estable). Así cada grupo sale entero y una sola vez.
+    const posicio = (s: Stop) => origens.findIndex((o) => o.id === (s.origen ?? ""));
+    return [...llista].sort((a, b) => posicio(a) - posicio(b));
+  }, [entregats, datos, client.codigo, agrupar, origens]);
 
   const conImporte = useMemo(
     () => delClient.filter((s) => s.price !== null && s.price > 0),
@@ -195,8 +212,13 @@ export default function Factura({
   );
 
   const lineas: LineaFactura[] = useMemo(
-    () => seleccionades.map((s) => ({ comanda: etiquetaComanda(s), importe: s.price as number })),
-    [seleccionades],
+    () =>
+      seleccionades.map((s) => ({
+        comanda: etiquetaComanda(s),
+        importe: s.price as number,
+        ...(agrupar ? { grup: nomOrigen(origens, s) } : {}),
+      })),
+    [seleccionades, agrupar, origens],
   );
   const totales = useMemo(() => calcularTotales(lineas), [lineas]);
   const paginas = useMemo(() => paginar(lineas), [lineas]);
@@ -421,18 +443,37 @@ export default function Factura({
                 Cap entrega aquest mes.
               </p>
             ) : (
-              delClient.map((stop) => {
+              delClient.map((stop, i) => {
                 const teImport = stop.price !== null && stop.price > 0;
                 const dins = teImport && !exclosos.has(stop.id);
                 const valor = esborranys[stop.id] ?? (teImport ? euros(stop.price as number) : "");
                 const malament = valor.trim() !== "" && parseImporte(valor) === undefined;
+                const grup = nomOrigen(origens, stop);
+                const obre = agrupar && (i === 0 || nomOrigen(origens, delClient[i - 1]) !== grup);
+                // Lo que suma este grupo en la factura, para cuadrarlo con
+                // cada empresa por separado.
+                const subtotal = obre
+                  ? seleccionades
+                      .filter((s) => nomOrigen(origens, s) === grup)
+                      .reduce((suma, s) => suma + (s.price ?? 0), 0)
+                  : 0;
 
                 return (
-                  // El <label> envuelve solo la casilla y el texto: si
-                  // envolviera también el importe, escribir en él
-                  // desmarcaría la comanda de propina.
+                  <Fragment key={stop.id}>
+                  {obre && (
+                    <div className="flex items-baseline justify-between gap-3 bg-muted/60 px-4 pb-1.5 pt-3">
+                      <h4 className="truncate text-xs font-semibold uppercase tracking-wide text-primary">
+                        {grup}
+                      </h4>
+                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                        {euros(subtotal)} €
+                      </span>
+                    </div>
+                  )}
+                  {/* El <label> envuelve solo la casilla y el texto: si
+                      envolviera también el importe, escribir en él
+                      desmarcaría la comanda de propina. */}
                   <div
-                    key={stop.id}
                     className={cn(
                       "flex items-center gap-3 px-4 py-2",
                       teImport && !dins && "opacity-50",
@@ -491,6 +532,7 @@ export default function Factura({
                       <span className="w-3 text-sm text-muted-foreground">€</span>
                     </div>
                   </div>
+                  </Fragment>
                 );
               })
             )}

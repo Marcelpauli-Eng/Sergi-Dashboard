@@ -395,6 +395,8 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     [manifest],
   ); // manifest.today.stops son TODAS las comandas del full
   const todayDate = manifest?.today?.date ?? ""; // The "today" date on the server
+  // Un manifiesto guardado por una versión anterior no trae la lista.
+  const origens = useMemo(() => manifest?.origens ?? [], [manifest]);
 
   // Clasificación de todos los pedidos
   const {
@@ -916,6 +918,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
             {activeTab === "calendari" && (
               <TabCalendari
                 todayDate={todayDate}
+                origens={origens}
                 unassignedStops={unassignedStops}
                 calendarStopsByDate={calendarStopsByDate}
                 onAssignDate={handleDateAssignment}
@@ -937,6 +940,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
             {activeTab === "factures" && (
               <Factures
                 entregats={historyStops.entregat}
+                origens={origens}
                 mes={selectedSheetTab || manifest?.sheetTab || ""}
                 datos={datosFactura}
                 online={online}

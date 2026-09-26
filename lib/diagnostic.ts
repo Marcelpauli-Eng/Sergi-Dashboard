@@ -5,6 +5,7 @@ import { findLatestTabUpTo, findMonthTab } from "./sheet-tab";
 import {
   TAB_FACTURAS,
   listSheetTabs,
+  origens,
   puedeEscribir,
   readSheet,
   type SheetDoc,
@@ -237,6 +238,47 @@ export async function comprobarConfiguracion(timezone: string): Promise<Comproba
       );
     } catch {
       // Igual: si la hoja no se puede leer, ya se ha dicho arriba.
+    }
+  }
+
+  // ── El segundo documento de comandas, si lo hay ────────────────────────
+  const segon = origens()[1];
+  if (segon) {
+    const etiqueta = `Segunda hoja ("${segon.nom}")`;
+    if (segon.sheetId === repartos) {
+      salida.push({
+        id: "segon",
+        titulo: etiqueta,
+        estado: "error",
+        detalle: "GOOGLE_SHEET_ID_2 apunta al MISMO documento que GOOGLE_SHEET_ID.",
+        arreglo:
+          "Cada comanda saldría dos veces, una en cada bossa. Pon el ID del " +
+          "documento de la otra empresa, o quita la variable.",
+      });
+    } else {
+      const acceso = await comprobarDocumento(segon.sheetId, "segon", etiqueta, []);
+      salida.push(...acceso);
+      if (acceso.every((c) => c.estado === "ok")) {
+        try {
+          const hoja = await readSheet(undefined, segon);
+          salida.push({
+            id: "segon-full",
+            titulo: `${etiqueta}: pestaña`,
+            estado: "ok",
+            detalle: `Se está leyendo "${hoja.sheetTab}": ${hoja.orders.length} comandas.`,
+          });
+        } catch (error) {
+          salida.push({
+            id: "segon-full",
+            titulo: `${etiqueta}: pestaña`,
+            estado: "error",
+            detalle: (error instanceof Error ? error.message : String(error)).slice(0, 300),
+            arreglo:
+              "Si esa hoja no va por meses, pon en GOOGLE_SHEET_TAB_2 el nombre " +
+              "exacto de la pestaña con las comandas.",
+          });
+        }
+      }
     }
   }
 

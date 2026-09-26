@@ -97,6 +97,8 @@ export function construirComandes(rows: unknown[][]): {
     const fila: Order = {
       id,
       codi: id,
+      // El documento lo sabe quien lee la hoja, no la fila: ver `readSheet`.
+      origen: "",
       part: 1,
       parts: 1,
       driverId,

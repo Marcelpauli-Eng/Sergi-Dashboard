@@ -1,4 +1,4 @@
-import { IRPF, IVA, euros } from "./factura.ts";
+import { IRPF, IVA, euros, obreGrup } from "./factura.ts";
 import type {
   ClienteFacturacion,
   DatosFacturacion,
@@ -241,7 +241,13 @@ export function componerHoja({
   e.push(caja(277.8, 99.2, 153, 274.9, FONDO, GRIS_BORDE));
 
   let y = 284.6;
-  for (const linea of lineas) {
+  lineas.forEach((linea, i) => {
+    // El nombre del documento encima de sus comandas. Ocupa una fila, que
+    // `paginar` ya ha contado.
+    if (obreGrup(linea, lineas[i - 1])) {
+      e.push(texto(y, 99.2, s, linea.grup!.toUpperCase(), { negrita: true, color: MORADO }));
+      y += 10.77;
+    }
     e.push(texto(y, 22.7, s, datos.articulo));
     e.push(texto(y, 99.2, s, `Pedido numero ${linea.comanda}`));
     e.push(derecha(y, 291.9, s, euros(1)));
@@ -249,7 +255,7 @@ export function componerHoja({
     e.push(derecha(y, 419.5, s, euros(linea.importe)));
     e.push(derecha(y, 561.2, s, euros(linea.importe)));
     y += 10.77;
-  }
+  });
 
   // ── Banda de bases e impuestos ──
   e.push(caja(572.6, 14.2, 555.4, 16.9, LILA, BORDE));

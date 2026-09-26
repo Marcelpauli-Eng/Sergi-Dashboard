@@ -23,7 +23,7 @@ import {
 import { addDays, formatLongDate, getMonthGrid, getWeekGrid, getYearMonth } from "@/lib/dates";
 import { euros } from "@/lib/factura";
 import { telHref } from "@/lib/format";
-import type { Stop } from "@/lib/types";
+import type { OrigenManifest, Stop } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import StopCard from "@/components/stop-card";
@@ -66,6 +66,7 @@ function classeChip(cat: Stop["statusCategory"]): string {
  */
 export default function TabCalendari({
   todayDate,
+  origens,
   unassignedStops,
   calendarStopsByDate,
   onAssignDate,
@@ -74,6 +75,8 @@ export default function TabCalendari({
   onIncident,
 }: {
   todayDate: string;
+  /** Los documentos de comandas: una bossa por cada uno. */
+  origens: OrigenManifest[];
   unassignedStops: Stop[];
   calendarStopsByDate: Record<string, Stop[]>;
   onAssignDate: (orderId: string, date: string | null) => void;
@@ -167,6 +170,7 @@ export default function TabCalendari({
         date={selectedDate}
         stops={assignades}
         todayDate={todayDate}
+        origens={origens}
         unassignedStops={unassignedStops}
         onAssignDate={onAssignDate}
         onImporte={onImporte}
@@ -341,6 +345,7 @@ export default function TabCalendari({
                       className={cn(
                         "truncate rounded-md px-1.5 py-0.5 text-[11px] leading-4",
                         classeChip(stop.statusCategory),
+                        stop.origen && CHIP_SEGON,
                       )}
                     >
                       {stop.statusCategory === "entregat" && "✓ "}
@@ -427,10 +432,13 @@ export default function TabCalendari({
                             stop.statusCategory !== "incidencia"
                           }
                           onDragStart={(e) => e.dataTransfer.setData("text/plain", stop.id)}
-                          title={`${stop.customer || stop.codi}${stop.city ? ` · ${stop.city}` : ""}`}
+                          title={`${stop.customer || stop.codi}${stop.city ? ` · ${stop.city}` : ""}${
+                            stop.origen ? ` · ${nomOrigen(origens, stop.origen)}` : ""
+                          }`}
                           className={cn(
                             "truncate rounded-md px-1.5 py-1 text-[11px] leading-4 lg:cursor-grab lg:active:cursor-grabbing",
                             classeChip(stop.statusCategory),
+                            stop.origen && CHIP_SEGON,
                           )}
                         >
                           {stop.statusCategory === "entregat" && "✓ "}
@@ -448,7 +456,8 @@ export default function TabCalendari({
 
       {/* ── Columna de al lado: la bolsa ───────────────────────────────── */}
       <aside className="mt-6 flex flex-col gap-3 lg:mt-0 lg:min-h-0 lg:pt-0">
-        <Bossa
+        <Bosses
+          origens={origens}
           stops={unassignedStops}
           onAssign={null}
           onDelivered={onDelivered}
@@ -477,6 +486,7 @@ function DiaDetall({
   date,
   stops,
   todayDate,
+  origens,
   unassignedStops,
   onAssignDate,
   onImporte,
@@ -488,6 +498,7 @@ function DiaDetall({
   /** Todas las comandas de ese día, cerradas incluidas. */
   stops: Stop[];
   todayDate: string;
+  origens: OrigenManifest[];
   unassignedStops: Stop[];
   onAssignDate: (orderId: string, date: string | null) => void;
   onImporte: (orderId: string, importe: number | null) => void;
@@ -620,6 +631,7 @@ function DiaDetall({
                       <p className="truncate text-xs text-muted-foreground">
                         {stop.codi}
                         {stop.city ? ` · ${stop.city}` : ""}
+                        {stop.origen ? ` · ${nomOrigen(origens, stop.origen)}` : ""}
                       </p>
                       {incidencia && stop.incidentNote && (
                         <p className="mt-1 text-xs text-status-incidencia">
@@ -686,6 +698,7 @@ function DiaDetall({
                   <p className="truncate text-sm font-medium">{stop.customer || stop.codi}</p>
                   <p className="truncate text-xs text-muted-foreground">
                     {stop.city || stop.address || stop.codi}
+                    {stop.origen ? ` · ${nomOrigen(origens, stop.origen)}` : ""}
                   </p>
                 </button>
                 <Trucar phone={stop.phone} />
@@ -708,7 +721,8 @@ function DiaDetall({
           </p>
         )
       ) : (
-        <Bossa
+        <Bosses
+          origens={origens}
           stops={unassignedStops}
           onAssign={(id) => onAssignDate(id, date)}
           onDelivered={onDelivered}
@@ -805,6 +819,50 @@ function Xifra({
 // ── La bolsa de comandas sin asignar ───────────────────────────────────
 
 /**
+ * Las comandas del segundo documento, en el calendario: un filo a la
+ * izquierda. El color de fondo ya dice cómo acabó; esto dice de dónde es.
+ */
+const CHIP_SEGON = "border-l-2 border-primary";
+
+function nomOrigen(origens: OrigenManifest[], id: string): string {
+  return origens.find((o) => o.id === id)?.nom ?? id;
+}
+
+/**
+ * Una bossa por documento.
+ *
+ * Cada empresa llena su hoja a su ritmo, y juntar las dos en una lista
+ * obligaba a leer comanda por comanda de cuál era. Separadas, se ve de un
+ * vistazo qué le queda por colocar a cada una. Con un solo documento —o un
+ * manifiesto de antes, que no trae la lista— es la bossa de siempre.
+ */
+function Bosses({
+  origens,
+  stops,
+  ...resta
+}: {
+  origens: OrigenManifest[];
+  stops: Stop[];
+  onAssign: ((id: string) => void) | null;
+  onDelivered: (orderId: string, price: number | null) => void;
+  onImporte: (orderId: string, importe: number | null) => void;
+}) {
+  if (origens.length <= 1) return <Bossa stops={stops} {...resta} />;
+  return (
+    <>
+      {origens.map((origen) => (
+        <Bossa
+          key={origen.id}
+          origen={origen}
+          stops={stops.filter((s) => (s.origen ?? "") === origen.id)}
+          {...resta}
+        />
+      ))}
+    </>
+  );
+}
+
+/**
  * Las comandas que todavía no tienen día.
  *
  * Un solo componente para las dos maneras de asignar: tocar (móvil, con
@@ -813,11 +871,14 @@ function Xifra({
  * lo inicia ya cancela el toque, así que no se pisan.
  */
 function Bossa({
+  origen,
   stops,
   onAssign,
   onDelivered,
   onImporte,
 }: {
+  /** De qué documento es. Sin él, la bossa única de siempre. */
+  origen?: OrigenManifest;
   stops: Stop[];
   /** `null` cuando no hay ningún día abierto: entonces tocar solo previsualiza. */
   onAssign: ((id: string) => void) | null;
@@ -918,10 +979,12 @@ function Bossa({
   return (
     <div className="flex min-h-0 flex-col gap-2">
       <div className="hairline flex items-center justify-between gap-2 pt-4">
-        <div className="flex items-center gap-2">
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-status-pendent">
-            <Inbox className="size-4" aria-hidden />
-            Bossa de comandes
+        <div className="flex min-w-0 items-center gap-2">
+          <h3 className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-status-pendent">
+            <Inbox className="size-4 shrink-0" aria-hidden />
+            <span className="truncate">
+              {origen ? `Bossa · ${origen.nom}` : "Bossa de comandes"}
+            </span>
           </h3>
           {/*
             Crear una comanda a mano. Pegado al título de la bossa porque es
@@ -935,8 +998,12 @@ function Bossa({
             Es un enlace a una pantalla aparte, no un diálogo: son siete
             campos y el teclado del móvil se come media pantalla.
           */}
-          <Button asChild variant="secondary" size="icon" className="size-8">
-            <Link href="/nova-comanda" aria-label="Crear una comanda">
+          <Button asChild variant="secondary" size="icon" className="size-8 shrink-0">
+            {/* La comanda nueva va al documento de ESTA bossa. */}
+            <Link
+              href={origen?.id ? `/nova-comanda?origen=${encodeURIComponent(origen.id)}` : "/nova-comanda"}
+              aria-label={origen ? `Crear una comanda a ${origen.nom}` : "Crear una comanda"}
+            >
               <Plus strokeWidth={2.5} />
             </Link>
           </Button>
@@ -954,7 +1021,15 @@ function Bossa({
         </span>
       </p>
 
-      {stops.length === 0 ? (
+      {origen?.error ? (
+        /* Sin esto, un documento sin compartir o sin la pestaña del mes
+           salía como una bossa vacía: "no queda nada" cuando en realidad no
+           se ha podido mirar. */
+        <p className="soft-card flex gap-2 px-4 py-3 text-sm text-warning-foreground">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span className="min-w-0 break-words">No s&apos;ha pogut llegir: {origen.error}</span>
+        </p>
+      ) : stops.length === 0 ? (
         <p className="soft-card px-4 py-6 text-center text-sm text-muted-foreground">
           No et queden comandes pendents d&apos;assignar.
         </p>

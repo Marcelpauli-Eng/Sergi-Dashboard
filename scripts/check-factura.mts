@@ -17,10 +17,12 @@ import {
   etiquetaComanda,
   euros,
   formatearNumero,
+  obreGrup,
   paginar,
   parseImporte,
   parseImportesFactura,
   LINEAS_POR_PAGINA,
+  type LineaFactura,
 } from "../lib/factura.ts";
 
 const linea = (comanda: string, importe: number) => ({ comanda, importe });
@@ -191,6 +193,30 @@ console.log("\x1b[32m✓\x1b[0m Los números de la factura cuadran");
   assert.equal(etiquetaComanda({ codi: "748", part: 3, parts: 3 }), "748 (3/3)");
   // La comanda entera se queda como estaba: sin paréntesis que explicar.
   assert.equal(etiquetaComanda({ codi: "749", part: 1, parts: 1 }), "749");
+}
+
+// Dos documentos en la misma factura: cada título de grupo ocupa una fila
+// del recuadro. Si no se contara, la hoja llena se saldría por abajo.
+{
+  const grup = (g: string, n: number) =>
+    Array.from({ length: n }, (_, i) => ({ comanda: `${g}${i}`, importe: 10, grup: g }));
+  const filas = (hoja: LineaFactura[]) =>
+    hoja.length + hoja.filter((l, i) => obreGrup(l, hoja[i - 1])).length;
+
+  const hojas = paginar([...grup("A", 20), ...grup("B", 20)]);
+  for (const hoja of hojas) {
+    assert.ok(filas(hoja) <= LINEAS_POR_PAGINA, "una hoja con títulos se sale del recuadro");
+  }
+  assert.equal(hojas.flat().length, 40, "ninguna línea se pierde al paginar con grupos");
+  // La hoja que empieza a medio grupo repite su título arriba.
+  assert.ok(obreGrup(hojas[1][0], undefined), "la hoja siguiente no dice de qué documento es");
+
+  // Un título nunca se queda solo al pie: va con su primera línea.
+  const justo = paginar([...grup("A", LINEAS_POR_PAGINA - 2), ...grup("B", 3)]);
+  assert.equal(justo[0].at(-1)!.grup, "A", "el título de B se ha quedado sin línea al pie");
+
+  // Sin grupos, la de siempre: ni una fila de más.
+  assert.equal(paginar(grup("", LINEAS_POR_PAGINA))[0].length, LINEAS_POR_PAGINA);
 }
 
 console.log("✓ lib/factura.ts — totales, páginas, importes y clientes");

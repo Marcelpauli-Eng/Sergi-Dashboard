@@ -96,6 +96,18 @@ interface Env {
      * Ver lib/sheet-tab.ts. Definir la variable fuerza una pestaña concreta.
      */
     sheetTab: string | null;
+    /** Cómo se llama el documento de siempre en la pantalla. Solo se ve si hay segundo. */
+    nom: string;
+    /**
+     * Un segundo documento de comandas, con su propia bossa.
+     *
+     * Otra empresa que también manda portes, con su hoja y su numeración.
+     * Sus comandas van al mismo calendario y a la misma factura —separadas
+     * por un título con su `nom`—, pero no se mezclan en la bossa: cada
+     * documento tiene la suya. `null` si no está definido, que es lo de
+     * siempre.
+     */
+    segon: { sheetId: string; sheetTab: string | null; nom: string } | null;
     mapsApiKey: string;
   };
   /** Dirección de la central. Es el punto de partida de todas las rutas. */
@@ -134,6 +146,16 @@ const loaders: { [K in keyof Env]: () => Env[K] } = {
       return crudo === null ? null : sheetIdFrom(crudo);
     })(),
     sheetTab: optionalOrNull("GOOGLE_SHEET_TAB"),
+    nom: optional("GOOGLE_SHEET_NOM", "Full principal"),
+    segon: (() => {
+      const crudo = optionalOrNull("GOOGLE_SHEET_ID_2");
+      if (crudo === null) return null;
+      return {
+        sheetId: sheetIdFrom(crudo),
+        sheetTab: optionalOrNull("GOOGLE_SHEET_TAB_2"),
+        nom: optional("GOOGLE_SHEET_NOM_2", "Segon full"),
+      };
+    })(),
     mapsApiKey: required("GOOGLE_MAPS_API_KEY"),
   }),
   depotAddress: () => required("DEPOT_ADDRESS"),

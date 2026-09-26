@@ -153,6 +153,25 @@ export interface LineaFactura {
   comanda: string;
   /** Lo cobrado por esa entrega, sin IVA. */
   importe: number;
+  /**
+   * El nombre del documento de donde sale, cuando hay más de uno.
+   *
+   * Las comandas de las dos bosses van a la misma factura, agrupadas, y
+   * cada grupo con su nombre delante: son dos numeraciones distintas y sin
+   * el título no se sabe de cuál es cada "748". Vacío con un solo
+   * documento, y entonces la factura es la de siempre.
+   */
+  grup?: string;
+}
+
+/**
+ * ¿Empieza aquí un grupo? Es donde la hoja pinta el título del documento.
+ *
+ * También arriba de cada hoja nueva (`anterior` es `undefined`), para que
+ * una hoja que empieza a medio grupo diga de cuál es.
+ */
+export function obreGrup(linea: LineaFactura, anterior?: LineaFactura): boolean {
+  return Boolean(linea.grup) && linea.grup !== anterior?.grup;
 }
 
 export interface TotalesFactura {
@@ -247,13 +266,28 @@ export function fechaCorta(iso: string): string {
   return `${dia}/${mes}/${año}`;
 }
 
-/** Reparte las líneas en hojas. Siempre devuelve al menos una. */
+/**
+ * Reparte las líneas en hojas. Siempre devuelve al menos una.
+ *
+ * El título de cada grupo ocupa una fila del recuadro, así que cuenta: sin
+ * esto, una hoja llena con dos grupos se salía por abajo. Y va siempre con
+ * su primera línea —un título solo al pie de una hoja no dice nada—.
+ */
 export function paginar(lineas: LineaFactura[]): LineaFactura[][] {
-  if (lineas.length === 0) return [[]];
   const paginas: LineaFactura[][] = [];
-  for (let i = 0; i < lineas.length; i += LINEAS_POR_PAGINA) {
-    paginas.push(lineas.slice(i, i + LINEAS_POR_PAGINA));
+  let pagina: LineaFactura[] = [];
+  let filas = 0;
+  for (const linea of lineas) {
+    const coste = () => (obreGrup(linea, pagina.at(-1)) ? 2 : 1);
+    if (filas + coste() > LINEAS_POR_PAGINA) {
+      paginas.push(pagina);
+      pagina = [];
+      filas = 0;
+    }
+    filas += coste();
+    pagina.push(linea);
   }
+  paginas.push(pagina);
   return paginas;
 }
 

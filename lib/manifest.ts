@@ -1,6 +1,7 @@
 import "server-only";
 import { env } from "./env";
 import {
+  origens,
   readImportes,
   readSheet,
   cacheCoordinates,
@@ -344,8 +345,23 @@ export async function buildManifest(
     pedidos salen de la hoja que comparte la empresa y los importes del
     archivo privado del transportista. Una espera a la otra no aporta nada.
   */
-  const [snapshot, importes] = await Promise.all([
-    readSheet(sheetTab),
+  const [principal, ...altres] = origens();
+  const [snapshot, segons, importes] = await Promise.all([
+    readSheet(sheetTab, principal),
+    /*
+      El segundo documento no puede dejar sin ruta a nadie: sin compartir,
+      con la pestaña del mes sin crear… Se sigue con el primero y el motivo
+      viaja en `origens`, que su bossa lo enseña en vez de salir vacía.
+    */
+    Promise.all(
+      altres.map((origen) =>
+        readSheet(sheetTab, origen).catch((error: unknown) => {
+          const motiu = error instanceof Error ? error.message : String(error);
+          console.warn(`No se ha podido leer "${origen.nom}": ${motiu}`);
+          return { origen, error: motiu.slice(0, 300) };
+        }),
+      ),
+    ),
     readImportes().catch((error) => {
       // Que no se puedan leer los importes no puede dejar sin ruta a nadie:
       // se sigue con los pedidos y sin precios, que es lo accesorio.
@@ -353,11 +369,16 @@ export async function buildManifest(
       return new Map<string, number>();
     }),
   ]);
+  const snapshots = [
+    snapshot,
+    ...segons.filter((s): s is SheetSnapshot => "orders" in s),
+  ];
 
-  if (snapshot.skipped.length > 0) {
+  for (const s of snapshots) {
+    if (s.skipped.length === 0) continue;
     console.warn(
-      `Filas descartadas del Sheet: ${snapshot.skipped
-        .map((s) => `fila ${s.rowNumber} (${s.reason})`)
+      `Filas descartadas de "${s.origen.nom}": ${s.skipped
+        .map((f) => `fila ${f.rowNumber} (${f.reason})`)
         .join(", ")}`,
     );
   }
@@ -370,17 +391,27 @@ export async function buildManifest(
     navegaba por texto. Se espera a que acabe porque lo que encuentra tiene
     que salir en ESTE manifiesto; que no tumbe la sincronización si Google
     falla, que las paradas se ven igual sin coordenadas.
+
+    Un documento detrás de otro: cada tanda escribe en la hoja de la que
+    salió, y `geocodificarPendents` solo deja correr una a la vez.
   */
-  try {
-    await geocodificarPendents(snapshot.orders, snapshot);
-  } catch (error) {
-    console.error("No se han podido geocodificar las comandas pendientes:", error);
+  for (const s of snapshots) {
+    try {
+      await geocodificarPendents(s.orders, s);
+    } catch (error) {
+      console.error("No se han podido geocodificar las comandas pendientes:", error);
+    }
   }
 
   const todayDate = today(env.timezone);
   const normalizedDriver = driverId.toLowerCase();
 
-  const mine = comandasDelTransportista(snapshot.orders, normalizedDriver);
+  /*
+    El filtro de transportista, hoja por hoja: si una tiene la columna y la
+    otra no, la que no la tiene es toda suya. Juntándolas antes, la columna
+    de una escondía todas las comandas de la otra.
+  */
+  const mine = snapshots.flatMap((s) => comandasDelTransportista(s.orders, normalizedDriver));
 
   const sorted = [...mine].sort(
     (a, b) => a.priority - b.priority || a.id.localeCompare(b.id),
@@ -405,6 +436,11 @@ export async function buildManifest(
     driverName,
     generatedAt: new Date().toISOString(),
     sheetTab: snapshot.sheetTab ?? "",
+    origens: [snapshot, ...segons].map((s) => ({
+      id: s.origen.id,
+      nom: s.origen.nom,
+      ...("error" in s ? { sheetTab: "", error: s.error } : { sheetTab: s.sheetTab ?? "" }),
+    })),
     today: {
       date: todayDate,
       stops: stops, // Enviamos TODOS los stops aquí para que el dashboard los reparta

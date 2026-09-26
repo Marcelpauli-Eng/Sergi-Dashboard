@@ -20,6 +20,7 @@ import {
   findLatestTabUpTo,
   findMonthTab,
   parseTabMonth,
+  pestanyaACrear,
   sheetIdFrom,
 } from "../lib/sheet-tab.ts";
 
@@ -167,6 +168,23 @@ import {
   // Y el orden dentro del documento da igual.
   assert.equal(findLatestTabUpTo(["JUL 26", "MAI 26", "JUNY 26"], "2026-08"), "JUL 26");
   assert.equal(findLatestTabUpTo(["Resum", "Factures"], "2026-08"), null);
+}
+
+// ── El mes que le falta al segundo documento ─────────────────────────────
+// Estás en SET 26 y creas una comanda de la otra empresa: si su hoja no
+// tiene septiembre, se crea con el mismo nombre.
+{
+  // Hoja recién estrenada: se copia la cabecera del full de siempre.
+  assert.deepEqual(pestanyaACrear(["Full 1"], "SET 26"), { titol: "SET 26", cabeceraDe: null });
+  // Con meses suyos, la cabecera de su último: que sus pestañas se parezcan.
+  assert.deepEqual(pestanyaACrear(["JUL 26", "AGO 26"], "SET 26"), {
+    titol: "SET 26",
+    cabeceraDe: "AGO 26",
+  });
+  // Ya tiene septiembre, se llame como se llame: no se duplica.
+  assert.equal(pestanyaACrear(["Setembre 2026"], "SET 26"), null, "ha creado un mes que ya estaba");
+  // Un full que no es un mes no se copia a ningún sitio.
+  assert.equal(pestanyaACrear([], "Resum"), null);
 }
 
 // ── El ID de la hoja, venga como venga ───────────────────────────────────

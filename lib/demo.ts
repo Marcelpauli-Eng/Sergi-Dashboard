@@ -70,14 +70,18 @@ export function crearComandaDemo(dades: {
   phone?: string;
   notes?: string;
   afegirPart?: boolean;
+  /** La bossa: "" la de siempre, "2" la del segundo documento. */
+  origen?: string;
 }): boolean {
-  const totes = [...TODAY_SAMPLES, ...TOMORROW_SAMPLES, ...creadesDemo];
+  const totes = [...TODAY_SAMPLES, ...TOMORROW_SAMPLES, ...SEGON_SAMPLES, ...creadesDemo];
+  // Con el prefijo del documento, como al leer la hoja de verdad.
+  const base = dades.origen ? `${dades.origen}:${dades.id}` : dades.id;
   // Cuántas veces está ya ese número: la clave interna de la segunda parte
   // es "748#2", igual que al leer la hoja de verdad. Ver `construirComandes`.
-  const partsJa = totes.filter((s) => s.id.split("#")[0] === dades.id).length;
+  const partsJa = totes.filter((s) => s.id.split("#")[0] === base).length;
   if (partsJa > 0 && !dades.afegirPart) return false;
 
-  const clau = partsJa > 0 ? `${dades.id}#${partsJa + 1}` : dades.id;
+  const clau = partsJa > 0 ? `${base}#${partsJa + 1}` : base;
 
   creadesDemo.push({
     id: clau,
@@ -100,7 +104,7 @@ export function actualitzarComandaDemo(
   id: string,
   dades: { customer?: string; address?: string; city?: string; phone?: string; notes?: string },
 ): boolean {
-  const mostra = [...TODAY_SAMPLES, ...TOMORROW_SAMPLES, ...creadesDemo].find(
+  const mostra = [...TODAY_SAMPLES, ...TOMORROW_SAMPLES, ...SEGON_SAMPLES, ...creadesDemo].find(
     (s) => s.id === id,
   );
   if (!mostra) return false;
@@ -239,6 +243,27 @@ const TOMORROW_SAMPLES: Sample[] = [
   },
 ];
 
+/** Las del segundo documento, sin día: esperan en su propia bossa. */
+const SEGON_SAMPLES: Sample[] = [
+  {
+    id: "2:P-310",
+    customer: "Fusteria Vilalta",
+    address: "Carrer de Pujades 77, 08005 Barcelona",
+    lat: 41.3985,
+    lng: 2.1949,
+    priority: 2,
+    phone: "+34 933 00 11 22",
+  },
+  {
+    id: "2:P-311",
+    customer: "Vidres Poblenou",
+    address: "Carrer de Llull 140, 08005 Barcelona",
+    lat: 41.4004,
+    lng: 2.1985,
+    priority: 3,
+  },
+];
+
 const DEMO_DEPOT = "Carrer de Mallorca 401, 08013 Barcelona";
 
 /**
@@ -253,12 +278,15 @@ function toStop(
   parts = 1,
 ): Stop {
   const recorded = demoDeliveries.get(sample.id);
-  // La clave de una segunda parte es "748#2"; el número de la comanda es el
-  // de delante, que es lo que se enseña. Igual que al leer la hoja de verdad.
-  const [codi, sufix] = sample.id.split("#");
+  // La clave de una segunda parte es "748#2", y la del segundo documento
+  // "2:748"; el número de la comanda es lo de en medio, que es lo que se
+  // enseña. Igual que al leer la hoja de verdad.
+  const origen = sample.id.match(/^(\w+):/)?.[1] ?? "";
+  const [codi, sufix] = sample.id.slice(origen ? origen.length + 1 : 0).split("#");
   return {
     id: sample.id,
     codi,
+    origen,
     part: sufix ? Number(sufix) : 1,
     parts,
     driverId: DEMO_DRIVER.id,
@@ -330,6 +358,8 @@ function buildDay(samples: Sample[], date: string, timezone: string): RouteDay {
 /** El manifiesto de demostración, siempre fechado en el día de hoy. */
 export function demoManifest(timezone: string): Manifest {
   const todayDate = today(timezone);
+  const avui = buildDay([...TODAY_SAMPLES, ...creadesDemo], todayDate, timezone);
+  const segon = buildDay(SEGON_SAMPLES, "", timezone);
 
   return {
     driverId: DEMO_DRIVER.id,
@@ -337,7 +367,13 @@ export function demoManifest(timezone: string): Manifest {
     generatedAt: new Date().toISOString(),
     demo: true,
     sheetTab: "Demo",
-    today: buildDay([...TODAY_SAMPLES, ...creadesDemo], todayDate, timezone),
+    // La demo enseña las dos bosses, que es lo que hay que poder ver sin
+    // configurar el segundo documento.
+    origens: [
+      { id: "", nom: "Full principal", sheetTab: "Demo" },
+      { id: "2", nom: "Segon full", sheetTab: "Demo" },
+    ],
+    today: { ...avui, stops: [...avui.stops, ...segon.stops] },
     tomorrow: buildDay(TOMORROW_SAMPLES, addDays(todayDate, 1), timezone),
   };
 }

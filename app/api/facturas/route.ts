@@ -50,6 +50,8 @@ function fallo(error: unknown, mensaje: string): NextResponse {
 const lineaSchema = z.object({
   comanda: z.string().min(1).max(64),
   importe: z.number().min(0).max(1_000_000),
+  /** El documento de donde sale, para el separador. Ver `LineaFactura`. */
+  grup: z.string().max(120).optional(),
 });
 
 const schema = z.object({

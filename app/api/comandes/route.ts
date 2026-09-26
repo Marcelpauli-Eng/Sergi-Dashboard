@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { isConfigError } from "@/lib/env";
-import { actualitzarComanda, crearComanda } from "@/lib/sheets";
+import { actualitzarComanda, crearComanda, origens } from "@/lib/sheets";
 import { actualitzarComandaDemo, crearComandaDemo, isDemoMode } from "@/lib/demo";
 
 /**
@@ -48,6 +48,8 @@ const schema = z.object({
    * nunca de serie: un número repetido sin querer es un número mal tecleado.
    */
   afegirPart: z.boolean().optional(),
+  /** En qué documento: "" o sin poner, el de siempre; "2", el segundo. */
+  origen: z.string().max(8).optional(),
 });
 
 export async function POST(request: Request) {
@@ -66,10 +68,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const { sheetTab, lloc, ...dades } = parsed.data;
+  const { sheetTab, lloc, origen: idOrigen, ...dades } = parsed.data;
 
   if (isDemoMode()) {
-    return crearComandaDemo(dades)
+    return crearComandaDemo({ ...dades, origen: idOrigen })
       ? NextResponse.json({ comanda: dades.id, sheetTab: "Demo" })
       : NextResponse.json(
           {
@@ -81,7 +83,21 @@ export async function POST(request: Request) {
   }
 
   try {
-    const resultat = await crearComanda({ ...dades, driverId: driver.id }, sheetTab, lloc);
+    // Un origen que ya no existe —el segundo documento quitado del entorno
+    // con la pantalla abierta— no se manda al primero sin decir nada.
+    const origen = origens().find((o) => o.id === (idOrigen ?? ""));
+    if (!origen) {
+      return NextResponse.json(
+        { error: "Aquesta bossa ja no està configurada al servidor." },
+        { status: 400 },
+      );
+    }
+    const resultat = await crearComanda(
+      { ...dades, driverId: driver.id },
+      sheetTab,
+      lloc,
+      origen,
+    );
     console.warn(`Comanda ${dades.id} creada por ${driver.id} en ${resultat.sheetTab}`);
     return NextResponse.json({ comanda: dades.id, sheetTab: resultat.sheetTab });
   } catch (error) {

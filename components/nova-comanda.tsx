@@ -41,7 +41,12 @@ const CAMPS = [
 
 type Clau = (typeof CAMPS)[number]["clau"];
 
-export default function NovaComanda() {
+export default function NovaComanda({
+  origen = "",
+}: {
+  /** En qué documento se crea: "" el de siempre. Ver `Order.origen`. */
+  origen?: string;
+}) {
   const router = useRouter();
 
   /*
@@ -56,6 +61,9 @@ export default function NovaComanda() {
   const triat = useSyncExternalStore(subscribeLocalPrefs, getSelectedTab, () => null);
   const desat = useLiveQuery(() => db.manifest.get("current"), []);
   const full = triat ?? desat?.data.sheetTab ?? null;
+  /** La bossa donde va a caer, para decirlo. Solo si hay más de una. */
+  const origens = desat?.data.origens ?? [];
+  const bossa = origens.length > 1 ? origens.find((o) => o.id === origen) : undefined;
 
   const [id, setId] = useState("");
   const [camps, setCamps] = useState<Record<Clau, string>>({
@@ -101,6 +109,7 @@ export default function NovaComanda() {
           // se ha retocado a mano, el punto ya no es de esa dirección.
           ...(lloc && lloc.address === camps.address ? { lloc } : {}),
           ...(full ? { sheetTab: full } : {}),
+          ...(origen ? { origen } : {}),
           ...(afegirPart ? { afegirPart: true } : {}),
         }),
       });
@@ -139,6 +148,9 @@ export default function NovaComanda() {
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-lg font-semibold">Nova comanda</h1>
             <p className="truncate text-xs text-muted-foreground">
+              {bossa && `${bossa.nom} · `}
+              {/* Al segundo documento también: si no tiene ese mes, el
+                  servidor se lo crea con este mismo nombre. */}
               {full ? `S'afegirà al full ${full}` : "S'afegirà al full del mes"}
             </p>
           </div>

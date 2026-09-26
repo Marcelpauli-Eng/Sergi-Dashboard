@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSession } from "@/lib/session";
-import { readSheet } from "@/lib/sheets";
+import { origenDe, origens, readSheet } from "@/lib/sheets";
 import { fillMissingCoordinates, getDepotCoord } from "@/lib/manifest";
 import {
   optimizeRoute,
@@ -38,8 +38,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const snapshot = await readSheet(body.sheetTab);
-    const orderMap = new Map(snapshot.orders.map((o) => [o.id, o]));
+    // Solo los documentos de los que hay alguna parada: la ruta de un día
+    // sin comandas del segundo no tiene por qué leerlo.
+    const calen = new Set(body.orderIds.map((id) => origenDe(id).id));
+    const snapshots = await Promise.all(
+      origens()
+        .filter((o) => calen.has(o.id))
+        .map((o) => readSheet(body.sheetTab, o)),
+    );
+    const orderMap = new Map(snapshots.flatMap((s) => s.orders).map((o) => [o.id, o]));
     const orders: Order[] = body.orderIds
       .map((id) => orderMap.get(id))
       .filter((o): o is Order => o !== undefined);
@@ -51,7 +58,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await fillMissingCoordinates(orders, snapshot);
+    // Cada documento guarda las coordenadas de las suyas, uno detrás de otro.
+    for (const snapshot of snapshots) {
+      await fillMissingCoordinates(
+        orders.filter((o) => o.origen === snapshot.origen.id),
+        snapshot,
+      );
+    }
     
     // Usar la ubicación del usuario si está disponible, o el almacén por defecto.
     const depot = body.startLocation || await getDepotCoord();

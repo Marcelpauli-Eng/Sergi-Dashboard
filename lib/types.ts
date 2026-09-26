@@ -46,6 +46,16 @@ export interface Order {
    * para el cliente es una sola comanda.
    */
   codi: string;
+  /**
+   * De qué documento sale: "" el de siempre, "2" el segundo
+   * (`GOOGLE_SHEET_ID_2`).
+   *
+   * Las comandas del segundo llevan el origen delante de su `id` —"2:748"—
+   * porque los dos documentos numeran por su cuenta y un 748 de cada uno
+   * se pisarían en la cola, en los importes y en la pantalla. Ver
+   * `origens()` en lib/sheets.ts.
+   */
+  origen: string;
   /** Qué parte de la comanda es esta entrega. 1 cuando no está partida. */
   part: number;
   /** En cuántas partes está partida la comanda. 1 cuando no lo está. */
@@ -189,8 +199,30 @@ export interface Manifest {
   demo?: boolean;
   /** Nombre de la pestaña del Sheet que se está usando. */
   sheetTab: string;
+  /**
+   * Los documentos de donde salen las comandas, el de siempre primero.
+   *
+   * Uno solo mientras no haya `GOOGLE_SHEET_ID_2`. Opcional porque los
+   * manifiestos guardados en el móvil por una versión anterior no lo traen.
+   */
+  origens?: OrigenManifest[];
   today: RouteDay;
   tomorrow: RouteDay | null;
+}
+
+/** Un documento de comandas, tal y como lo ve la pantalla: cada uno es una bossa. */
+export interface OrigenManifest {
+  /** Ver `Order.origen`. */
+  id: string;
+  /** Cómo se llama en la bossa y en el separador de la factura. */
+  nom: string;
+  /** La pestaña que se ha leído. Vacía si no se ha podido leer. */
+  sheetTab: string;
+  /**
+   * Por qué no se ha podido leer. Solo el segundo documento puede fallar
+   * sin tumbar el manifiesto: sin el primero no hay app.
+   */
+  error?: string;
 }
 
 /**
@@ -264,7 +296,8 @@ export interface FacturaEmitida {
    * se guarda en la hoja, que es donde la oficina lo puede ver.
    */
   estat: EstatFactura;
-  lineas: { comanda: string; importe: number }[];
+  /** `grup` es el documento de donde salió cada línea. Ver `LineaFactura`. */
+  lineas: { comanda: string; importe: number; grup?: string }[];
   base: number;
   iva: number;
   irpf: number;

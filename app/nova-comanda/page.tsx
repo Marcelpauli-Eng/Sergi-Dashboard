@@ -13,9 +13,15 @@ import NovaComanda from "@/components/nova-comanda";
  */
 export const dynamic = "force-dynamic";
 
-export default async function NovaComandaPage() {
+export default async function NovaComandaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const driver = await getSession();
   if (!driver) redirect("/login");
 
-  return <NovaComanda />;
+  // La bossa desde la que se ha pulsado "+": en qué documento se crea.
+  const { origen } = await searchParams;
+  return <NovaComanda origen={typeof origen === "string" ? origen : ""} />;
 }
