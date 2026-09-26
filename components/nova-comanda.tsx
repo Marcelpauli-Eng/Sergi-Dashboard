@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { db } from "@/lib/db";
 import { getSelectedTab, subscribeLocalPrefs } from "@/lib/sync";
 import { formatLongDate } from "@/lib/dates";
+import { cn } from "@/lib/utils";
 import CampAdreca from "@/components/camp-adreca";
 import type { LlocTriat } from "@/lib/llocs";
 
@@ -42,9 +43,12 @@ const CAMPS = [
 type Clau = (typeof CAMPS)[number]["clau"];
 
 export default function NovaComanda({
-  origen = "",
+  origen: origenInicial = "",
 }: {
-  /** En qué documento se crea: "" el de siempre. Ver `Order.origen`. */
+  /**
+   * La bossa desde la que se ha pulsado "+": es la hoja que sale marcada,
+   * pero se puede cambiar aquí. Ver `Order.origen`.
+   */
   origen?: string;
 }) {
   const router = useRouter();
@@ -61,8 +65,13 @@ export default function NovaComanda({
   const triat = useSyncExternalStore(subscribeLocalPrefs, getSelectedTab, () => null);
   const desat = useLiveQuery(() => db.manifest.get("current"), []);
   const full = triat ?? desat?.data.sheetTab ?? null;
-  /** La bossa donde va a caer, para decirlo. Solo si hay más de una. */
+  /*
+    En qué hoja se crea. Antes solo lo decidía qué "+" se pulsaba, y desde
+    esta pantalla no había forma de verlo ni de cambiarlo: si entrabas por
+    la bossa equivocada, la comanda iba a la otra empresa.
+  */
   const origens = desat?.data.origens ?? [];
+  const [origen, setOrigen] = useState(origenInicial);
   const bossa = origens.length > 1 ? origens.find((o) => o.id === origen) : undefined;
 
   const [id, setId] = useState("");
@@ -164,6 +173,38 @@ export default function NovaComanda({
           void crear();
         }}
       >
+        {/* Con dos hojas, lo primero es a cuál va: el número se busca
+            repetido en ESA hoja, y cada empresa numera por su cuenta. Dos
+            botones y no un desplegable, que así se ven las dos a la vez. */}
+        {origens.length > 1 && (
+          <fieldset className="soft-card p-4">
+            <legend className="sr-only">A quin full s&apos;afegeix</legend>
+            <p className="text-sm font-medium">A quin full s&apos;afegeix</p>
+            <div className="mt-2 grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+              {origens.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => {
+                    setOrigen(o.id);
+                    // Otra hoja, otra numeración: lo que se contestó de la
+                    // anterior no vale para esta.
+                    setRepetida(false);
+                    setError(null);
+                  }}
+                  aria-pressed={origen === o.id}
+                  className={cn(
+                    "pressable truncate rounded-lg px-3 py-2 text-sm font-medium",
+                    origen === o.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground",
+                  )}
+                >
+                  {o.nom}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        )}
+
         {/* El número, solo y arriba: es el único que hace falta de verdad. */}
         <div className="soft-card p-4">
           <label htmlFor="comanda" className="block text-sm font-medium">
