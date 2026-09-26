@@ -930,6 +930,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
             {activeTab === "historial" && (
               <TabHistorial
                 historyStops={historyStops}
+                origens={origens}
                 mes={selectedSheetTab || manifest?.sheetTab || ""}
                 onDelivered={handleDelivered}
                 onIncident={handleIncident}

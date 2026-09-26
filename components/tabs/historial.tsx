@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 import { ArrowUpDown, Check, Download, Search, TriangleAlert } from "lucide-react";
 import { formatLongDate } from "@/lib/dates";
 import { euros } from "@/lib/factura";
-import type { Stop } from "@/lib/types";
+import type { OrigenManifest, Stop } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import StopCard from "@/components/stop-card";
@@ -19,6 +19,8 @@ import Previsualitzacio from "@/components/previsualitzacio";
 
 const COLUMNES_HISTORIAL = [
   { clau: "id", etiqueta: "Comanda", classe: "w-32" },
+  // Solo con dos hojas: con una sola, una columna que dice siempre lo mismo.
+  { clau: "origen", etiqueta: "Full", classe: "w-40" },
   { clau: "customer", etiqueta: "Client", classe: "" },
   { clau: "city", etiqueta: "Població", classe: "w-44" },
   { clau: "date", etiqueta: "Data", classe: "w-28" },
@@ -41,10 +43,14 @@ function celdaCsv(valor: string | number | null): string {
  * abra en columnas de una vez en vez de meter toda la fila en la celda A1.
  * Los importes van con coma decimal por lo mismo.
  */
-function descarregarCsv(stops: Stop[], nom: string): void {
-  const cabecera = COLUMNES_HISTORIAL.map((c) => c.etiqueta);
+function descarregarCsv(stops: Stop[], nom: string, origens: OrigenManifest[]): void {
+  const columnes = columnesPer(origens);
+  const cabecera = columnes.map((c) => c.etiqueta);
   const filas = stops.map((s) => [
-    celdaCsv(s.id),
+    // Sin el prefijo del segundo documento: "2:748" no lo entiende nadie, y
+    // de qué hoja es ya lo dice su columna.
+    celdaCsv(s.origen ? s.id.slice(s.origen.length + 1) : s.id),
+    ...(columnes.some((c) => c.clau === "origen") ? [celdaCsv(nomOrigen(origens, s))] : []),
     celdaCsv(s.customer),
     celdaCsv(s.city),
     celdaCsv(s.date),
@@ -61,6 +67,17 @@ function descarregarCsv(stops: Stop[], nom: string): void {
   URL.revokeObjectURL(url);
 }
 
+/** Las columnas que tocan: la del full, solo si hay más de uno. */
+function columnesPer(origens: OrigenManifest[]) {
+  return origens.length > 1
+    ? COLUMNES_HISTORIAL
+    : COLUMNES_HISTORIAL.filter((c) => c.clau !== "origen");
+}
+
+function nomOrigen(origens: OrigenManifest[], s: Stop): string {
+  return origens.find((o) => o.id === (s.origen ?? ""))?.nom ?? "";
+}
+
 const ETIQUETA_ESTAT: Record<string, string> = {
   entregat: "Entregat",
   incidencia: "Incidència",
@@ -70,6 +87,7 @@ const ETIQUETA_ESTAT: Record<string, string> = {
 
 export default function TabHistorial({
   historyStops,
+  origens,
   mes,
   onDelivered,
   onIncident,
@@ -77,6 +95,8 @@ export default function TabHistorial({
   onUndeliver,
 }: {
   historyStops: { entregat: Stop[]; incidencia: Stop[] };
+  /** Los documentos de comandas. Con más de uno, se puede mirar cada uno aparte. */
+  origens: OrigenManifest[];
   /** Nombre del full, solo para el nombre del CSV. */
   mes: string;
   onDelivered: (id: string, price: number | null) => void;
@@ -95,7 +115,22 @@ export default function TabHistorial({
    */
   const [obertId, setObertId] = useState<string | null>(null);
 
-  const allHistory = useMemo(() => [...historyStops.entregat, ...historyStops.incidencia], [historyStops]);
+  /**
+   * Qué hoja se mira: `null` las dos juntas.
+   *
+   * Cada empresa se repasa y se cobra por separado, así que lo que se quiere
+   * ver es lo de una sola: sus entregas, sus incidencias y lo que suma.
+   */
+  const [filtreOrigen, setFiltreOrigen] = useState<string | null>(null);
+  const agrupar = origens.length > 1;
+  const columnes = columnesPer(origens);
+
+  const allHistory = useMemo(() => {
+    const totes = [...historyStops.entregat, ...historyStops.incidencia];
+    if (filtreOrigen === null) return totes;
+    return totes.filter((s) => (s.origen ?? "") === filtreOrigen);
+  }, [historyStops, filtreOrigen]);
+  const entregats = allHistory.filter((s) => s.statusCategory === "entregat").length;
 
   const filteredHistory = useMemo(() => {
     if (!searchTerm.trim()) return allHistory;
@@ -122,14 +157,16 @@ export default function TabHistorial({
       if (clau === "price") {
         return signo * ((a.price ?? -1) - (b.price ?? -1));
       }
-      const va = String(a[clau] ?? "");
-      const vb = String(b[clau] ?? "");
+      // El full, por su nombre: el id del de siempre es "", y como vacío se
+      // iría al final se ordene como se ordene.
+      const va = clau === "origen" ? nomOrigen(origens, a) : String(a[clau] ?? "");
+      const vb = clau === "origen" ? nomOrigen(origens, b) : String(b[clau] ?? "");
       // Los vacíos al final, se ordene como se ordene.
       if (va === "" && vb !== "") return 1;
       if (vb === "" && va !== "") return -1;
       return signo * va.localeCompare(vb, "ca", { numeric: true });
     });
-  }, [filteredHistory, ordre]);
+  }, [filteredHistory, ordre, origens]);
 
   const obert = obertId ? (allHistory.find((s) => s.id === obertId) ?? null) : null;
 
@@ -156,15 +193,42 @@ export default function TabHistorial({
 
   return (
     <div className="space-y-6">
+      {/* Qué hoja se mira. Botones y no un desplegable: se ven todas las
+          opciones a la vez, como el conmutador de mes y semana. */}
+      {agrupar && (
+        <div
+          role="group"
+          aria-label="Quin full es mira"
+          className="flex gap-1 rounded-full bg-muted p-0.5 lg:max-w-md"
+        >
+          {[{ id: null, nom: "Tots" }, ...origens].map((o) => (
+            <button
+              key={o.id ?? "tots"}
+              type="button"
+              onClick={() => setFiltreOrigen(o.id)}
+              aria-pressed={filtreOrigen === o.id}
+              className={cn(
+                "pressable min-w-0 flex-1 truncate rounded-full px-3 py-1.5 text-xs font-medium",
+                filtreOrigen === o.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground",
+              )}
+            >
+              {o.nom}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center gap-4 soft-card p-4 lg:max-w-md">
         <div className="flex-1">
           <p className="text-xs font-semibold text-muted-foreground">Entregats</p>
-          <p className="text-2xl font-semibold text-status-entregat">{historyStops.entregat.length}</p>
+          <p className="text-2xl font-semibold text-status-entregat">{entregats}</p>
         </div>
         <div className="h-10 w-px bg-border" />
         <div className="flex-1">
           <p className="text-xs font-semibold text-muted-foreground">Incidències</p>
-          <p className="text-2xl font-semibold text-status-incidencia">{historyStops.incidencia.length}</p>
+          <p className="text-2xl font-semibold text-status-incidencia">
+            {allHistory.length - entregats}
+          </p>
         </div>
       </div>
 
@@ -182,7 +246,7 @@ export default function TabHistorial({
         <Button
           variant="secondary"
           disabled={ordenat.length === 0}
-          onClick={() => descarregarCsv(ordenat, mes)}
+          onClick={() => descarregarCsv(ordenat, mes, origens)}
         >
           <Download />
           <span className="hidden sm:inline">Exportar CSV</span>
@@ -205,7 +269,7 @@ export default function TabHistorial({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left">
-                  {COLUMNES_HISTORIAL.map((col) => {
+                  {columnes.map((col) => {
                     const activa = ordre.clau === col.clau;
                     return (
                       <th key={col.clau} className={cn("font-medium", col.classe)}>
@@ -244,6 +308,20 @@ export default function TabHistorial({
                     className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/60"
                   >
                     <td className="px-4 py-2 tabular-nums">{stop.codi}</td>
+                    {agrupar && (
+                      <td className="max-w-0 px-4 py-2">
+                        {/* La del segundo, en el color de la app: la misma
+                            marca que lleva en el calendario. */}
+                        <span
+                          className={cn(
+                            "block truncate text-xs font-medium",
+                            stop.origen ? "text-primary" : "text-muted-foreground",
+                          )}
+                        >
+                          {nomOrigen(origens, stop)}
+                        </span>
+                      </td>
+                    )}
                     <td className="max-w-0 truncate px-4 py-2">{stop.customer || "—"}</td>
                     <td className="max-w-0 truncate px-4 py-2 text-muted-foreground">
                       {stop.city || "—"}
@@ -271,7 +349,7 @@ export default function TabHistorial({
               </tbody>
               <tfoot>
                 <tr className="border-t border-border">
-                  <td colSpan={3} className="px-4 py-2.5 text-xs text-muted-foreground">
+                  <td colSpan={agrupar ? 4 : 3} className="px-4 py-2.5 text-xs text-muted-foreground">
                     {ordenat.length} {ordenat.length === 1 ? "comanda" : "comandes"}
                   </td>
                   <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">Total</td>
@@ -327,6 +405,9 @@ export default function TabHistorial({
                           <span className="block truncate text-xs text-muted-foreground">
                             {stop.codi}
                             {stop.city ? ` · ${stop.city}` : ""}
+                            {agrupar && stop.origen && (
+                              <span className="text-primary"> · {nomOrigen(origens, stop)}</span>
+                            )}
                           </span>
                           {incidencia && stop.incidentNote && (
                             <span className="mt-1 block text-xs text-status-incidencia">
