@@ -86,7 +86,9 @@ export function crearComandaDemo(dades: {
   creadesDemo.push({
     id: clau,
     customer: dades.customer ?? "",
-    address: [dades.address, dades.city].filter(Boolean).join(", "),
+    // "calle, población", con la coma aunque falte la calle: `toStop` parte
+    // por ahí, y sin ella la población se leía como si fuera la calle.
+    address: dades.city ? `${dades.address ?? ""}, ${dades.city}` : (dades.address ?? ""),
     // Sin coordenadas, como una comanda recién creada de verdad: la hoja
     // no las trae y nadie las ha buscado todavía.
     lat: null,
@@ -295,8 +297,11 @@ function toStop(
     date: demoDates.get(sample.id) ?? date,
     priority: sample.priority,
     customer: sample.customer,
-    address: sample.address,
-    city: null,
+    // Las muestras llevan calle y población juntas; la hoja de verdad las
+    // trae en columnas separadas, y sin población la bossa decía "Sense
+    // adreça" de todas.
+    address: sample.address.split(",")[0].trim(),
+    city: sample.address.split(",").slice(1).join(",").trim() || null,
     billingClient: null,
     phone: sample.phone ?? null,
     measures: null,
