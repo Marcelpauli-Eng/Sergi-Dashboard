@@ -882,28 +882,34 @@ export async function actualitzarComanda(
 }
 
 /**
- * Pasa la fila de una comanda a otro full del mismo documento.
+ * Pasa las filas de unas comandas a otro full del mismo documento.
  *
- * Primero se añade en el destino y luego se borra del origen: si algo falla
- * a medias queda repetida, que se ve y se arregla, en vez de perdida.
+ * Primero se añaden en el destino y luego se borran del origen: si algo falla
+ * a medias quedan repetidas, que se ve y se arregla, en vez de perdidas. Todo
+ * de una vez —una lectura, una escritura y un borrado— y no comanda a
+ * comanda: con diez seguidas se pasaba del cupo por minuto de Google.
  *
  * Cada columna va a la de la misma cabecera en el destino, no a la misma
  * posición: cada mes puede tener las columnas en otro orden. Si una celda con
  * datos no tiene dónde ir, no se mueve nada.
  *
  * `desti` es un full del documento de siempre; para el segundo se usa su
- * mes, como en `crearComanda`.
+ * mes, como en `crearComanda`. Devuelve las que se han movido y de qué full
+ * salieron, que es adonde las devuelve el Desfer.
  */
-export async function moureComanda(
-  id: string,
+export async function moureComandes(
+  ids: string[],
   desti: string,
   sheetTab?: string | null,
-): Promise<boolean> {
-  const origen = origenDe(id);
+): Promise<{ mogudes: string[]; de: string }> {
+  const origen = origenDe(ids[0]);
+  if (ids.some((id) => origenDe(id).id !== origen.id)) {
+    throw new ErrorAccionable("Les comandes són de documents diferents.");
+  }
   const snapshot = await readSheet(sheetTab, origen);
-  const order = snapshot.orders.find((o) => o.id === id);
-  if (!order || !snapshot.sheetTab) return false;
-  const tabOrigen = snapshot.sheetTab;
+  const tabOrigen = snapshot.sheetTab ?? "";
+  const orders = snapshot.orders.filter((o) => ids.includes(o.id));
+  if (orders.length === 0) return { mogudes: [], de: tabOrigen };
 
   let tabDesti = desti;
   if (origen.id) {
@@ -911,7 +917,7 @@ export async function moureComanda(
     tabDesti = await resolverPestanya(origen, desti);
   }
   if (tabDesti === tabOrigen) {
-    throw new ErrorAccionable(`La comanda ja és al full ${tabOrigen}.`);
+    throw new ErrorAccionable(`Les comandes ja són al full ${tabOrigen}.`);
   }
 
   const destiSnapshot = await readSheet(tabDesti, origen);
@@ -922,66 +928,63 @@ export async function moureComanda(
       `/values/${encodeURIComponent(range(a1, tab))}`,
       undefined,
       origen.sheetId,
-    )) as { values?: unknown[][] }).values?.[0] ?? [];
+    )) as { values?: unknown[][] }).values ?? [];
   // Valores formateados, tal y como se ven: fechas e importes se reescriben
   // igual con USER_ENTERED en el mismo documento.
-  const [cabOrigen, fila, cabDesti] = await Promise.all([
-    llegir("1:1", tabOrigen),
-    llegir(`${order.rowNumber}:${order.rowNumber}`, tabOrigen),
+  const [filesOrigen, [cabDesti = []]] = await Promise.all([
+    llegir("A1:ZZ", tabOrigen),
     llegir("1:1", tabDesti),
   ]);
+  const cabOrigen = filesOrigen[0] ?? [];
 
-  const valors: unknown[] = [];
-  const perdudes: string[] = [];
-  fila.forEach((valor, i) => {
-    if (valor === "" || valor === null || valor === undefined) return;
+  const columnaDesti = (i: number): number => {
     const clau = (Object.keys(snapshot.headerMap) as ColumnKey[]).find(
       (k) => snapshot.headerMap[k] === i,
     );
     const nom = normalizeHeader(String(cabOrigen[i] ?? ""));
-    const j =
+    return (
       (clau ? destiMap[clau] : undefined) ??
-      cabDesti.findIndex((c) => normalizeHeader(String(c ?? "")) === nom);
-    if (j === undefined || j < 0) perdudes.push(String(cabOrigen[i] ?? i + 1));
-    else valors[j] = valor;
+      cabDesti.findIndex((c) => normalizeHeader(String(c ?? "")) === nom)
+    );
+  };
+
+  const perdudes = new Set<string>();
+  const noves = orders.map((order) => {
+    const valors: unknown[] = [];
+    (filesOrigen[order.rowNumber - 1] ?? []).forEach((valor, i) => {
+      if (valor === "" || valor === null || valor === undefined) return;
+      const j = columnaDesti(i);
+      if (j < 0) perdudes.add(String(cabOrigen[i] ?? i + 1));
+      else valors[j] = valor;
+    });
+    return Array.from(valors, (v) => v ?? "");
   });
-  if (perdudes.length > 0) {
+  if (perdudes.size > 0) {
     throw new ErrorAccionable(
-      `El full ${tabDesti} no té les columnes: ${perdudes.join(", ")}. No s'ha mogut res.`,
+      `El full ${tabDesti} no té les columnes: ${[...perdudes].join(", ")}. No s'ha mogut res.`,
     );
   }
 
   await sheetsFetch(
     `/values/${encodeURIComponent(filaLliure(destiSnapshot))}:append` +
       `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-    { method: "POST", body: JSON.stringify({ values: [Array.from(valors, (v) => v ?? "")] }) },
+    { method: "POST", body: JSON.stringify({ values: noves }) },
     origen.sheetId,
   );
 
   const gid = await idPestanya(origen.sheetId, tabOrigen);
-  if (gid === null) throw new ErrorAccionable(`No trobo el full ${tabOrigen} per esborrar-la.`);
-  await sheetsFetch(
-    ":batchUpdate",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        requests: [
-          {
-            deleteDimension: {
-              range: {
-                sheetId: gid,
-                dimension: "ROWS",
-                startIndex: order.rowNumber - 1,
-                endIndex: order.rowNumber,
-              },
-            },
-          },
-        ],
-      }),
-    },
-    origen.sheetId,
-  );
-  return true;
+  if (gid === null) throw new ErrorAccionable(`No trobo el full ${tabOrigen} per esborrar-les.`);
+  // De abajo arriba: borrar una fila sube las de debajo, no las de encima.
+  const requests = orders
+    .map((o) => o.rowNumber)
+    .sort((a, b) => b - a)
+    .map((fila) => ({
+      deleteDimension: {
+        range: { sheetId: gid, dimension: "ROWS", startIndex: fila - 1, endIndex: fila },
+      },
+    }));
+  await sheetsFetch(":batchUpdate", { method: "POST", body: JSON.stringify({ requests }) }, origen.sheetId);
+  return { mogudes: orders.map((o) => o.id), de: tabOrigen };
 }
 
 /** Lo que se guarda de una comanda ya geocodificada. */

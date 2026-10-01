@@ -925,6 +925,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
                 onImporte={handleImporte}
                 onDelivered={handleDelivered}
                 onIncident={handleIncident}
+                onDesfer={anotarDesfer}
               />
             )}
             {activeTab === "historial" && (

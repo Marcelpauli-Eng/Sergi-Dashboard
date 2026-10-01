@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { isConfigError } from "@/lib/env";
-import { actualitzarComanda, crearComanda, moureComanda, origens } from "@/lib/sheets";
+import { actualitzarComanda, crearComanda, moureComandes, origens } from "@/lib/sheets";
 import { actualitzarComandaDemo, crearComandaDemo, isDemoMode } from "@/lib/demo";
 
 /**
@@ -153,8 +153,6 @@ const editarSchema = z.object({
   measures: z.string().trim().max(300).optional(),
   notes: z.string().trim().max(500).optional(),
   lloc: llocSchema.optional(),
-  /** Pasar la fila a este otro full. Va sola, sin otros cambios. */
-  moureA: z.string().trim().min(1).max(120).optional(),
 });
 
 /**
@@ -179,25 +177,7 @@ export async function PATCH(request: Request) {
     );
   }
 
-  const { id, sheetTab, lloc, moureA, ...dades } = parsed.data;
-
-  if (moureA) {
-    if (isDemoMode()) {
-      return NextResponse.json({ error: "No disponible en mode demo" }, { status: 400 });
-    }
-    try {
-      return (await moureComanda(id, moureA, sheetTab))
-        ? NextResponse.json({ comanda: id, sheetTab: moureA })
-        : NextResponse.json({ error: `La comanda ${id} ja no és al full` }, { status: 404 });
-    } catch (error) {
-      console.error("Error moviendo la comanda:", error);
-      return NextResponse.json(
-        { error: isConfigError(error) ? error.message : "No s'ha pogut moure la comanda" },
-        { status: isConfigError(error) ? 400 : 502 },
-      );
-    }
-  }
-
+  const { id, sheetTab, lloc, ...dades } = parsed.data;
   if (Object.keys(dades).length === 0) {
     return NextResponse.json({ error: "No hi ha res per canviar" }, { status: 400 });
   }
@@ -225,6 +205,55 @@ export async function PATCH(request: Request) {
     return NextResponse.json(
       { error: "No s'han pogut desar els canvis al Google Sheet" },
       { status: 502 },
+    );
+  }
+}
+
+const moureSchema = z.object({
+  ids: z.array(z.string().trim().min(1).max(64)).min(1).max(200),
+  /** El full al que van. */
+  desti: z.string().trim().min(1).max(120),
+  /** El full en el que están ahora. Sin él, el del mes en curso. */
+  sheetTab: z.string().max(120).optional(),
+});
+
+/**
+ * Pasa unas comandas de la bossa a otro full.
+ *
+ * Contesta de qué full salieron: es adonde las devuelve el Desfer, con otra
+ * llamada igual a esta pero al revés.
+ */
+export async function PUT(request: Request) {
+  const driver = await getSession();
+  if (!driver) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+
+  const parsed = moureSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    const [problema] = parsed.error.issues;
+    return NextResponse.json(
+      { error: `Petición inválida: ${problema.path.join(".") || "cuerpo"} — ${problema.message}` },
+      { status: 400 },
+    );
+  }
+
+  if (isDemoMode()) {
+    return NextResponse.json({ error: "No disponible en mode demo" }, { status: 400 });
+  }
+
+  const { ids, desti, sheetTab } = parsed.data;
+  try {
+    const resultat = await moureComandes(ids, desti, sheetTab);
+    if (resultat.mogudes.length === 0) {
+      return NextResponse.json({ error: "Aquestes comandes ja no són al full" }, { status: 404 });
+    }
+    return NextResponse.json(resultat);
+  } catch (error) {
+    console.error("Error moviendo comandas:", error);
+    return NextResponse.json(
+      { error: isConfigError(error) ? error.message : "No s'han pogut moure les comandes" },
+      { status: isConfigError(error) ? 400 : 502 },
     );
   }
 }
