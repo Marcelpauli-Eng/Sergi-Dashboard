@@ -263,6 +263,61 @@ export function pestanyaACrear(
   return { titol: full, cabeceraDe: findLatestTabUpTo(tabs, mes) };
 }
 
+/**
+ * Qué pestaña usar para un mes, y si hay que crearla.
+ *
+ * Está aparte y sin red porque es donde se ha equivocado dos veces: un mes
+ * que se lee distinto del que se escribe deja comandas que no salen por
+ * ningún lado, y eso no se ve hasta que alguien las echa de menos. Las
+ * llamadas a Google están en `resolverPestanya`; la decisión, aquí.
+ *
+ * - `usa`: ese mes ya está en el documento.
+ * - `crea`: no está y toca crearlo, con el nombre que trae el documento de
+ *   siempre. Solo el segundo documento, y solo del mes en curso o de uno por
+ *   venir: así la otra empresa estrena el mes a la vez que la oficina, sin
+ *   esperar a que alguien apunte la primera comanda.
+ * - `enrere`: no está, pero hay un mes anterior del que tirar. Es lo de
+ *   siempre para el documento de la oficina, que es el que manda el mes.
+ * - `falta`: no hay nada que hacer y hay que decirlo.
+ *
+ * `nom` es cómo se llamaría la pestaña de ese mes en el documento de siempre
+ * —"OCT 26"—, para crearla igual en el otro. `null` si no se sabe.
+ */
+export function planDelFull(opcions: {
+  /** Las pestañas que tiene ESE documento. */
+  tabs: string[];
+  /** El mes que se quiere, "AAAA-MM". */
+  mes: string;
+  /** Cómo nombra ese mes el documento de siempre, si se sabe. */
+  nom: string | null;
+  /** El mes de hoy, "AAAA-MM". */
+  avui: string;
+  /** Si es el segundo documento, que es el único que sigue al primero. */
+  segon: boolean;
+}):
+  | { fes: "usa"; full: string }
+  | { fes: "crea"; full: string }
+  | { fes: "enrere"; full: string }
+  | { fes: "falta" } {
+  const { tabs, mes, nom, avui, segon } = opcions;
+
+  const delMes = findMonthTab(tabs, mes);
+  if (delMes) return { fes: "usa", full: delMes };
+
+  if (segon && nom && parseTabMonth(nom) === mes) {
+    // Un mes que ya pasó no se crea: mirar atrás no escribe en la hoja de
+    // nadie, y enseñar otro mes como si fuera este es peor que decir que no
+    // está.
+    if (mes >= avui) return { fes: "crea", full: nom };
+    return { fes: "falta" };
+  }
+
+  const anterior = findLatestTabUpTo(tabs, mes);
+  if (anterior) return { fes: "enrere", full: anterior };
+
+  return { fes: "falta" };
+}
+
 /** Mensaje de error con la lista de pestañas, para que se vea qué hay. */
 export function noTabFoundMessage(
   tabs: string[],
