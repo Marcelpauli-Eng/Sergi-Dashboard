@@ -9,7 +9,7 @@
  * es solo que ahora se encuentra.
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Check,
@@ -23,6 +23,7 @@ import {
 import { addDays, formatLongDate, getMonthGrid, getWeekGrid, getYearMonth } from "@/lib/dates";
 import { euros } from "@/lib/factura";
 import { telHref } from "@/lib/format";
+import { getSelectedTab, syncNow } from "@/lib/sync";
 import type { OrigenManifest, Stop } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -764,6 +765,74 @@ function DiaDetall({
  * en vez de desaparecer. Así la lista no baila según la fila, y se ve de un
  * vistazo a quién le falta el teléfono en la hoja.
  */
+/**
+ * Pasar la comanda a otro full: la fila se va de este mes al elegido.
+ *
+ * Pide la lista de fulls ella misma: solo se monta con la previsualización
+ * abierta, y así no hay que bajarla por tres componentes.
+ */
+function MoureFull({ stop, onMoguda }: { stop: Stop; onMoguda: () => void }) {
+  const [fulls, setFulls] = useState<string[]>([]);
+  const [movent, setMovent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const actual = getSelectedTab();
+
+  useEffect(() => {
+    void fetch("/api/sheets/tabs")
+      .then((r) => (r.ok ? r.json() : { tabs: [] }))
+      .then((d: { tabs: string[] }) => setFulls(d.tabs))
+      .catch(() => {});
+  }, []);
+
+  const moure = async (desti: string) => {
+    if (!desti) return;
+    setMovent(true);
+    setError(null);
+    try {
+      const resposta = await fetch("/api/comandes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: stop.id, moureA: desti, ...(actual ? { sheetTab: actual } : {}) }),
+      });
+      const cos = (await resposta.json().catch(() => null)) as { error?: string } | null;
+      if (!resposta.ok) throw new Error(cos?.error ?? "No s'ha pogut moure");
+      await syncNow(actual ?? undefined).catch(() => {});
+      onMoguda();
+    } catch (e) {
+      setError(
+        e instanceof TypeError
+          ? "Sense cobertura no es pot moure: això s'escriu al full de l'oficina."
+          : e instanceof Error
+            ? e.message
+            : "Error desconegut",
+      );
+      setMovent(false);
+    }
+  };
+
+  return (
+    <div className="space-y-1">
+      <select
+        aria-label="Moure a un altre full"
+        className="h-11 w-full rounded-[var(--radius)] border border-border bg-background px-3 text-sm"
+        value=""
+        disabled={movent || fulls.length === 0}
+        onChange={(e) => void moure(e.target.value)}
+      >
+        <option value="">{movent ? "Movent…" : "Moure a un altre full…"}</option>
+        {fulls
+          .filter((f) => f !== actual)
+          .map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+      </select>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
 function Trucar({ phone }: { phone: string | null }) {
   if (!phone || phone.trim() === "") {
     return (
@@ -1162,6 +1231,8 @@ function Bossa({
                     <Check />
                     Ja està entregada
                   </Button>
+
+                  <MoureFull stop={previewStop} onMoguda={() => setPreviewId(null)} />
                 </div>
               }
             />

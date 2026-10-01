@@ -39,6 +39,7 @@ import {
 import {
   canonicalHeader,
   MANAGED_COLUMNS,
+  normalizeHeader,
   type ColumnKey,
 } from "./sheet-schema";
 import { construirComandes } from "./sheet-rows.ts";
@@ -858,6 +859,109 @@ export async function actualitzarComanda(
     lloc || canviaAdreca ? await ensureManagedColumns(snapshot) : snapshot.headerMap;
 
   await writeCells(updates, headerMap, snapshot);
+  return true;
+}
+
+/**
+ * Pasa la fila de una comanda a otro full del mismo documento.
+ *
+ * Primero se añade en el destino y luego se borra del origen: si algo falla
+ * a medias queda repetida, que se ve y se arregla, en vez de perdida.
+ *
+ * Cada columna va a la de la misma cabecera en el destino, no a la misma
+ * posición: cada mes puede tener las columnas en otro orden. Si una celda con
+ * datos no tiene dónde ir, no se mueve nada.
+ *
+ * `desti` es un full del documento de siempre; para el segundo se usa su
+ * mes, como en `crearComanda`.
+ */
+export async function moureComanda(
+  id: string,
+  desti: string,
+  sheetTab?: string | null,
+): Promise<boolean> {
+  const origen = origenDe(id);
+  const snapshot = await readSheet(sheetTab, origen);
+  const order = snapshot.orders.find((o) => o.id === id);
+  if (!order || !snapshot.sheetTab) return false;
+  const tabOrigen = snapshot.sheetTab;
+
+  let tabDesti = desti;
+  if (origen.id) {
+    if (!origen.sheetTab) await assegurarPestanya(origen, desti);
+    tabDesti = await resolverPestanya(origen, desti);
+  }
+  if (tabDesti === tabOrigen) {
+    throw new ErrorAccionable(`La comanda ja és al full ${tabOrigen}.`);
+  }
+
+  const destiSnapshot = await readSheet(tabDesti, origen);
+  // Las columnas de la app (_lat, Estat…) pueden no existir aún en el destino.
+  const destiMap = await ensureManagedColumns(destiSnapshot);
+  const llegir = async (a1: string, tab: string) =>
+    ((await sheetsFetch(
+      `/values/${encodeURIComponent(range(a1, tab))}`,
+      undefined,
+      origen.sheetId,
+    )) as { values?: unknown[][] }).values?.[0] ?? [];
+  // Valores formateados, tal y como se ven: fechas e importes se reescriben
+  // igual con USER_ENTERED en el mismo documento.
+  const [cabOrigen, fila, cabDesti] = await Promise.all([
+    llegir("1:1", tabOrigen),
+    llegir(`${order.rowNumber}:${order.rowNumber}`, tabOrigen),
+    llegir("1:1", tabDesti),
+  ]);
+
+  const valors: unknown[] = [];
+  const perdudes: string[] = [];
+  fila.forEach((valor, i) => {
+    if (valor === "" || valor === null || valor === undefined) return;
+    const clau = (Object.keys(snapshot.headerMap) as ColumnKey[]).find(
+      (k) => snapshot.headerMap[k] === i,
+    );
+    const nom = normalizeHeader(String(cabOrigen[i] ?? ""));
+    const j =
+      (clau ? destiMap[clau] : undefined) ??
+      cabDesti.findIndex((c) => normalizeHeader(String(c ?? "")) === nom);
+    if (j === undefined || j < 0) perdudes.push(String(cabOrigen[i] ?? i + 1));
+    else valors[j] = valor;
+  });
+  if (perdudes.length > 0) {
+    throw new ErrorAccionable(
+      `El full ${tabDesti} no té les columnes: ${perdudes.join(", ")}. No s'ha mogut res.`,
+    );
+  }
+
+  await sheetsFetch(
+    `/values/${encodeURIComponent(range("A:ZZ", tabDesti))}:append` +
+      `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { method: "POST", body: JSON.stringify({ values: [Array.from(valors, (v) => v ?? "")] }) },
+    origen.sheetId,
+  );
+
+  const gid = await idPestanya(origen.sheetId, tabOrigen);
+  if (gid === null) throw new ErrorAccionable(`No trobo el full ${tabOrigen} per esborrar-la.`);
+  await sheetsFetch(
+    ":batchUpdate",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        requests: [
+          {
+            deleteDimension: {
+              range: {
+                sheetId: gid,
+                dimension: "ROWS",
+                startIndex: order.rowNumber - 1,
+                endIndex: order.rowNumber,
+              },
+            },
+          },
+        ],
+      }),
+    },
+    origen.sheetId,
+  );
   return true;
 }
 

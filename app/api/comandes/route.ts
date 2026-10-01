@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { isConfigError } from "@/lib/env";
-import { actualitzarComanda, crearComanda, origens } from "@/lib/sheets";
+import { actualitzarComanda, crearComanda, moureComanda, origens } from "@/lib/sheets";
 import { actualitzarComandaDemo, crearComandaDemo, isDemoMode } from "@/lib/demo";
 
 /**
@@ -153,6 +153,8 @@ const editarSchema = z.object({
   measures: z.string().trim().max(300).optional(),
   notes: z.string().trim().max(500).optional(),
   lloc: llocSchema.optional(),
+  /** Pasar la fila a este otro full. Va sola, sin otros cambios. */
+  moureA: z.string().trim().min(1).max(120).optional(),
 });
 
 /**
@@ -177,7 +179,25 @@ export async function PATCH(request: Request) {
     );
   }
 
-  const { id, sheetTab, lloc, ...dades } = parsed.data;
+  const { id, sheetTab, lloc, moureA, ...dades } = parsed.data;
+
+  if (moureA) {
+    if (isDemoMode()) {
+      return NextResponse.json({ error: "No disponible en mode demo" }, { status: 400 });
+    }
+    try {
+      return (await moureComanda(id, moureA, sheetTab))
+        ? NextResponse.json({ comanda: id, sheetTab: moureA })
+        : NextResponse.json({ error: `La comanda ${id} ja no és al full` }, { status: 404 });
+    } catch (error) {
+      console.error("Error moviendo la comanda:", error);
+      return NextResponse.json(
+        { error: isConfigError(error) ? error.message : "No s'ha pogut moure la comanda" },
+        { status: isConfigError(error) ? 400 : 502 },
+      );
+    }
+  }
+
   if (Object.keys(dades).length === 0) {
     return NextResponse.json({ error: "No hi ha res per canviar" }, { status: 400 });
   }
