@@ -99,7 +99,17 @@ export async function POST(request: Request) {
       origen,
     );
     console.warn(`Comanda ${dades.id} creada por ${driver.id} en ${resultat.sheetTab}`);
-    return NextResponse.json({ comanda: dades.id, sheetTab: resultat.sheetTab });
+    /*
+      `full` y no `sheetTab`: la pantalla lo usa para volver a pedir el
+      manifiesto, y eso se pide siempre con el nombre de una pestaña del
+      documento de siempre. En el segundo documento las suyas se llaman como
+      quieren. Ver `crearComanda`.
+    */
+    return NextResponse.json({
+      comanda: dades.id,
+      sheetTab: resultat.sheetTab,
+      full: resultat.full,
+    });
   } catch (error) {
     console.error("Error creando la comanda:", error);
 

@@ -181,8 +181,28 @@ export interface SheetSnapshot {
 async function resolverPestanya(origen: Origen, full?: string | null): Promise<string> {
   if (origen.sheetTab) return origen.sheetTab;
 
+  /*
+    Qué mes se está mirando lo dice el documento de siempre, no el calendario.
+
+    Cuando el móvil no manda ninguna pestaña —lo normal hasta que alguien
+    elige un mes a mano—, cada documento resolvía su mes por su cuenta: "el
+    de hoy, y si no lo tiene, el último". El día 1 del mes eso los separaba.
+    La oficina todavía no había creado OCT 26 en su hoja, así que la bossa de
+    siempre seguía en SET 26; pero la otra empresa, que lleva su propio
+    documento, sí tenía su octubre, y su bossa se iba a OCT 26 ella sola.
+
+    Y una comanda nueva en esa bossa se escribe en el mes del documento de
+    siempre (ver `crearComanda`): caía en SET 26 mientras la pantalla leía
+    OCT 26. Se apuntaba la comanda y no salía por ningún lado.
+
+    Así que el segundo documento sigue al primero: un mes para los dos, el
+    mismo que se escribe y el que se lee.
+  */
+  const ancora =
+    full ?? (origen.id ? await resolverPestanya(origens()[0]) : null);
+
   const tabs = await listSheetTabs(origen.sheetId);
-  const mes = (full && parseTabMonth(full)) || today(env.timezone).slice(0, 7);
+  const mes = (ancora && parseTabMonth(ancora)) || today(env.timezone).slice(0, 7);
 
   const delMes = findMonthTab(tabs, mes);
   if (delMes) return delMes;
@@ -198,7 +218,7 @@ async function resolverPestanya(origen: Origen, full?: string | null): Promise<s
   */
   if (origen.id) {
     throw new Error(
-      `Encara no hi ha el full de ${full && parseTabMonth(full) ? full : mes} a ${origen.nom}. ` +
+      `Encara no hi ha el full de ${ancora && parseTabMonth(ancora) ? ancora : mes} a ${origen.nom}. ` +
         `Es crearà sol quan hi afegeixis la primera comanda amb el «+» d'aquesta bossa.`,
     );
   }
@@ -627,7 +647,16 @@ export async function crearComanda(
   lloc?: LlocGuardat | null,
   /** En qué documento: la bossa desde la que se ha pulsado "+". */
   origen: Origen = origens()[0],
-): Promise<{ sheetTab: string }> {
+): Promise<{
+  /** La pestaña donde ha caído la fila. En el segundo documento es la suya. */
+  sheetTab: string;
+  /**
+   * El full tal y como lo nombra la app, que es siempre del documento de
+   * siempre. Es lo que vale para volver a pedir el manifiesto: el nombre de
+   * una pestaña del segundo documento no lo entiende nadie más.
+   */
+  full: string;
+}> {
   /*
     En el segundo documento, el mes que estás mirando se crea si no está.
     Sin esto, una comanda de la otra empresa en SET 26 caía en su último
@@ -722,7 +751,12 @@ export async function crearComanda(
     origen.sheetId,
   );
 
-  return { sheetTab: snapshot.sheetTab ?? "" };
+  return {
+    sheetTab: snapshot.sheetTab ?? "",
+    full: origen.id
+      ? (full ?? (await resolverPestanya(origens()[0])))
+      : (snapshot.sheetTab ?? ""),
+  };
 }
 
 /** Una dirección ya elegida en el buscador, tal y como se guarda. */
