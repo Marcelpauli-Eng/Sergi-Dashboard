@@ -6,7 +6,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { ChevronLeft, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/db";
-import { getSelectedTab, subscribeLocalPrefs } from "@/lib/sync";
+import { getSelectedTab, refreshManifest, subscribeLocalPrefs } from "@/lib/sync";
 import { formatLongDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import CampAdreca from "@/components/camp-adreca";
@@ -54,17 +54,22 @@ export default function NovaComanda({
   const router = useRouter();
 
   /*
-    El full donde se va a crear: el que estás mirando, y punto.
+    El full donde se va a crear: el elegido a mano si lo hay, y si no, el que
+    decida el servidor.
 
-    No el que le tocaría por la fecha de hoy. Si estás repasando JUL 26 y
-    creas una comanda, va a JUL 26; si estás en SET 26, a SET 26. Es el mismo
-    que sale en la cabecera de la app: el elegido a mano si lo hay, y si no
-    el del manifiesto que tienes descargado, que es el que estás viendo.
-    Solo cuando no hay ninguno de los dos decide el servidor.
+    Antes, sin elegir ninguno, se mandaba el del manifiesto descargado. Y eso
+    el día 1 del mes creaba comandas invisibles: el manifiesto que tenías
+    bajado era de SET 26, así que la comanda se escribía allí, mientras que la
+    bossa —que pide la hoja sin decir cuál y deja decidir al servidor— ya
+    estaba en OCT 26. Se apuntaba una comanda y no salía por ningún lado.
+
+    Crear y leer tienen que pedir lo mismo: esto manda lo que manda
+    `refreshManifest`, o sea la pestaña elegida a mano, o nada.
   */
   const triat = useSyncExternalStore(subscribeLocalPrefs, getSelectedTab, () => null);
   const desat = useLiveQuery(() => db.manifest.get("current"), []);
-  const full = triat ?? desat?.data.sheetTab ?? null;
+  /* Solo para decir en pantalla qué mes estás viendo; no decide dónde cae. */
+  const mostrat = triat ?? desat?.data.sheetTab ?? null;
   /*
     En qué hoja se crea. Antes solo lo decidía qué "+" se pulsaba, y desde
     esta pantalla no había forma de verlo ni de cambiarlo: si entrabas por
@@ -117,7 +122,7 @@ export default function NovaComanda({
           // Solo si la dirección sigue siendo la que se eligió: si después
           // se ha retocado a mano, el punto ya no es de esa dirección.
           ...(lloc && lloc.address === camps.address ? { lloc } : {}),
-          ...(full ? { sheetTab: full } : {}),
+          ...(triat ? { sheetTab: triat } : {}),
           ...(origen ? { origen } : {}),
           ...(afegirPart ? { afegirPart: true } : {}),
         }),
@@ -125,6 +130,7 @@ export default function NovaComanda({
       const cos = (await resposta.json().catch(() => null)) as {
         error?: string;
         repetida?: boolean;
+        full?: string;
       } | null;
       if (resposta.status === 409 && cos?.repetida) {
         setRepetida(true);
@@ -133,8 +139,16 @@ export default function NovaComanda({
         return;
       }
       if (!resposta.ok) throw new Error(cos?.error ?? "No s'ha pogut crear");
-      // A la bossa, que es donde acaba de caer: el calendario la descarga al
-      // entrar y desde allí se le pone día.
+      /*
+        Y se baja el full DONDE SE HA CREADO, que lo dice el servidor.
+
+        Volver a la pantalla y esperar el refresco no basta: si lo que había
+        bajado era de otro mes, la bossa enseñaría el de antes y la comanda
+        no aparecería. Pidiendo el que contesta el servidor, lo que acabas de
+        apuntar está ahí al llegar.
+      */
+      if (cos?.full) await refreshManifest(cos.full).catch(() => {});
+      // A la bossa, que es donde acaba de caer: desde allí se le pone día.
       router.push("/");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error desconegut");
@@ -160,7 +174,9 @@ export default function NovaComanda({
               {bossa && `${bossa.nom} · `}
               {/* Al segundo documento también: si no tiene ese mes, el
                   servidor se lo crea con este mismo nombre. */}
-              {full ? `S'afegirà al full ${full}` : "S'afegirà al full del mes"}
+              {triat
+                ? `S'afegirà al full ${triat}`
+                : `S'afegirà al full del mes en curs${mostrat ? ` (ara veus ${mostrat})` : ""}`}
             </p>
           </div>
         </div>
