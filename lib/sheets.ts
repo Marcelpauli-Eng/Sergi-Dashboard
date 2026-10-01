@@ -3,11 +3,10 @@ import { googleAccessToken } from "./google-auth";
 import { env, ErrorAccionable } from "./env";
 import { parseSheetDate, formatSheetTimestamp, today } from "./dates";
 import {
-  findMonthTab,
-  findLatestTabUpTo,
   noTabFoundMessage,
   parseTabMonth,
   pestanyaACrear,
+  planDelFull,
 } from "./sheet-tab";
 import { parseImportesFactura } from "./factura.ts";
 import {
@@ -204,22 +203,39 @@ async function resolverPestanya(origen: Origen, full?: string | null): Promise<s
   const tabs = await listSheetTabs(origen.sheetId);
   const mes = (ancora && parseTabMonth(ancora)) || today(env.timezone).slice(0, 7);
 
-  const delMes = findMonthTab(tabs, mes);
-  if (delMes) return delMes;
+  /*
+    Qué pestaña toca lo decide `planDelFull`, que no habla con Google y se
+    comprueba sin él. Aquí solo se hace lo que diga.
 
-  const anterior = findLatestTabUpTo(tabs, mes);
-  if (anterior) return anterior;
+    `crea` es la novedad: el día que la oficina estrena octubre, la otra
+    empresa estrena el suyo a la vez, con el mismo nombre y solo la cabecera.
+    Antes esperaba a que alguien apuntara la primera comanda con su "+", y
+    hasta entonces su bossa enseñaba las comandas de septiembre mientras la
+    pantalla decía octubre.
+  */
+  const pla = planDelFull({
+    tabs,
+    mes,
+    nom: ancora ?? null,
+    avui: today(env.timezone).slice(0, 7),
+    segon: origen.id !== "",
+  });
+  if (pla.fes === "usa" || pla.fes === "enrere") return pla.full;
+  if (pla.fes === "crea") {
+    await assegurarPestanya(origen, pla.full);
+    return pla.full;
+  }
 
   /*
-    El segundo documento sin ningún mes todavía —una hoja recién estrenada,
-    con su "Full 1" vacío— no es un fallo: es lo normal hasta la primera
-    comanda, que crea el mes ella sola (ver `assegurarPestanya`). Se dice
-    así en su bossa, que es donde está el "+".
+    Aquí solo se llega mirando un mes que allí no existe y que ya pasó, o con
+    una pestaña forzada que no dice de qué mes es. No es un fallo de la app:
+    se cuenta en su bossa —que es donde está su "+"— en vez de tumbar la ruta.
   */
   if (origen.id) {
+    const quin = ancora && parseTabMonth(ancora) ? ancora : mes;
     throw new Error(
-      `Encara no hi ha el full de ${ancora && parseTabMonth(ancora) ? ancora : mes} a ${origen.nom}. ` +
-        `Es crearà sol quan hi afegeixis la primera comanda amb el «+» d'aquesta bossa.`,
+      `No hi ha el full de ${quin} a ${origen.nom}. Els mesos que ja han passat ` +
+        `no es creen sols; crea'l a mà a la seva fulla si hi vols apuntar res.`,
     );
   }
   throw new Error(noTabFoundMessage(tabs, mes));

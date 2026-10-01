@@ -21,6 +21,7 @@ import {
   findMonthTab,
   parseTabMonth,
   pestanyaACrear,
+  planDelFull,
   sheetIdFrom,
 } from "../lib/sheet-tab.ts";
 
@@ -241,6 +242,85 @@ import {
       );
     }
   }
+}
+
+// ── Qué full se mira, y si hay que crearlo ───────────────────────────────
+// Aquí está lo que ha fallado dos veces: el mes que se lee tiene que ser el
+// mismo que se escribe. Cuando no lo es, una comanda se apunta en un mes y se
+// busca en otro, y nadie se entera hasta que la echa de menos.
+{
+  const DOC1 = ["JUL 26", "AGO 26", "SET 26", "OCT 26"];
+
+  // El mes está: se usa, se llame como se llame en cada documento.
+  assert.deepEqual(
+    planDelFull({ tabs: DOC1, mes: "2026-10", nom: "OCT 26", avui: "2026-10", segon: false }),
+    { fes: "usa", full: "OCT 26" },
+  );
+  assert.deepEqual(
+    planDelFull({
+      tabs: ["Setembre 2026", "Octubre 2026"],
+      mes: "2026-10",
+      nom: "OCT 26",
+      avui: "2026-10",
+      segon: true,
+    }),
+    { fes: "usa", full: "Octubre 2026" },
+    "la otra empresa nombra sus meses como quiere: no se duplica ninguno",
+  );
+
+  // La oficina estrena octubre y la otra empresa todavía no lo tiene: se le
+  // crea, con el nombre del documento de siempre. Antes esperaba a que
+  // alguien apuntara la primera comanda, y hasta entonces su bossa enseñaba
+  // septiembre mientras la pantalla decía octubre.
+  assert.deepEqual(
+    planDelFull({
+      tabs: ["AGO 26", "SET 26"],
+      mes: "2026-10",
+      nom: "OCT 26",
+      avui: "2026-10",
+      segon: true,
+    }),
+    { fes: "crea", full: "OCT 26" },
+  );
+
+  // Y su hoja recién estrenada, sin ningún mes, también.
+  assert.deepEqual(
+    planDelFull({ tabs: ["Full 1"], mes: "2026-10", nom: "OCT 26", avui: "2026-10", segon: true }),
+    { fes: "crea", full: "OCT 26" },
+  );
+
+  // Un mes que ya pasó NO se crea: mirar atrás no escribe en la hoja de
+  // nadie. Y tampoco se enseña otro mes en su lugar, que es lo que hacía.
+  assert.deepEqual(
+    planDelFull({ tabs: ["AGO 26"], mes: "2026-07", nom: "JUL 26", avui: "2026-10", segon: true }),
+    { fes: "falta" },
+  );
+
+  // El documento de la oficina es el que manda el mes: ahí no se crea nada y
+  // se tira del último que haya. Es lo de siempre y sigue igual.
+  assert.deepEqual(
+    planDelFull({
+      tabs: ["AGO 26", "SET 26"],
+      mes: "2026-10",
+      nom: "OCT 26",
+      avui: "2026-10",
+      segon: false,
+    }),
+    { fes: "enrere", full: "SET 26" },
+  );
+
+  // Una pestaña forzada que no dice de qué mes es: no hay nada que crear, se
+  // tira de lo que haya.
+  assert.deepEqual(
+    planDelFull({ tabs: ["SET 26"], mes: "2026-10", nom: "Comandes", avui: "2026-10", segon: true }),
+    { fes: "enrere", full: "SET 26" },
+  );
+
+  // Y sin nada de nada, se dice.
+  assert.deepEqual(
+    planDelFull({ tabs: ["Resum"], mes: "2026-10", nom: null, avui: "2026-10", segon: false }),
+    { fes: "falta" },
+  );
 }
 
 console.log("✓ lib/sheet-schema.ts + lib/sheet-tab.ts — columnas, pestañas e IDs");
