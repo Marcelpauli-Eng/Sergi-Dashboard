@@ -78,6 +78,12 @@ export default function NovaComanda({
   const origens = desat?.data.origens ?? [];
   const [origen, setOrigen] = useState(origenInicial);
   const bossa = origens.length > 1 ? origens.find((o) => o.id === origen) : undefined;
+  /*
+    La pestaña donde va a caer, para enseñarla antes de crear nada. La del
+    documento elegido, que en el segundo se llama como quiera: sale del
+    manifiesto, que es lo que se está leyendo ahora mismo en su bossa.
+  */
+  const fullDesti = bossa?.sheetTab || triat || mostrat;
 
   const [id, setId] = useState("");
   const [camps, setCamps] = useState<Record<Clau, string>>({
@@ -171,12 +177,19 @@ export default function NovaComanda({
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-lg font-semibold">Nova comanda</h1>
             <p className="truncate text-xs text-muted-foreground">
-              {bossa && `${bossa.nom} · `}
-              {/* Al segundo documento también: si no tiene ese mes, el
-                  servidor se lo crea con este mismo nombre. */}
-              {triat
-                ? `S'afegirà al full ${triat}`
-                : `S'afegirà al full del mes en curs${mostrat ? ` (ara veus ${mostrat})` : ""}`}
+              {/*
+                Dónde va a caer, con nombre y apellido: el documento y la
+                pestaña. Con dos empresas, "s'afegirà al full del mes" no dice
+                lo que hace falta saber —en qué hoja— y una comanda apuntada
+                en la bossa de la otra empresa se iba a buscar al documento de
+                siempre, donde no estaba.
+
+                La pestaña del segundo documento es la del mismo mes que la
+                del de siempre, aunque allí se llame de otra manera, y si no la
+                tiene se la crea el servidor. Ver `resolverPestanya`.
+              */}
+              {`S'afegirà a ${bossa?.nom ?? origens[0]?.nom ?? "la fulla de sempre"}`}
+              {fullDesti ? ` · full ${fullDesti}` : " · el full del mes en curs"}
             </p>
           </div>
         </div>

@@ -985,6 +985,19 @@ function Bossa({
             <span className="truncate">
               {origen ? `Bossa · ${origen.nom}` : "Bossa de comandes"}
             </span>
+            {/*
+              De qué pestaña sale, al lado del nombre.
+
+              Cada documento tiene las suyas, y con dos empresas una comanda
+              apuntada aquí acababa en una pestaña que nadie estaba mirando:
+              "la he creado y en la hoja no está". Diciéndolo no hay nada que
+              adivinar — es la misma pestaña donde se escribe.
+            */}
+            {origen?.sheetTab ? (
+              <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-sans text-[10px] font-medium tabular-nums text-muted-foreground">
+                {origen.sheetTab}
+              </span>
+            ) : null}
           </h3>
           {/*
             Crear una comanda a mano. Pegado al título de la bossa porque es
