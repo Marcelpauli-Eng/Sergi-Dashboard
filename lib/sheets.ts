@@ -159,6 +159,25 @@ export interface SheetSnapshot {
   sheetTab: string | null;
   /** De qué documento. Todo lo que se escriba a partir de aquí va a ese. */
   origen: Origen;
+  /**
+   * Filas con algo escrito, cabecera incluida: la siguiente libre es esta +1.
+   * Ver `filaLliure`.
+   */
+  files: number;
+}
+
+/**
+ * Dónde añadir una fila: la primera libre, desde la columna A.
+ *
+ * Un `:append` sobre "A:ZZ" deja que Google adivine dónde empieza la tabla,
+ * y con cualquier cosa escrita a la derecha de la cabecera —el "RESUM
+ * D'ENTREGUES" de Bricomuebles— la fila caía veinte columnas más allá, y
+ * cada comanda nueva un poco más lejos. Anclado a una fila vacía no hay nada
+ * que adivinar; sigue siendo `:append` para que añada filas si la pestaña
+ * está llena.
+ */
+function filaLliure(snapshot: SheetSnapshot): string {
+  return range(`A${snapshot.files + 1}:ZZ`, snapshot.sheetTab);
 }
 
 /**
@@ -333,7 +352,7 @@ export async function readSheet(
       order.origen = origen.id;
     }
   }
-  return { orders, headerMap, skipped, sheetTab: tab, origen };
+  return { orders, headerMap, skipped, sheetTab: tab, origen, files: rows.length };
 }
 
 /**
@@ -762,7 +781,7 @@ export async function crearComanda(
   );
 
   await sheetsFetch(
-    `/values/${encodeURIComponent(range("A:ZZ", snapshot.sheetTab))}:append` +
+    `/values/${encodeURIComponent(filaLliure(snapshot))}:append` +
       `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     { method: "POST", body: JSON.stringify({ values: [valores] }) },
     origen.sheetId,
@@ -933,7 +952,7 @@ export async function moureComanda(
   }
 
   await sheetsFetch(
-    `/values/${encodeURIComponent(range("A:ZZ", tabDesti))}:append` +
+    `/values/${encodeURIComponent(filaLliure(destiSnapshot))}:append` +
       `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     { method: "POST", body: JSON.stringify({ values: [Array.from(valors, (v) => v ?? "")] }) },
     origen.sheetId,
