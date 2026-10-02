@@ -98,7 +98,14 @@ export async function POST(request: Request) {
       lloc,
       origen,
     );
-    console.warn(`Comanda ${dades.id} creada por ${driver.id} en ${resultat.sheetTab}`);
+    /*
+      Con el nombre del documento: con dos empresas, "creada en OCT 26" no
+      dice en cuál de las dos hojas, que es justo lo que hace falta saber
+      cuando alguien no la encuentra.
+    */
+    console.warn(
+      `Comanda ${dades.id} creada por ${driver.id} en "${origen.nom}", full "${resultat.sheetTab}"`,
+    );
     /*
       `full` y no `sheetTab`: la pantalla lo usa para volver a pedir el
       manifiesto, y eso se pide siempre con el nombre de una pestaña del
