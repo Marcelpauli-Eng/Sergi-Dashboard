@@ -157,6 +157,25 @@ export default function Factures({
     }
   };
 
+  /** Cambia la fecha de una factura emitida y la sustituye en la lista. */
+  const canviarData = async (numero: number, fecha: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return;
+    setError(null);
+    try {
+      const respuesta = await fetch("/api/facturas", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ numero, fecha }),
+      });
+      const cuerpo = await respuesta.json().catch(() => null);
+      if (!respuesta.ok) throw new Error(cuerpo?.error ?? "No s'ha pogut canviar la data");
+      const nova = cuerpo.factura as FacturaEmitida;
+      setFacturas((previas) => (previas ?? []).map((f) => (f.numero === numero ? nova : f)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error desconegut");
+    }
+  };
+
   return (
     <div className="space-y-6 lg:grid lg:grid-cols-[20rem_minmax(0,1fr)] lg:items-start lg:gap-6 lg:space-y-0">
       {/* Facturar el mes que esté seleccionado, no solo el de hoy: si cambias
@@ -248,7 +267,19 @@ export default function Factures({
                       {formatearNumero(factura.numero)}
                     </p>
                     <p className="mt-0.5 text-xs leading-snug text-muted-foreground sm:truncate">
-                      {fechaCorta(factura.fecha)} · {factura.periodo} ·{" "}
+                      <input
+                        type="date"
+                        defaultValue={factura.fecha}
+                        disabled={!online}
+                        aria-label={`Data de la factura ${formatearNumero(factura.numero)}`}
+                        className="rounded border border-border bg-transparent px-1 tabular-nums"
+                        onBlur={(e) => {
+                          if (e.target.value !== factura.fecha) {
+                            void canviarData(factura.numero, e.target.value);
+                          }
+                        }}
+                      />{" "}
+                      · {factura.periodo} ·{" "}
                       {factura.lineas.length}{" "}
                       {factura.lineas.length === 1 ? "comanda" : "comandes"}
                     </p>
