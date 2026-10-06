@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Download, FileCheck, Printer, Trash2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Factura, { Hoja } from "@/components/factura";
+import { EscenaFactura } from "@/components/halloween";
 import type { FacturaEmitida, OrigenManifest, Stop } from "@/lib/types";
 import {
   clientePara,
@@ -180,7 +181,8 @@ export default function Factures({
     <div className="space-y-6 lg:grid lg:grid-cols-[20rem_minmax(0,1fr)] lg:items-start lg:gap-6 lg:space-y-0">
       {/* Facturar el mes que esté seleccionado, no solo el de hoy: si cambias
           de hoja desde el menú, aquí se factura esa. */}
-      <div className="soft-card space-y-3 p-4">
+      <div className="soft-card tema-nit relative space-y-3 overflow-hidden p-4">
+        <EscenaFactura />
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Per facturar

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { formatDistance, formatDuration } from "@/lib/format";
 import { euros } from "@/lib/factura";
+import { EscenaRuta } from "@/components/halloween";
 import type { Stop } from "@/lib/types";
 
 /**
@@ -140,9 +141,10 @@ export default function HomeSummary({
     <div className="space-y-4 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 xl:grid-cols-3">
       {/* ── Acción principal del día ─────────────────────────────────── */}
       {porRepartir > 0 && (
-        <div className="soft-card relative overflow-hidden bg-[color-mix(in_srgb,var(--primary)_8%,var(--card))] p-5 xl:col-span-2">
+        <div className="soft-card tema-nit relative overflow-hidden bg-[color-mix(in_srgb,var(--primary)_8%,var(--card))] p-5 xl:col-span-2">
+          <EscenaRuta />
           <div className="relative z-10 max-w-[58%]">
-            <span className="inline-block rounded-full bg-card px-2.5 py-1 text-[11px] font-semibold text-primary">
+            <span className="pill-nit inline-block rounded-full bg-card px-2.5 py-1 text-[11px] font-semibold text-primary">
               {porRepartir} {porRepartir === 1 ? "parada" : "parades"}
             </span>
             <h2 className="mt-2.5 text-[19px] font-bold leading-tight">

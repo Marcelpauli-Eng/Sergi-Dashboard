@@ -28,6 +28,7 @@ import Desfer, { MARGE_DESFER_MS, type AccioDesfer } from "@/components/desfer";
 import EditarComanda from "@/components/editar-comanda";
 import Endarrerides from "@/components/endarrerides";
 import Sidebar from "@/components/sidebar";
+import { GotesSang, Ratpenat } from "@/components/halloween";
 import Previsualitzacio from "@/components/previsualitzacio";
 import TabCalendari from "@/components/tabs/calendari";
 import TabHistorial from "@/components/tabs/historial";
@@ -686,6 +687,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
     // barra lateral y la cabecera no se mueven, y una pantalla como el
     // calendario puede pedir el alto que le queda y caber entera.
     <div className="lg:flex lg:h-svh lg:overflow-hidden">
+      <GotesSang />
       <Sidebar
         activa={activeTab}
         onSeccio={(seccion) => {
@@ -704,7 +706,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       {manifest?.demo && (
         // Texto negro sobre el naranja del sistema: en blanco no hay
         // contraste suficiente y este aviso tiene que leerse sí o sí.
-        <p className="bg-warning px-4 py-1 text-center text-xs font-semibold text-black">
+        <p className="avis-demo bg-warning px-4 py-1 text-center text-xs font-semibold text-black">
           Modo demo · pedidos de ejemplo
         </p>
       )}
@@ -712,7 +714,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       {/* Franja de arriba. En el móvil lleva el nombre y los botones; a partir
           de `lg` es la barra del escritorio: sección a la izquierda, día y
           full a la derecha. */}
-      <header className="sticky top-0 z-20 bg-background pt-[env(safe-area-inset-top)] lg:border-b lg:border-border">
+      <header className="capcalera sticky top-0 z-20 bg-background pt-[env(safe-area-inset-top)] lg:border-b lg:border-border">
         <div className="flex items-center justify-between gap-4 px-4 py-2.5 lg:px-8 lg:py-3">
           {/* `lg:contents` disuelve esta caja en pantalla grande: sus hijos
               pasan a ser celdas de la franja y el día se va a la derecha. */}
@@ -727,6 +729,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
               </p>
             </div>
             <div className="flex items-center gap-1.5 lg:ml-auto">
+              <Ratpenat className="nomes-halloween w-5 shrink-0 text-foreground" />
               {todayDate && (
                 <p className="text-xs text-muted-foreground first-letter:uppercase">
                   {formatLongDate(todayDate)}
@@ -1122,12 +1125,15 @@ export default function Dashboard({ driverName }: { driverName: string }) {
             key={id}
             onClick={() => anarA(id)}
             className={cn(
-              "pressable flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1 text-[10px] font-medium",
+              "pressable tab-boto relative flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1 text-[10px] font-medium",
               activeTab === id ? "text-primary" : "text-tertiary-foreground",
             )}
           >
             <Icona className="size-6" strokeWidth={activeTab === id ? 2.3 : 1.8} />
             {label}
+            {activeTab === id && (
+              <span className="nomes-halloween absolute bottom-0.5 left-1/2 size-1 -translate-x-1/2 rounded-full bg-[var(--sang)]" />
+            )}
           </button>
         ))}
       </nav>
