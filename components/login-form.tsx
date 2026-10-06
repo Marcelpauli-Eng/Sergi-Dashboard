@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Eye, EyeOff, Lock, User } from "lucide-react";
+import { Carbassa, EscenaAcces } from "@/components/halloween";
 
 /**
  * Login de una sola vez.
@@ -59,16 +60,18 @@ export default function LoginForm() {
   return (
     <main className="flex min-h-svh flex-col bg-card lg:flex-row">
       {/* ── Mitad cálida: marca e ilustración ──────────────────────────── */}
-      <div className="warm-gradient relative min-h-[36svh] shrink-0 overflow-hidden pt-[max(1rem,env(safe-area-inset-top))] lg:flex lg:min-h-svh lg:w-[46%] lg:flex-col lg:pt-10">
+      <div className="warm-gradient tema-nit relative min-h-[36svh] shrink-0 overflow-hidden pt-[max(1rem,env(safe-area-inset-top))] lg:flex lg:min-h-svh lg:w-[46%] lg:flex-col lg:pt-10">
+        <EscenaAcces />
         <div className="flex items-center gap-2 px-6">
-          <CamionLogo />
+          <CamionLogo className="nomes-classic" />
+          <Carbassa className="nomes-halloween size-[30px]" />
           <span className="text-2xl font-bold tracking-tight">
-            Rep<span className="text-primary">arto</span>
+            Rep<span className="marca-arto text-primary">arto</span>
           </span>
         </div>
 
         <div className="hidden px-6 lg:mt-auto lg:block lg:pb-16 lg:pt-24">
-          <p className="max-w-sm text-[28px] font-semibold leading-tight tracking-tight">
+          <p className="lema max-w-sm text-[28px] font-semibold leading-tight tracking-tight">
             Los pedidos del día, en la ruta más corta.
           </p>
           <p className="mt-3 max-w-sm text-base text-muted-foreground">
@@ -96,7 +99,7 @@ export default function LoginForm() {
           height={1010}
           priority
           aria-hidden
-          className="pointer-events-none absolute -right-8 bottom-0 h-[82%] w-auto select-none object-contain lg:hidden"
+          className="nomes-classic pointer-events-none absolute -right-8 bottom-0 h-[82%] w-auto select-none object-contain lg:hidden"
           style={{
             // Dos máscaras que se cruzan: la horizontal disuelve el canto
             // izquierdo y la radial redondea el resto. Van en `style` y no en
@@ -217,9 +220,9 @@ export default function LoginForm() {
 }
 
 /** Marca: camión con el pin de destino encima. */
-function CamionLogo() {
+function CamionLogo({ className }: { className?: string }) {
   return (
-    <svg width="30" height="26" viewBox="0 0 30 26" fill="none" aria-hidden>
+    <svg width="30" height="26" viewBox="0 0 30 26" fill="none" className={className} aria-hidden>
       <rect x="1" y="12" width="15" height="9" rx="2" fill="#2b2b31" />
       <path
         d="M16 15h4.6c.4 0 .8.2 1 .5l2.2 2.8c.2.2.2.4.2.7V21H16v-6Z"

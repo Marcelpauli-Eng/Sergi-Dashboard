@@ -469,3 +469,133 @@ html {
   --color-status-incidencia: var(--warning);
 }
 
+
+/* ── Tema de Halloween ─────────────────────────────────────────────────────
+ *
+ * Todo cuelga de `data-tema="halloween"` en <html> (ver `lib/tema.ts`): sin
+ * el atributo no aplica nada y la app es la de siempre.
+ *
+ * Negro en vez de naranja para todo lo pulsable, y la sangre solo en los
+ * detalles: la marca, las gotas de arriba, la acción de las tarjetas de noche
+ * y lo que borra. Va fuera de las capas de Tailwind a propósito: así gana a
+ * las utilidades sin `!important`.
+ */
+
+:root:not([data-tema="halloween"]) .nomes-halloween,
+[data-tema="halloween"] .nomes-classic {
+  display: none;
+}
+
+:root[data-tema="halloween"] {
+  --primary: #151317;
+  --primary-foreground: #f3eee4;
+  --ring: #151317;
+  --destructive: #a3191f;
+
+  --sang: #a3191f;
+  --sang-fosc: #5a0e11;
+  /* Sobre el cielo de noche la sangre de siempre no se lee: esta sí. */
+  --sang-clar: #dc2a32;
+  /* El hueso de la luna: el texto sobre el cielo. */
+  --lluna: #f2ece1;
+  --cel-nit: linear-gradient(180deg, #110e15 0%, #18131e 55%, #271e31 100%);
+}
+
+/* Títulos y cifras grandes. La de siempre (San Francisco) sigue en el resto. */
+[data-tema="halloween"] :is(h1, h2, .text-3xl, .text-4xl, .lema) {
+  font-family: var(--font-display), -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+[data-tema="halloween"] .marca-arto {
+  color: var(--sang);
+}
+
+/* Sitio para las gotas de arriba (`GotesSang`, 24 px): sin él, las largas
+   tapan el nombre y los botones de la cabecera. */
+[data-tema="halloween"] .capcalera {
+  padding-top: calc(env(safe-area-inset-top) + 0.875rem);
+}
+
+[data-tema="halloween"] .avis-demo {
+  padding-top: 1.5rem;
+}
+
+[data-tema="halloween"] .marca-fila {
+  padding-top: 2.25rem;
+}
+
+/* La sección activa, en negro y con su gota (ver `components/sidebar.tsx`). */
+[data-tema="halloween"] .nav-activa {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+/* Hueco para el punto de sangre bajo la pestaña activa. */
+[data-tema="halloween"] .tab-boto {
+  padding-bottom: 0.625rem;
+}
+
+/*
+ * Tarjetas de noche: "Ruta d'avui", "Per facturar" y la mitad de arriba del
+ * login. Las utilidades de dentro leen estos tokens, así que el texto
+ * apagado, el botón —que pasa a sangre— y los avisos se adaptan solos al
+ * cielo sin tocar los componentes.
+ */
+[data-tema="halloween"] .tema-nit {
+  --foreground: var(--lluna);
+  --muted-foreground: rgb(242 236 225 / 72%);
+  --primary: var(--sang);
+  --primary-foreground: #ffffff;
+  --warning-foreground: #f0b46a;
+  /* La escena va con z-index negativo: así queda encima del cielo y debajo
+     del texto sin tener que posicionar cada línea. */
+  isolation: isolate;
+  background: var(--cel-nit);
+  color: var(--lluna);
+}
+
+[data-tema="halloween"] .tema-nit .marca-arto {
+  color: var(--sang-clar);
+}
+
+[data-tema="halloween"] .tema-nit h2 {
+  font-size: 1.75rem;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+[data-tema="halloween"] .tema-nit .pill-nit {
+  background: transparent;
+  color: var(--lluna);
+  box-shadow: inset 0 0 0 1px rgb(242 236 225 / 30%);
+}
+
+[data-tema="halloween"] .tema-nit .bg-primary {
+  box-shadow: 0 10px 24px -12px var(--sang);
+}
+
+.escena-nit {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Sin estrellas detrás del texto, que va a la izquierda: una suelta al lado
+   de una palabra se lee como un punto. */
+.estrelles-dreta {
+  mask-image: linear-gradient(to right, transparent 45%, #000 75%);
+  -webkit-mask-image: linear-gradient(to right, transparent 45%, #000 75%);
+}
+
+.lluna-halo {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgb(241 232 212 / 22%) 0%,
+    rgb(241 232 212 / 7%) 38%,
+    transparent 68%
+  );
+}

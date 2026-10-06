@@ -1621,6 +1621,39 @@ export async function actualizarEstadoFactura(
 }
 
 /**
+ * Cambia la fecha de una factura ya emitida (columna B), por si salió con
+ * el día en que se hizo y no con el que tocaba. Número e importes no se tocan.
+ */
+export async function canviarDataFactura(
+  numero: number,
+  fecha: string,
+): Promise<FacturaEmitida | null> {
+  await asegurarTabFacturas();
+
+  const data = (await sheetsFetch(
+    `/values/${encodeURIComponent(range("A2:A", TAB_FACTURAS))}` +
+      `?valueRenderOption=UNFORMATTED_VALUE`,
+    undefined,
+    docFacturas(),
+  )) as { values?: unknown[][] };
+
+  const indice = (data.values ?? []).findIndex((fila) => parseNumber(fila[0]) === numero);
+  if (indice === -1) return null;
+
+  const fila = indice + 2;
+  // Con apóstrofo, como al emitir: si no, Sheets la convierte en fecha.
+  await sheetsFetch(
+    `/values/${encodeURIComponent(range(`B${fila}`, TAB_FACTURAS))}` +
+      `?valueInputOption=USER_ENTERED`,
+    { method: "PUT", body: JSON.stringify({ values: [[`'${fecha}`]] }) },
+    docFacturas(),
+  );
+
+  const todas = await readFacturas();
+  return todas.find((f) => f.numero === numero) ?? null;
+}
+
+/**
  * El identificador interno de una pestaña, que no es su nombre.
  *
  * Hace falta para borrar una fila: la API de valores sabe escribir y vaciar

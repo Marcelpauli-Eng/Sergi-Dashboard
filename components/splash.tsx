@@ -75,7 +75,7 @@ export default function Splash() {
 
       <h1 className="mt-1 text-4xl font-semibold tracking-tight">
         {NOMBRE.slice(0, corte)}
-        <span className="text-primary">{NOMBRE.slice(corte)}</span>
+        <span className="marca-arto text-primary">{NOMBRE.slice(corte)}</span>
       </h1>
 
       <p className="mt-3 max-w-[17rem] text-center text-sm leading-relaxed text-muted-foreground">
