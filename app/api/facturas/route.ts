@@ -4,6 +4,7 @@ import { isConfigError } from "@/lib/env";
 import { getSession } from "@/lib/session";
 import {
   actualizarEstadoFactura,
+  canviarDataFactura,
   emitirFactura,
   esborrarFactura,
   readFacturas,
@@ -14,6 +15,7 @@ import {
   emitirFacturaDemo,
   esborrarFacturaDemo,
   actualizarEstadoFacturaDemo,
+  canviarDataFacturaDemo,
 } from "@/lib/demo";
 
 /**
@@ -121,15 +123,21 @@ export async function POST(request: Request) {
   }
 }
 
-const estadoSchema = z.object({
-  numero: z.number().int().min(1).max(9_999_999),
-  estat: z.enum(["emesa", "enviada", "cobrada"]),
-});
+const estadoSchema = z.union([
+  z.object({
+    numero: z.number().int().min(1).max(9_999_999),
+    estat: z.enum(["emesa", "enviada", "cobrada"]),
+  }),
+  z.object({
+    numero: z.number().int().min(1).max(9_999_999),
+    fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  }),
+]);
 
 /**
  * Mueve una factura por los estados del cobro.
  *
- * Es lo único de una factura emitida que se puede cambiar. Las líneas, los
+ * O cambia su fecha (`{ numero, fecha }`). Las líneas, los
  * importes y el número no: una factura emitida no cambia, y menos desde un
  * móvil.
  */
@@ -147,15 +155,22 @@ export async function PATCH(request: Request) {
     );
   }
 
+  const cambio = parsed.data;
   if (isDemoMode()) {
-    const factura = actualizarEstadoFacturaDemo(parsed.data.numero, parsed.data.estat);
+    const factura =
+      "fecha" in cambio
+        ? canviarDataFacturaDemo(cambio.numero, cambio.fecha)
+        : actualizarEstadoFacturaDemo(cambio.numero, cambio.estat);
     return factura
       ? NextResponse.json({ factura })
       : NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
   }
 
   try {
-    const factura = await actualizarEstadoFactura(parsed.data.numero, parsed.data.estat);
+    const factura =
+      "fecha" in cambio
+        ? await canviarDataFactura(cambio.numero, cambio.fecha)
+        : await actualizarEstadoFactura(cambio.numero, cambio.estat);
     if (!factura) {
       return NextResponse.json(
         { error: "Esa factura no está en la hoja" },

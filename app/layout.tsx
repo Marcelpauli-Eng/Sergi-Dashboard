@@ -1,7 +1,23 @@
 import type { Metadata, Viewport } from "next";
+import { Bricolage_Grotesque } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import Splash from "@/components/splash";
+import { today } from "@/lib/dates";
+import { env } from "@/lib/env";
+import { temaDelDia } from "@/lib/tema";
+
+/*
+ * Los títulos y las cifras grandes del tema de Halloween (ver `lib/tema.ts`).
+ * Sin precarga: con el tema de siempre no se usa, y así ni se descarga.
+ */
+const display = Bricolage_Grotesque({
+  subsets: ["latin"],
+  axes: ["opsz"],
+  display: "swap",
+  preload: false,
+  variable: "--font-display",
+});
 
 export const metadata: Metadata = {
   title: "Reparto",
@@ -40,13 +56,28 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+/** Un adorno no puede tumbar la app: con la zona horaria mal puesta, la de siempre. */
+function tema() {
+  try {
+    return temaDelDia(today(env.timezone), process.env.TEMA);
+  } catch {
+    return "classic";
+  }
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className="h-full antialiased">
+    // Todas las páginas se renderizan en cada petición (`force-dynamic`), así
+    // que el tema sale de la fecha de hoy y no de la del último despliegue.
+    <html
+      lang="es"
+      className={`h-full antialiased ${display.variable}`}
+      data-tema={tema()}
+    >
       <body className="min-h-svh overflow-x-hidden">
         {/*
           En desarrollo, fuera cualquier service worker que quede registrado.

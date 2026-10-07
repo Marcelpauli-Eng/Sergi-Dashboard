@@ -450,3 +450,13 @@ export function actualizarEstadoFacturaDemo(
   factura.estat = estat;
   return factura;
 }
+
+export function canviarDataFacturaDemo(
+  numero: number,
+  fecha: string,
+): FacturaEmitida | null {
+  const factura = facturasDemo.find((f) => f.numero === numero);
+  if (!factura) return null;
+  factura.fecha = fecha;
+  return factura;
+}

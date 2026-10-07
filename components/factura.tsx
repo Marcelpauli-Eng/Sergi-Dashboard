@@ -239,6 +239,28 @@ export default function Factura({
       }),
     );
 
+  /*
+    Marcar o desmarcar de golpe todas las de una empresa.
+
+    Una factura es casi siempre de UNA empresa, y hasta ahora eso era
+    desmarcar las doce de la otra de una en una y marcar las ocho de esta
+    igual. Los botones de arriba son para todo; este es para su grupo.
+
+    Solo entran las que tienen importe: sin precio no van a la factura,
+    marcarlas no haría nada y el botón diría que ha hecho algo que no ha
+    hecho.
+  */
+  const alternarGrup = (delGrup: Stop[], treure: boolean) => {
+    setExclosos((previo) => {
+      const nou = new Set(previo);
+      for (const s of delGrup) {
+        if (treure) nou.add(s.id);
+        else nou.delete(s.id);
+      }
+      return nou;
+    });
+  };
+
   const alternar = (id: string) => {
     setExclosos((previo) => {
       const seguent = new Set(previo);
@@ -457,17 +479,43 @@ export default function Factura({
                       .filter((s) => nomOrigen(origens, s) === grup)
                       .reduce((suma, s) => suma + (s.price ?? 0), 0)
                   : 0;
+                // Las de esta empresa que pueden entrar en la factura, para
+                // el botón de marcarlas o desmarcarlas todas de golpe.
+                const facturables = obre
+                  ? conImporte.filter((s) => nomOrigen(origens, s) === grup)
+                  : [];
+                // Si ya están todas dentro, el botón las saca; si no, las mete.
+                // Una sola tecla para las dos cosas: es lo que se quiere en
+                // cada caso y así no hay que elegir entre dos botones.
+                const totesDins =
+                  facturables.length > 0 && facturables.every((s) => !exclosos.has(s.id));
 
                 return (
                   <Fragment key={stop.id}>
                   {obre && (
-                    <div className="flex items-baseline justify-between gap-3 bg-muted/60 px-4 pb-1.5 pt-3">
+                    <div className="flex items-baseline justify-between gap-2 bg-muted/60 px-4 pb-1.5 pt-3">
                       <h4 className="truncate text-xs font-semibold uppercase tracking-wide text-primary">
                         {grup}
                       </h4>
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                        {euros(subtotal)} €
-                      </span>
+                      <div className="flex shrink-0 items-baseline gap-1">
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          {euros(subtotal)} €
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          disabled={facturables.length === 0}
+                          onClick={() => alternarGrup(facturables, totesDins)}
+                          aria-label={
+                            totesDins
+                              ? `Treure de la factura les comandes de ${grup}`
+                              : `Posar a la factura totes les comandes de ${grup}`
+                          }
+                        >
+                          {totesDins ? "Cap" : "Totes"}
+                        </Button>
+                      </div>
                     </div>
                   )}
                   {/* El <label> envuelve solo la casilla y el texto: si

@@ -39,6 +39,7 @@ import {
 import {
   canonicalHeader,
   MANAGED_COLUMNS,
+  normalizeHeader,
   type ColumnKey,
 } from "./sheet-schema";
 import { construirComandes } from "./sheet-rows.ts";
@@ -158,6 +159,25 @@ export interface SheetSnapshot {
   sheetTab: string | null;
   /** De qué documento. Todo lo que se escriba a partir de aquí va a ese. */
   origen: Origen;
+  /**
+   * Filas con algo escrito, cabecera incluida: la siguiente libre es esta +1.
+   * Ver `filaLliure`.
+   */
+  files: number;
+}
+
+/**
+ * Dónde añadir una fila: la primera libre, desde la columna A.
+ *
+ * Un `:append` sobre "A:ZZ" deja que Google adivine dónde empieza la tabla,
+ * y con cualquier cosa escrita a la derecha de la cabecera —el "RESUM
+ * D'ENTREGUES" de Bricomuebles— la fila caía veinte columnas más allá, y
+ * cada comanda nueva un poco más lejos. Anclado a una fila vacía no hay nada
+ * que adivinar; sigue siendo `:append` para que añada filas si la pestaña
+ * está llena.
+ */
+function filaLliure(snapshot: SheetSnapshot): string {
+  return range(`A${snapshot.files + 1}:ZZ`, snapshot.sheetTab);
 }
 
 /**
@@ -332,7 +352,7 @@ export async function readSheet(
       order.origen = origen.id;
     }
   }
-  return { orders, headerMap, skipped, sheetTab: tab, origen };
+  return { orders, headerMap, skipped, sheetTab: tab, origen, files: rows.length };
 }
 
 /**
@@ -761,7 +781,7 @@ export async function crearComanda(
   );
 
   await sheetsFetch(
-    `/values/${encodeURIComponent(range("A:ZZ", snapshot.sheetTab))}:append` +
+    `/values/${encodeURIComponent(filaLliure(snapshot))}:append` +
       `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     { method: "POST", body: JSON.stringify({ values: [valores] }) },
     origen.sheetId,
@@ -859,6 +879,112 @@ export async function actualitzarComanda(
 
   await writeCells(updates, headerMap, snapshot);
   return true;
+}
+
+/**
+ * Pasa las filas de unas comandas a otro full del mismo documento.
+ *
+ * Primero se añaden en el destino y luego se borran del origen: si algo falla
+ * a medias quedan repetidas, que se ve y se arregla, en vez de perdidas. Todo
+ * de una vez —una lectura, una escritura y un borrado— y no comanda a
+ * comanda: con diez seguidas se pasaba del cupo por minuto de Google.
+ *
+ * Cada columna va a la de la misma cabecera en el destino, no a la misma
+ * posición: cada mes puede tener las columnas en otro orden. Si una celda con
+ * datos no tiene dónde ir, no se mueve nada.
+ *
+ * `desti` es un full del documento de siempre; para el segundo se usa su
+ * mes, como en `crearComanda`. Devuelve las que se han movido y de qué full
+ * salieron, que es adonde las devuelve el Desfer.
+ */
+export async function moureComandes(
+  ids: string[],
+  desti: string,
+  sheetTab?: string | null,
+): Promise<{ mogudes: string[]; de: string }> {
+  const origen = origenDe(ids[0]);
+  if (ids.some((id) => origenDe(id).id !== origen.id)) {
+    throw new ErrorAccionable("Les comandes són de documents diferents.");
+  }
+  const snapshot = await readSheet(sheetTab, origen);
+  const tabOrigen = snapshot.sheetTab ?? "";
+  const orders = snapshot.orders.filter((o) => ids.includes(o.id));
+  if (orders.length === 0) return { mogudes: [], de: tabOrigen };
+
+  let tabDesti = desti;
+  if (origen.id) {
+    if (!origen.sheetTab) await assegurarPestanya(origen, desti);
+    tabDesti = await resolverPestanya(origen, desti);
+  }
+  if (tabDesti === tabOrigen) {
+    throw new ErrorAccionable(`Les comandes ja són al full ${tabOrigen}.`);
+  }
+
+  const destiSnapshot = await readSheet(tabDesti, origen);
+  // Las columnas de la app (_lat, Estat…) pueden no existir aún en el destino.
+  const destiMap = await ensureManagedColumns(destiSnapshot);
+  const llegir = async (a1: string, tab: string) =>
+    ((await sheetsFetch(
+      `/values/${encodeURIComponent(range(a1, tab))}`,
+      undefined,
+      origen.sheetId,
+    )) as { values?: unknown[][] }).values ?? [];
+  // Valores formateados, tal y como se ven: fechas e importes se reescriben
+  // igual con USER_ENTERED en el mismo documento.
+  const [filesOrigen, [cabDesti = []]] = await Promise.all([
+    llegir("A1:ZZ", tabOrigen),
+    llegir("1:1", tabDesti),
+  ]);
+  const cabOrigen = filesOrigen[0] ?? [];
+
+  const columnaDesti = (i: number): number => {
+    const clau = (Object.keys(snapshot.headerMap) as ColumnKey[]).find(
+      (k) => snapshot.headerMap[k] === i,
+    );
+    const nom = normalizeHeader(String(cabOrigen[i] ?? ""));
+    return (
+      (clau ? destiMap[clau] : undefined) ??
+      cabDesti.findIndex((c) => normalizeHeader(String(c ?? "")) === nom)
+    );
+  };
+
+  const perdudes = new Set<string>();
+  const noves = orders.map((order) => {
+    const valors: unknown[] = [];
+    (filesOrigen[order.rowNumber - 1] ?? []).forEach((valor, i) => {
+      if (valor === "" || valor === null || valor === undefined) return;
+      const j = columnaDesti(i);
+      if (j < 0) perdudes.add(String(cabOrigen[i] ?? i + 1));
+      else valors[j] = valor;
+    });
+    return Array.from(valors, (v) => v ?? "");
+  });
+  if (perdudes.size > 0) {
+    throw new ErrorAccionable(
+      `El full ${tabDesti} no té les columnes: ${[...perdudes].join(", ")}. No s'ha mogut res.`,
+    );
+  }
+
+  await sheetsFetch(
+    `/values/${encodeURIComponent(filaLliure(destiSnapshot))}:append` +
+      `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { method: "POST", body: JSON.stringify({ values: noves }) },
+    origen.sheetId,
+  );
+
+  const gid = await idPestanya(origen.sheetId, tabOrigen);
+  if (gid === null) throw new ErrorAccionable(`No trobo el full ${tabOrigen} per esborrar-les.`);
+  // De abajo arriba: borrar una fila sube las de debajo, no las de encima.
+  const requests = orders
+    .map((o) => o.rowNumber)
+    .sort((a, b) => b - a)
+    .map((fila) => ({
+      deleteDimension: {
+        range: { sheetId: gid, dimension: "ROWS", startIndex: fila - 1, endIndex: fila },
+      },
+    }));
+  await sheetsFetch(":batchUpdate", { method: "POST", body: JSON.stringify({ requests }) }, origen.sheetId);
+  return { mogudes: orders.map((o) => o.id), de: tabOrigen };
 }
 
 /** Lo que se guarda de una comanda ya geocodificada. */
@@ -1487,6 +1613,39 @@ export async function actualizarEstadoFactura(
     `/values/${encodeURIComponent(range(`K${fila}`, TAB_FACTURAS))}` +
       `?valueInputOption=USER_ENTERED`,
     { method: "PUT", body: JSON.stringify({ values: [[ESTAT_FACTURA_SHEET[estat]]] }) },
+    docFacturas(),
+  );
+
+  const todas = await readFacturas();
+  return todas.find((f) => f.numero === numero) ?? null;
+}
+
+/**
+ * Cambia la fecha de una factura ya emitida (columna B), por si salió con
+ * el día en que se hizo y no con el que tocaba. Número e importes no se tocan.
+ */
+export async function canviarDataFactura(
+  numero: number,
+  fecha: string,
+): Promise<FacturaEmitida | null> {
+  await asegurarTabFacturas();
+
+  const data = (await sheetsFetch(
+    `/values/${encodeURIComponent(range("A2:A", TAB_FACTURAS))}` +
+      `?valueRenderOption=UNFORMATTED_VALUE`,
+    undefined,
+    docFacturas(),
+  )) as { values?: unknown[][] };
+
+  const indice = (data.values ?? []).findIndex((fila) => parseNumber(fila[0]) === numero);
+  if (indice === -1) return null;
+
+  const fila = indice + 2;
+  // Con apóstrofo, como al emitir: si no, Sheets la convierte en fecha.
+  await sheetsFetch(
+    `/values/${encodeURIComponent(range(`B${fila}`, TAB_FACTURAS))}` +
+      `?valueInputOption=USER_ENTERED`,
+    { method: "PUT", body: JSON.stringify({ values: [[`'${fecha}`]] }) },
     docFacturas(),
   );
 

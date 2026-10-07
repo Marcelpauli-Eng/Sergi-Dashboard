@@ -9,11 +9,12 @@
  * es solo que ahora se encuentra.
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Check,
   ChevronLeft,
+  FolderInput,
   ChevronRight,
   Inbox,
   Phone,
@@ -23,6 +24,7 @@ import {
 import { addDays, formatLongDate, getMonthGrid, getWeekGrid, getYearMonth } from "@/lib/dates";
 import { euros } from "@/lib/factura";
 import { telHref } from "@/lib/format";
+import { getSelectedTab, syncNow } from "@/lib/sync";
 import type { OrigenManifest, Stop } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -73,6 +75,7 @@ export default function TabCalendari({
   onImporte,
   onDelivered,
   onIncident,
+  onDesfer,
 }: {
   todayDate: string;
   /** Los documentos de comandas: una bossa por cada uno. */
@@ -84,6 +87,7 @@ export default function TabCalendari({
   onImporte: (orderId: string, importe: number | null) => void;
   onDelivered: (orderId: string, price: number | null) => void;
   onIncident: (orderId: string, note: string) => void;
+  onDesfer: (etiqueta: string, fer: () => void) => void;
 }) {
   const avui = todayDate || new Date().toISOString().slice(0, 10);
   const [currentMonth, setCurrentMonth] = useState(() => getYearMonth(avui));
@@ -176,6 +180,7 @@ export default function TabCalendari({
         onImporte={onImporte}
         onDelivered={onDelivered}
         onIncident={onIncident}
+        onDesfer={onDesfer}
         onTancar={() => setSelectedDate(null)}
       />
     );
@@ -462,6 +467,7 @@ export default function TabCalendari({
           onAssign={null}
           onDelivered={onDelivered}
           onImporte={onImporte}
+          onDesfer={onDesfer}
         />
       </aside>
     </div>
@@ -492,6 +498,7 @@ function DiaDetall({
   onImporte,
   onDelivered,
   onIncident,
+  onDesfer,
   onTancar,
 }: {
   date: string;
@@ -504,6 +511,7 @@ function DiaDetall({
   onImporte: (orderId: string, importe: number | null) => void;
   onDelivered: (orderId: string, price: number | null) => void;
   onIncident: (orderId: string, note: string) => void;
+  onDesfer: (etiqueta: string, fer: () => void) => void;
   onTancar: () => void;
 }) {
   /**
@@ -727,6 +735,7 @@ function DiaDetall({
           onAssign={(id) => onAssignDate(id, date)}
           onDelivered={onDelivered}
           onImporte={onImporte}
+          onDesfer={onDesfer}
         />
       )}
 
@@ -764,6 +773,105 @@ function DiaDetall({
  * en vez de desaparecer. Así la lista no baila según la fila, y se ve de un
  * vistazo a quién le falta el teléfono en la hoja.
  */
+/**
+ * Pasa comandas a otro full y vuelve a leer la hoja.
+ *
+ * Contesta de qué full salieron, que es adonde las devuelve el Desfer.
+ */
+async function moure(
+  ids: string[],
+  desti: string,
+  sheetTab: string | null,
+): Promise<{ mogudes: string[]; de: string }> {
+  const resposta = await fetch("/api/comandes", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids, desti, ...(sheetTab ? { sheetTab } : {}) }),
+  }).catch(() => {
+    throw new Error("Sense cobertura no es pot moure: això s'escriu al full de l'oficina.");
+  });
+  const cos = (await resposta.json().catch(() => null)) as
+    | { error?: string; mogudes?: string[]; de?: string }
+    | null;
+  if (!resposta.ok) throw new Error(cos?.error ?? "No s'han pogut moure");
+  await syncNow(getSelectedTab() ?? undefined).catch(() => {});
+  return { mogudes: cos?.mogudes ?? [], de: cos?.de ?? "" };
+}
+
+/**
+ * La barra de mover: a qué full y el botón de hacerlo.
+ *
+ * Pide la lista de fulls ella misma: solo se monta al pulsar el botón de la
+ * bossa, y así no hay que bajarla por tres componentes.
+ */
+function BarraMoure({
+  ids,
+  onFet,
+  onCancel,
+}: {
+  ids: string[];
+  onFet: (mogudes: string[], de: string, desti: string) => void;
+  onCancel: () => void;
+}) {
+  const [fulls, setFulls] = useState<string[]>([]);
+  const [desti, setDesti] = useState("");
+  const [movent, setMovent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const actual = getSelectedTab();
+
+  useEffect(() => {
+    void fetch("/api/sheets/tabs")
+      .then((r) => (r.ok ? r.json() : { tabs: [] }))
+      .then((d: { tabs: string[] }) => setFulls(d.tabs))
+      .catch(() => {});
+  }, []);
+
+  const fer = async () => {
+    setMovent(true);
+    setError(null);
+    try {
+      const { mogudes, de } = await moure(ids, desti, actual);
+      onFet(mogudes, de, desti);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error desconegut");
+      setMovent(false);
+    }
+  };
+
+  return (
+    <div className="soft-card space-y-2 p-3">
+      <p className="text-xs text-muted-foreground">
+        Tria les comandes i el full on les vols passar.
+      </p>
+      <select
+        aria-label="Full de destí"
+        className="h-10 w-full rounded-[var(--radius)] border border-border bg-background px-3 text-sm"
+        value={desti}
+        disabled={movent}
+        onChange={(e) => setDesti(e.target.value)}
+      >
+        <option value="">{fulls.length === 0 ? "Carregant fulls…" : "Tria un full…"}</option>
+        {fulls
+          .filter((f) => f !== actual)
+          .map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+      </select>
+      <div className="flex gap-2">
+        <Button variant="secondary" className="flex-1" onClick={onCancel} disabled={movent}>
+          Cancel·lar
+        </Button>
+        <Button className="flex-1" onClick={() => void fer()} disabled={movent || !desti || ids.length === 0}>
+          {movent ? "Movent…" : `Moure${ids.length ? ` (${ids.length})` : ""}`}
+        </Button>
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
 function Trucar({ phone }: { phone: string | null }) {
   if (!phone || phone.trim() === "") {
     return (
@@ -846,6 +954,7 @@ function Bosses({
   onAssign: ((id: string) => void) | null;
   onDelivered: (orderId: string, price: number | null) => void;
   onImporte: (orderId: string, importe: number | null) => void;
+  onDesfer: (etiqueta: string, fer: () => void) => void;
 }) {
   if (origens.length <= 1) return <Bossa stops={stops} {...resta} />;
   return (
@@ -876,6 +985,7 @@ function Bossa({
   onAssign,
   onDelivered,
   onImporte,
+  onDesfer,
 }: {
   /** De qué documento es. Sin él, la bossa única de siempre. */
   origen?: OrigenManifest;
@@ -901,7 +1011,28 @@ function Bossa({
    * hora.
    */
   onImporte: (orderId: string, importe: number | null) => void;
+  /** Ofrecer el Desfer después de pasar comandas a otro full. */
+  onDesfer: (etiqueta: string, fer: () => void) => void;
 }) {
+  /**
+   * Las comandas marcadas para pasar a otro full. `null`: no se está
+   * eligiendo, y la bossa funciona como siempre.
+   */
+  const [triades, setTriades] = useState<Set<string> | null>(null);
+  const commuta = (id: string) =>
+    setTriades((t) => {
+      const nou = new Set(t);
+      if (!nou.delete(id)) nou.add(id);
+      return nou;
+    });
+  const mogudes = (ids: string[], de: string, desti: string) => {
+    setTriades(null);
+    const nom = stops.find((s) => s.id === ids[0])?.customer || ids[0];
+    onDesfer(`${ids.length === 1 ? nom : `${ids.length} comandes`} · a ${desti}`, () => {
+      // Desfer es devolverlas con la misma llamada al revés.
+      moure(ids, de, desti).catch((e: Error) => window.alert(e.message));
+    });
+  };
   /**
    * La comanda que se está mirando, por su id.
    *
@@ -985,6 +1116,19 @@ function Bossa({
             <span className="truncate">
               {origen ? `Bossa · ${origen.nom}` : "Bossa de comandes"}
             </span>
+            {/*
+              De qué pestaña sale, al lado del nombre.
+
+              Cada documento tiene las suyas, y con dos empresas una comanda
+              apuntada aquí acababa en una pestaña que nadie estaba mirando:
+              "la he creado y en la hoja no está". Diciéndolo no hay nada que
+              adivinar — es la misma pestaña donde se escribe.
+            */}
+            {origen?.sheetTab ? (
+              <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-sans text-[10px] font-medium tabular-nums text-muted-foreground">
+                {origen.sheetTab}
+              </span>
+            ) : null}
           </h3>
           {/*
             Crear una comanda a mano. Pegado al título de la bossa porque es
@@ -1007,9 +1151,27 @@ function Bossa({
               <Plus strokeWidth={2.5} />
             </Link>
           </Button>
+          <Button
+            variant={triades ? "default" : "secondary"}
+            size="icon"
+            className="size-8 shrink-0"
+            aria-label="Passar comandes a un altre full"
+            aria-pressed={triades !== null}
+            disabled={stops.length === 0 && !triades}
+            onClick={() => setTriades(triades ? null : new Set())}
+          >
+            <FolderInput />
+          </Button>
         </div>
         <span className="text-sm tabular-nums text-muted-foreground">{stops.length}</span>
       </div>
+      {triades ? (
+        <BarraMoure
+          ids={[...triades]}
+          onFet={mogudes}
+          onCancel={() => setTriades(null)}
+        />
+      ) : (
       <p className="text-xs text-tertiary-foreground">
         <span className="lg:hidden">
           {onAssign
@@ -1020,6 +1182,7 @@ function Bossa({
           Arrossega-les a un dia del mes{onAssign ? ", o clica per assignar-les al dia obert" : ""}.
         </span>
       </p>
+      )}
 
       {origen?.error ? (
         /* Sin esto, un documento sin compartir o sin la pestaña del mes
@@ -1044,7 +1207,23 @@ function Bossa({
           para el nombre y hace que las dos listas del día se lean igual.
         */
         <ul className="soft-card min-h-0 divide-y divide-border overflow-y-auto">
-          {ordenades.map((stop) => (
+          {ordenades.map((stop) => triades ? (
+            /* Eligiendo: la fila entera marca y desmarca, nada más. */
+            <li key={stop.id}>
+              <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  className="size-5 shrink-0 accent-[var(--primary)]"
+                  checked={triades.has(stop.id)}
+                  onChange={() => commuta(stop.id)}
+                />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm font-medium">{stop.customer || stop.codi}</span>
+                  <span className="truncate text-xs text-muted-foreground">{stop.city || "Sense adreça"}</span>
+                </span>
+              </label>
+            </li>
+          ) : (
             /*
               La fila es el área de asignar —tocar, mantener pulsado o
               arrastrar— y el botón de llamar va aparte, como hermano: un

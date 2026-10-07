@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { isConfigError } from "@/lib/env";
-import { actualitzarComanda, crearComanda, origens } from "@/lib/sheets";
+import { actualitzarComanda, crearComanda, moureComandes, origens } from "@/lib/sheets";
 import { actualitzarComandaDemo, crearComandaDemo, isDemoMode } from "@/lib/demo";
 
 /**
@@ -98,7 +98,14 @@ export async function POST(request: Request) {
       lloc,
       origen,
     );
-    console.warn(`Comanda ${dades.id} creada por ${driver.id} en ${resultat.sheetTab}`);
+    /*
+      Con el nombre del documento: con dos empresas, "creada en OCT 26" no
+      dice en cuál de las dos hojas, que es justo lo que hace falta saber
+      cuando alguien no la encuentra.
+    */
+    console.warn(
+      `Comanda ${dades.id} creada por ${driver.id} en "${origen.nom}", full "${resultat.sheetTab}"`,
+    );
     /*
       `full` y no `sheetTab`: la pantalla lo usa para volver a pedir el
       manifiesto, y eso se pide siempre con el nombre de una pestaña del
@@ -205,6 +212,55 @@ export async function PATCH(request: Request) {
     return NextResponse.json(
       { error: "No s'han pogut desar els canvis al Google Sheet" },
       { status: 502 },
+    );
+  }
+}
+
+const moureSchema = z.object({
+  ids: z.array(z.string().trim().min(1).max(64)).min(1).max(200),
+  /** El full al que van. */
+  desti: z.string().trim().min(1).max(120),
+  /** El full en el que están ahora. Sin él, el del mes en curso. */
+  sheetTab: z.string().max(120).optional(),
+});
+
+/**
+ * Pasa unas comandas de la bossa a otro full.
+ *
+ * Contesta de qué full salieron: es adonde las devuelve el Desfer, con otra
+ * llamada igual a esta pero al revés.
+ */
+export async function PUT(request: Request) {
+  const driver = await getSession();
+  if (!driver) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+
+  const parsed = moureSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    const [problema] = parsed.error.issues;
+    return NextResponse.json(
+      { error: `Petición inválida: ${problema.path.join(".") || "cuerpo"} — ${problema.message}` },
+      { status: 400 },
+    );
+  }
+
+  if (isDemoMode()) {
+    return NextResponse.json({ error: "No disponible en mode demo" }, { status: 400 });
+  }
+
+  const { ids, desti, sheetTab } = parsed.data;
+  try {
+    const resultat = await moureComandes(ids, desti, sheetTab);
+    if (resultat.mogudes.length === 0) {
+      return NextResponse.json({ error: "Aquestes comandes ja no són al full" }, { status: 404 });
+    }
+    return NextResponse.json(resultat);
+  } catch (error) {
+    console.error("Error moviendo comandas:", error);
+    return NextResponse.json(
+      { error: isConfigError(error) ? error.message : "No s'han pogut moure les comandes" },
+      { status: isConfigError(error) ? 400 : 502 },
     );
   }
 }
