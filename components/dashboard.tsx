@@ -681,11 +681,16 @@ export default function Dashboard({ driverName }: { driverName: string }) {
   const pantallaSencera = A_PANTALLA_SENCERA.includes(activeTab);
 
   return (
-    // En el móvil scrollea la ventana entera, como toda la vida. A partir de
-    // `lg` la ventana se queda quieta y lo que scrollea es el contenido: la
-    // barra lateral y la cabecera no se mueven, y una pantalla como el
-    // calendario puede pedir el alto que le queda y caber entera.
-    <div className="lg:flex lg:h-svh lg:overflow-hidden">
+    // La ventana no scrollea nunca: lo que scrollea es `main`. La cabecera, la
+    // barra lateral y la barra de abajo son piezas del marco y no se mueven.
+    //
+    // En el móvil antes scrolleaba la ventana y la barra de abajo era
+    // `fixed`. En el iPhone eso no aguanta: al llegar al final de la lista el
+    // rebote elástico se la llevaba hacia arriba, y Safari la recoloca cada
+    // vez que esconde su barra de direcciones. Como pieza del marco no hay
+    // nada que la pueda mover. En pantalla grande ya era así, por lo mismo
+    // que el calendario pide el alto que le queda y cabe entero.
+    <div className="flex h-dvh overflow-hidden lg:h-svh">
       <Sidebar
         activa={activeTab}
         onSeccio={(seccion) => {
@@ -700,7 +705,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         onAjustos={() => setSettingsOpen(true)}
       />
 
-      <div className="mx-auto flex min-h-svh w-full max-w-2xl flex-col pb-[calc(4.25rem+env(safe-area-inset-bottom))] lg:mx-0 lg:h-svh lg:min-h-0 lg:max-w-none lg:overflow-hidden lg:pb-0">
+      <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-col overflow-hidden lg:mx-0 lg:max-w-none">
       {manifest?.demo && (
         // Texto negro sobre el naranja del sistema: en blanco no hay
         // contraste suficiente y este aviso tiene que leerse sí o sí.
@@ -881,7 +886,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         />
       )}
 
-      <main className="flex-1 lg:min-h-0 lg:overflow-hidden">
+      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:overflow-hidden">
       <div
         className={cn(
           "mx-auto w-full px-4 py-5 lg:max-w-[100rem] lg:px-8 lg:py-6",
@@ -1105,7 +1110,7 @@ export default function Dashboard({ driverName }: { driverName: string }) {
       <Desfer accio={accioDesfer} onTancar={() => setAccioDesfer(null)} />
 
       {/* ── Bottom Navigation ─────────────────────────────────────────── */}
-      <nav className="material fixed bottom-0 left-0 right-0 z-20 mx-auto flex max-w-2xl border-t border-border pb-[env(safe-area-inset-bottom)] lg:hidden">
+      <nav className="material z-20 flex shrink-0 border-t border-border pb-[env(safe-area-inset-bottom)] lg:hidden">
         {([
           ["avui", "Avui", Clock],
           ["calendari", "Calendari", CalendarDays],
