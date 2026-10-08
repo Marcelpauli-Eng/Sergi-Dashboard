@@ -64,32 +64,32 @@ export interface DatosFacturacion {
   primerNumero: number;
 }
 
+// En blanco a propósito: cada instalación pone los suyos en Ajustes, y se
+// guardan en las pestañas "Emissor" y "Clients" de su documento de facturas.
+// Aquí no van los datos fiscales de nadie: el código es el mismo para todos.
 const EMISOR = {
-  nombre: "SERGIO MARCIAL ORTIZ",
-  direccion: "GRANOLLERS 18",
-  cp: "08458",
-  poblacion: "SANT PERE DE VILAMAJOR",
-  provincia: "BARCELONA",
-  nif: "44993210N",
-  telefono: "938451529",
+  nombre: "",
+  direccion: "",
+  cp: "",
+  poblacion: "",
+  provincia: "",
+  nif: "",
+  telefono: "",
 } as const;
 
 const CLIENTE = {
-  nombre: "SAINT GOBAIN IDAPLAC SL",
-  direccion: "C/ Albert Einstein, 25",
-  cp: "08940",
-  poblacion: "Cornellà del Llobregat",
-  provincia: "Barcelona",
-  codigo: "35",
-  nif: "B62465141",
+  nombre: "",
+  direccion: "",
+  cp: "",
+  poblacion: "",
+  provincia: "",
+  codigo: "",
+  nif: "",
 } as const;
 
 /**
- * Valores de partida, tomados de la factura 1-000029.
- *
- * Son solo el punto de partida: se editan desde Ajustes y se guardan en el
- * móvil. Si el repositorio llega a ser público, conviene vaciar el NIF y el
- * domicilio de aquí y dejar que se rellenen desde la app.
+ * Valores de partida de una instalación nueva: emisor y cliente en blanco,
+ * para rellenar desde Ajustes.
  */
 export const DATOS_POR_DEFECTO: DatosFacturacion = {
   emisor: { ...EMISOR },
