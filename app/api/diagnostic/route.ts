@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { env } from "@/lib/env";
@@ -16,10 +17,13 @@ import { comprobarConfiguracion } from "@/lib/diagnostic";
  * No devuelve ningún secreto: ni claves, ni PINs, ni los IDs enteros de los
  * documentos. Del ID solo los últimos seis caracteres, que es lo que se
  * compara de un vistazo con la URL que tienes abierta.
+ *
+ * Además de un transportista con sesión, lo puede leer el panel de
+ * operaciones (sistema-programas) con `Authorization: Bearer <PANEL_CLAVE>`.
+ * Esa clave solo abre esta ruta: no da acceso a pedidos ni a facturas.
  */
-export async function GET() {
-  const driver = await getSession();
-  if (!driver) {
+export async function GET(request: Request) {
+  if (!esElPanel(request) && !(await getSession())) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
@@ -41,4 +45,14 @@ export async function GET() {
     generadoEn: new Date().toISOString(),
     comprobaciones: await comprobarConfiguracion(env.timezone),
   });
+}
+
+/** La petición trae la clave del panel. Sin PANEL_CLAVE definida, nunca. */
+function esElPanel(request: Request): boolean {
+  const clave = process.env.PANEL_CLAVE ?? "";
+  if (clave.length < 32) return false;
+  const recibida = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
+  const a = Buffer.from(recibida);
+  const b = Buffer.from(clave);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
