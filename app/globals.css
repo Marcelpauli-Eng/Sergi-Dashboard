@@ -233,6 +233,9 @@
 html {
   /* Evita que iOS agrande el texto al girar el móvil. */
   -webkit-text-size-adjust: 100%;
+  /* El rebote de la página entera. En `body` iOS no lo mira: la ventana la
+     gobierna `html`. Sin esto, tirar del marco lo despega de los bordes. */
+  overscroll-behavior: none;
 }
 
 /* Aparición del contenido: un desvanecido corto, sin desplazamiento. */
