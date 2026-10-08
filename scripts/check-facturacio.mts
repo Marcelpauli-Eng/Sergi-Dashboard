@@ -27,11 +27,11 @@ import { DATOS_POR_DEFECTO, type ClienteFacturacion } from "../lib/factura.ts";
 
 const CLIENT: ClienteFacturacion = {
   codigo: "35",
-  nombre: "SAINT GOBAIN IDAPLAC SL",
-  nif: "B62465141",
-  direccion: "C/ Albert Einstein, 25",
+  nombre: "CLIENT DE PROVA SL",
+  nif: "B00000000",
+  direccion: "C/ Major, 1",
   cp: "08940",
-  poblacion: "Cornellà del Llobregat",
+  poblacion: "Barcelona",
   provincia: "Barcelona",
 };
 
@@ -87,14 +87,14 @@ assert.deepEqual(CABECERA_CLIENTS, [
 // ── La lista conserva el orden: el primero es el de por defecto ───────────
 {
   const clients = parseClients([
-    ["35", "SAINT GOBAIN", "B1", "", "08940", "", ""],
+    ["35", "CLIENT DE PROVA", "B1", "", "08940", "", ""],
     ["", "", "", "", "", "", ""],
     ["12", "ALTRE CLIENT", "B2", "", "08001", "", ""],
   ]);
   assert.equal(clients.length, 2, "una fila a medias se ha colado en la lista");
   assert.deepEqual(
     clients.map((c) => c.nombre),
-    ["SAINT GOBAIN", "ALTRE CLIENT"],
+    ["CLIENT DE PROVA", "ALTRE CLIENT"],
     "el orden ha cambiado: cambiaría a quién se factura por defecto",
   );
 }
@@ -123,7 +123,16 @@ assert.deepEqual(CABECERA_EMISSOR, [
 
 // ── Ida y vuelta ──────────────────────────────────────────────────────────
 {
-  const emissor = DATOS_POR_DEFECTO.emisor;
+  // Inventado: los valores por defecto van en blanco (cada instalación pone el suyo).
+  const emissor = {
+    nombre: "TRANSPORTISTA DE PROVA",
+    direccion: "C/ Major, 1",
+    cp: "08001",
+    poblacion: "Barcelona",
+    provincia: "Barcelona",
+    nif: "00000000T",
+    telefono: "930000000",
+  };
   const fila = emissorAFila(emissor);
   assert.equal(fila.length, CABECERA_EMISSOR.length, "la fila no cuadra con la cabecera");
   assert.deepEqual(
@@ -145,8 +154,8 @@ assert.deepEqual(CABECERA_EMISSOR, [
 
 // ── El teléfono no se convierte en un número ─────────────────────────────
 {
-  const fila = emissorAFila({ ...DATOS_POR_DEFECTO.emisor, telefono: "938451529" });
-  assert.equal(fila[CABECERA_EMISSOR.indexOf("Telèfon")], "'938451529");
+  const fila = emissorAFila({ ...DATOS_POR_DEFECTO.emisor, telefono: "930000000" });
+  assert.equal(fila[CABECERA_EMISSOR.indexOf("Telèfon")], "'930000000");
 }
 
 console.log(

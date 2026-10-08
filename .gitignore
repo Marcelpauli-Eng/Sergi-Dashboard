@@ -35,6 +35,7 @@ yarn-error.log*
 # La plantilla sí se versiona: no lleva valores, solo los nombres y cómo
 # rellenarlos. Sin ella el `cp .env.example .env.local` del README falla.
 !.env.example
+!.env.servidor.example
 
 # vercel
 .vercel

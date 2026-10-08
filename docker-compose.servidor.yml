@@ -1,0 +1,26 @@
+# El programa de reparto en el servidor de programas (repositorio
+# sistema-programas, `servidor.sh`): un contenedor por cliente.
+#
+# Los datos de cada cliente viven en su Google Sheet, así que no lleva base de
+# datos ni copias propias: la copia es la del propio Google.
+#
+#   - Todo se llama con INSTANCIA (reparto-sergi-web...), para que varios
+#     clientes convivan en la misma máquina.
+#   - Sin puertos abiertos: el túnel único llega por la red «publica» a
+#     http://<cliente>-web:3000.
+#   - Las variables del programa (Google, DRIVERS, SESSION_SECRET...) salen del
+#     .env del cliente, que es también ENV_CLIENTE.
+name: ${INSTANCIA:?falta INSTANCIA}
+
+services:
+  web:
+    build: .
+    container_name: ${INSTANCIA}-web
+    restart: always
+    env_file: ${ENV_CLIENTE:?falta ENV_CLIENTE}
+    mem_limit: ${LIMITE_RAM_WEB:-512m}
+    networks: [publica]
+
+networks:
+  publica:
+    external: true

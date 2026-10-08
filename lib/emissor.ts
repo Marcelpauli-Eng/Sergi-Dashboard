@@ -32,7 +32,7 @@ export const CABECERA_EMISSOR = [
  * La fila tal y como se escribe.
  *
  * Todo texto, con apóstrofo delante, por lo mismo que en los clientes: un CP
- * como "08458" perdería el cero, y un teléfono como "938451529" se
+ * como "08458" perdería el cero, y un teléfono como "930000000" se
  * convertiría en un número con el que nadie va a hacer cuentas.
  */
 export function emissorAFila(emissor: Emissor): string[] {
