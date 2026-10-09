@@ -6,8 +6,10 @@
 #
 #   - Todo se llama con INSTANCIA (reparto-sergi-web...), para que varios
 #     clientes convivan en la misma máquina.
-#   - Sin puertos abiertos: el túnel único llega por la red «publica» a
-#     http://<cliente>-web:3000.
+#   - El túnel único llega por la red «publica» a http://<cliente>-web:3000.
+#   - Y cada cliente tiene además su puerto propio (81NN, lo pone
+#     `servidor.sh alta` según su número), solo en IP_PUERTOS (127.0.0.1 por
+#     defecto; en el servidor, su IP de Tailscale).
 #   - Las variables del programa (Google, DRIVERS, SESSION_SECRET...) salen del
 #     .env del cliente, que es también ENV_CLIENTE.
 name: ${INSTANCIA:?falta INSTANCIA}
@@ -19,6 +21,8 @@ services:
     restart: always
     env_file: ${ENV_CLIENTE:?falta ENV_CLIENTE}
     mem_limit: ${LIMITE_RAM_WEB:-512m}
+    ports:
+      - "${IP_PUERTOS:-127.0.0.1}:${PUERTO_WEB:?falta PUERTO_WEB}:3000"
     networks: [publica]
 
 networks:
