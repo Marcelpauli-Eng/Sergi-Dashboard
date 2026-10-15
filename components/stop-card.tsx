@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { Check, Navigation, Pencil, Phone, Send, TriangleAlert, X } from "lucide-react";
+import { Check, MessageCircle, Navigation, Pencil, Phone, Send, TriangleAlert, X } from "lucide-react";
 import type { Stop } from "@/lib/types";
 import { formatDistance, formatDuration, smsHref, telHref, whatsappHref } from "@/lib/format";
 import { PASSOS, missatge, nomPas, pasProposat, type Pas } from "@/lib/avisos";
@@ -631,7 +631,9 @@ export default function StopCard({
                   aria-label="Validar i avisar el client"
                   onClick={() => triarPas(pasProposat(avis?.pas))}
                 >
-                  <Send />
+                  {/* Un bocadillo y no el avión de papel: al lado de la flecha
+                      de Navegar, en pequeño, los dos se confundían. */}
+                  <MessageCircle />
                   {!detall && "Validar"}
                 </Button>
               )}
