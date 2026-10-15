@@ -9,7 +9,7 @@ import {
 } from "./db";
 import { applyOutbox, seleccionarTanda } from "./outbox.ts";
 import type { DeliveryStatus, Manifest } from "./types";
-import type { Avis, Pas } from "./avisos";
+import { normalitzarAvisos, type AvisosComanda, type Pas } from "./avisos";
 
 // Se re-exporta porque el resto de la app la importa desde aquí desde
 // siempre; vive en `outbox.ts` para poder probarla sin arrancar Dexie.
@@ -308,20 +308,20 @@ export function setCustomOrder(orderIds: string[]): void {
 }
 
 const AVISOS_KEY = "avisosClient";
-const SIN_AVISOS: Readonly<Record<string, Avis>> = {};
-let avisosCache: { raw: string | null; valor: Readonly<Record<string, Avis>> } = {
+const SIN_AVISOS: Readonly<Record<string, AvisosComanda>> = {};
+let avisosCache: { raw: string | null; valor: Readonly<Record<string, AvisosComanda>> } = {
   raw: null,
   valor: SIN_AVISOS,
 };
 
 /**
- * El último aviso mandado a cada comanda, por su id.
+ * A qué hora se avisó cada paso de cada comanda, por su id.
  *
  * ponytail: solo en este móvil, que es el de empresa y el único que avisa.
  * Si la oficina tiene que verlo, pasarlo a una columna de la hoja por la
  * cola, como el importe.
  */
-export function getAvisos(): Readonly<Record<string, Avis>> {
+export function getAvisos(): Readonly<Record<string, AvisosComanda>> {
   if (typeof window === "undefined") return SIN_AVISOS;
 
   const raw = localStorage.getItem(AVISOS_KEY);
@@ -329,7 +329,7 @@ export function getAvisos(): Readonly<Record<string, Avis>> {
 
   let valor = SIN_AVISOS;
   try {
-    if (raw) valor = JSON.parse(raw) as Record<string, Avis>;
+    if (raw) valor = normalitzarAvisos(JSON.parse(raw));
   } catch {
     valor = SIN_AVISOS;
   }
@@ -337,7 +337,7 @@ export function getAvisos(): Readonly<Record<string, Avis>> {
   return valor;
 }
 
-export function getAvisosServer(): Readonly<Record<string, Avis>> {
+export function getAvisosServer(): Readonly<Record<string, AvisosComanda>> {
   return SIN_AVISOS;
 }
 
@@ -350,8 +350,12 @@ export function getAvisosServer(): Readonly<Record<string, Avis>> {
  */
 export async function setAvis(orderId: string, pas: Pas, text: string): Promise<void> {
   if (typeof window === "undefined") return;
-  const avis: Avis = { pas, at: new Date().toISOString() };
-  localStorage.setItem(AVISOS_KEY, JSON.stringify({ ...getAvisos(), [orderId]: avis }));
+  const at = new Date().toISOString();
+  const totes = getAvisos();
+  localStorage.setItem(
+    AVISOS_KEY,
+    JSON.stringify({ ...totes, [orderId]: { ...totes[orderId], [pas]: at } }),
+  );
   emitLocalPrefs();
 
   await db.outbox.put({
@@ -362,7 +366,7 @@ export async function setAvis(orderId: string, pas: Pas, text: string): Promise<
     sheetTab: getSelectedTab(),
     pas,
     note: text,
-    recordedAt: avis.at,
+    recordedAt: at,
     syncedAt: null,
     attempts: 0,
     lastError: null,

@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { Check, MessageCircle, Navigation, Pencil, Phone, Send, TriangleAlert, X } from "lucide-react";
 import type { Stop } from "@/lib/types";
 import { formatDistance, formatDuration, smsHref, telHref, whatsappHref } from "@/lib/format";
-import { PASSOS, missatge, nomPas, pasProposat, type Pas } from "@/lib/avisos";
+import { PASSOS, missatge, nomPas, pasProposat, ultimPas, type Pas } from "@/lib/avisos";
 import { getAvisos, getAvisosServer, setAvis, subscribeLocalPrefs } from "@/lib/sync";
 import { leerDatosFacturacion } from "@/lib/ajustes-factura";
 import {
@@ -71,6 +71,11 @@ interface Props {
    * sin querer y necesita deshacerse sin ir a buscar la hoja.
    */
   onUndeliver?: (orderId: string) => void;
+}
+
+/** La hora local de un aviso, "10:42". Vacío si no lo hay. */
+function hora(iso: string | undefined): string {
+  return iso ? new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : "";
 }
 
 /** Una fecha del Sheet, tal y como se lee: 01/07/2026. */
@@ -309,12 +314,13 @@ export default function StopCard({
   const [editantImport, setEditantImport] = useState<string | null>(null);
   /** Se enciende un momento al guardar, para que se vea que ha ido. */
   const [desat, setDesat] = useState(false);
-  /** El último aviso que recibió el cliente. */
-  const avis = useSyncExternalStore(
+  /** A qué hora se le avisó cada paso al cliente. */
+  const avisos = useSyncExternalStore(
     subscribeLocalPrefs,
     () => getAvisos()[stop.id],
     () => getAvisosServer()[stop.id],
   );
+  const ultim = ultimPas(avisos);
   /** El paso elegido en la hoja de avisar. `null` = hoja cerrada. */
   const [pas, setPas] = useState<Pas | null>(null);
   const [text, setText] = useState("");
@@ -322,7 +328,7 @@ export default function StopCard({
     setPas(p);
     setText(missatge(p, stop, leerDatosFacturacion().emisor.nombre));
   };
-  const enviat = (p: Pas) => PASSOS.findIndex((x) => x.id === p) <= PASSOS.findIndex((x) => x.id === avis?.pas);
+  const enviat = (p: Pas) => Boolean(avisos?.[p]);
 
   // Coma o punto: en el móvil el teclado numérico da una u otro según el
   // idioma. La cuenta la hace `parseImporte`, la misma que la factura, para
@@ -555,11 +561,10 @@ export default function StopCard({
             </>
           )}
 
-          {avis && (
+          {ultim && (
             <p className="mt-1 flex items-center gap-1 text-xs font-medium text-[color:var(--success)]">
               <Check className="size-3" strokeWidth={3} />
-              Avisat: {nomPas(avis.pas)} ·{" "}
-              {new Date(avis.at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
+              Avisat: {nomPas(ultim)} · {hora(avisos?.[ultim])}
             </p>
           )}
 
@@ -629,7 +634,7 @@ export default function StopCard({
                   variant="secondary"
                   size={detall ? "icon" : "sm"}
                   aria-label="Validar i avisar el client"
-                  onClick={() => triarPas(pasProposat(avis?.pas))}
+                  onClick={() => triarPas(pasProposat(ultim))}
                 >
                   {/* Un bocadillo y no el avión de papel: al lado de la flecha
                       de Navegar, en pequeño, los dos se confundían. */}
@@ -769,6 +774,18 @@ export default function StopCard({
                           ) : (
                             enviat(p.id) && <Check className="size-3" strokeWidth={3} />
                           )}
+                        </span>
+                        {/* La hora a la que salió, pegada al check y de su
+                            color. Si el elegido ya se mandó, su hora y no
+                            "Ara": así se ve que reenviarlo es repetir. Ancho
+                            fijo para que los nombres queden en columna. */}
+                        <span
+                          className={cn(
+                            "w-10 shrink-0 text-[13px] font-medium tabular-nums",
+                            enviat(p.id) ? "text-[color:var(--success)]" : "text-[#0a84ff]",
+                          )}
+                        >
+                          {enviat(p.id) ? hora(avisos?.[p.id]) : pas === p.id && "Ara"}
                         </span>
                         <span className={cn(!enviat(p.id) && pas !== p.id && "text-white/60")}>{p.nom}</span>
                       </button>
