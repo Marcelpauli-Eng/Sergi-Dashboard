@@ -25,7 +25,7 @@ import {
   telHref,
   whatsappHref,
 } from "../lib/format.ts";
-import { CABECERA_AVISOS, filesAvisos, missatge, pasProposat } from "../lib/avisos.ts";
+import { CABECERA_AVISOS, filesAvisos, missatge, normalitzarAvisos, pasProposat, ultimPas } from "../lib/avisos.ts";
 import { decodePolyline } from "../lib/polyline.ts";
 
 // ── Fechas que vienen del Sheet ──────────────────────────────────────────
@@ -193,6 +193,19 @@ import { decodePolyline } from "../lib/polyline.ts";
   assert.equal(pasProposat(undefined), "rebuda");
   assert.equal(pasProposat("fabrica"), "cami");
   assert.equal(pasProposat("lliurat"), "lliurat");
+
+  // El último es el más avanzado, aunque se reenvíe uno de antes después.
+  assert.equal(ultimPas(undefined), undefined);
+  assert.equal(ultimPas({ cami: "2026-10-15T10:42:00Z", rebuda: "2026-10-15T11:00:00Z" }), "cami");
+  assert.equal(pasProposat(ultimPas({ rebuda: "x", fabrica: "y" })), "cami");
+
+  // Lo guardado por la primera versión —solo el último aviso— no se pierde.
+  assert.deepEqual(
+    normalitzarAvisos({ "748": { pas: "rebuda", at: "2026-10-15T07:58:00Z" } }),
+    { "748": { rebuda: "2026-10-15T07:58:00Z" } },
+  );
+  const nou = { rebuda: "a", cami: "b" };
+  assert.deepEqual(normalitzarAvisos({ "748": nou }), { "748": nou });
 
   // Ningún paso sin texto, y la firma solo si hay empresa.
   for (const pas of ["rebuda", "fabrica", "cami", "10min", "lliurat"] as const) {

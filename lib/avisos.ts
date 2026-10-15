@@ -61,11 +61,37 @@ export function filesAvisos(avisos: AvisEntrada[], idsExistents: string[]): stri
   return files;
 }
 
-/** El último aviso mandado a una comanda. Vive en el móvil: ver `getAvisos` en lib/sync.ts. */
-export interface Avis {
-  pas: Pas;
-  /** ISO, del momento en que se pulsó enviar. */
-  at: string;
+/**
+ * Cuándo se avisó cada paso de una comanda (ISO, del momento de pulsar
+ * enviar). Vive en el móvil: ver `getAvisos` en lib/sync.ts.
+ */
+export type AvisosComanda = Partial<Record<Pas, string>>;
+
+/**
+ * Lo guardado en el móvil, ya con la forma de ahora.
+ *
+ * La primera versión guardaba solo el último aviso, `{ pas, at }`, y así
+ * no había manera de enseñar a qué hora salió cada paso. Lo que quedara
+ * guardado así se convierte en vez de tirarse.
+ */
+export function normalitzarAvisos(guardat: Record<string, unknown>): Record<string, AvisosComanda> {
+  const avisos: Record<string, AvisosComanda> = {};
+  for (const [comanda, valor] of Object.entries(guardat)) {
+    const antic = valor as { pas?: Pas; at?: string };
+    avisos[comanda] =
+      antic.pas && antic.at ? { [antic.pas]: antic.at } : (valor as AvisosComanda);
+  }
+  return avisos;
+}
+
+/**
+ * El paso más avanzado que se ha avisado.
+ *
+ * Por el orden de los pasos y no por la hora: si se reenvía "Comanda
+ * rebuda" después de "En camí", el pedido sigue en camino.
+ */
+export function ultimPas(avisos: AvisosComanda | undefined): Pas | undefined {
+  return PASSOS.findLast((p) => avisos?.[p.id])?.id;
 }
 
 /** El que toca: el siguiente al último que se mandó, o el primero si no hay ninguno. */
