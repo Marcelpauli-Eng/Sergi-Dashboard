@@ -51,12 +51,41 @@ export function formatRelativeTime(iso: string): string {
  * pegándose — arreglar si aparece en la hoja.
  */
 export function telHref(phone: string): string {
+  return `tel:${numeros(phone)[0]}`;
+}
+
+/** Todos los números marcables de la celda, en orden. Nunca vacío. */
+function numeros(phone: string): string[] {
   const limpio = phone.replace(/\([^)]*\p{L}[^)]*\)/gu, " ");
-  const marcable =
-    limpio
-      .split(/[/;,]|\s+[-–—]\s+/)
-      .map((trozo) => trozo.replace(/[^\d+]/g, ""))
-      .find((trozo) => trozo.replace(/\D/g, "").length >= 6) ??
-    limpio.replace(/[^\d+]/g, "");
-  return `tel:${marcable}`;
+  const trozos = limpio
+    .split(/[/;,]|\s+[-–—]\s+/)
+    .map((trozo) => trozo.replace(/[^\d+]/g, ""))
+    .filter((trozo) => trozo.replace(/\D/g, "").length >= 6);
+  return trozos.length > 0 ? trozos : [limpio.replace(/[^\d+]/g, "")];
+}
+
+/**
+ * El número al que mandar un aviso, en formato internacional sin "+".
+ *
+ * El primer MÓVIL de la celda, no el primer número: en "93 322 11 00 /
+ * 666 555 444" el fijo va delante, y a un fijo no le llega ni un WhatsApp
+ * ni un SMS. A los nueve dígitos españoles se les pone el 34 delante, que
+ * es lo que pide wa.me.
+ */
+function movil(phone: string): string {
+  const intl = numeros(phone).map((n) => {
+    const cifras = n.replace(/^\+|^00/, "");
+    return /^\d{9}$/.test(cifras) ? `34${cifras}` : cifras;
+  });
+  return intl.find((n) => /^34[67]\d{8}$/.test(n)) ?? intl[0];
+}
+
+/** Abre WhatsApp con el mensaje escrito, listo para enviar desde el móvil de empresa. */
+export function whatsappHref(phone: string, text: string): string {
+  return `https://wa.me/${movil(phone)}?text=${encodeURIComponent(text)}`;
+}
+
+/** Lo mismo por SMS. `?&body=` es la forma que entienden iOS y Android a la vez. */
+export function smsHref(phone: string, text: string): string {
+  return `sms:+${movil(phone)}?&body=${encodeURIComponent(text)}`;
 }

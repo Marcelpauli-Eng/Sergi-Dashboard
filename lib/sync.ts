@@ -9,6 +9,7 @@ import {
 } from "./db";
 import { applyOutbox, seleccionarTanda } from "./outbox.ts";
 import type { DeliveryStatus, Manifest } from "./types";
+import type { Avis, Pas } from "./avisos";
 
 // Se re-exporta porque el resto de la app la importa desde aquí desde
 // siempre; vive en `outbox.ts` para poder probarla sin arrancar Dexie.
@@ -304,6 +305,69 @@ export function setCustomOrder(orderIds: string[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(CUSTOM_ORDER_KEY, JSON.stringify(orderIds));
   emitLocalPrefs();
+}
+
+const AVISOS_KEY = "avisosClient";
+const SIN_AVISOS: Readonly<Record<string, Avis>> = {};
+let avisosCache: { raw: string | null; valor: Readonly<Record<string, Avis>> } = {
+  raw: null,
+  valor: SIN_AVISOS,
+};
+
+/**
+ * El último aviso mandado a cada comanda, por su id.
+ *
+ * ponytail: solo en este móvil, que es el de empresa y el único que avisa.
+ * Si la oficina tiene que verlo, pasarlo a una columna de la hoja por la
+ * cola, como el importe.
+ */
+export function getAvisos(): Readonly<Record<string, Avis>> {
+  if (typeof window === "undefined") return SIN_AVISOS;
+
+  const raw = localStorage.getItem(AVISOS_KEY);
+  if (raw === avisosCache.raw) return avisosCache.valor;
+
+  let valor = SIN_AVISOS;
+  try {
+    if (raw) valor = JSON.parse(raw) as Record<string, Avis>;
+  } catch {
+    valor = SIN_AVISOS;
+  }
+  avisosCache = { raw, valor };
+  return valor;
+}
+
+export function getAvisosServer(): Readonly<Record<string, Avis>> {
+  return SIN_AVISOS;
+}
+
+/**
+ * Apunta un aviso: en el móvil, para la línea "Avisat" de la tarjeta, y en
+ * la cola, para la pestaña "Avisos" del documento privado.
+ *
+ * Sin parchear el manifiesto, al contrario que las otras: un aviso no cambia
+ * nada de la parada.
+ */
+export async function setAvis(orderId: string, pas: Pas, text: string): Promise<void> {
+  if (typeof window === "undefined") return;
+  const avis: Avis = { pas, at: new Date().toISOString() };
+  localStorage.setItem(AVISOS_KEY, JSON.stringify({ ...getAvisos(), [orderId]: avis }));
+  emitLocalPrefs();
+
+  await db.outbox.put({
+    clientId: crypto.randomUUID(),
+    orderId,
+    type: "avis",
+    // El full de AHORA, no el que haya al subir. Ver `sheetTab` en types.ts.
+    sheetTab: getSelectedTab(),
+    pas,
+    note: text,
+    recordedAt: avis.at,
+    syncedAt: null,
+    attempts: 0,
+    lastError: null,
+  });
+  void flushOutbox().catch(() => {});
 }
 
 /**

@@ -21,8 +21,11 @@ import {
   formatDistance,
   formatDuration,
   formatRelativeTime,
+  smsHref,
   telHref,
+  whatsappHref,
 } from "../lib/format.ts";
+import { CABECERA_AVISOS, filesAvisos, missatge, pasProposat } from "../lib/avisos.ts";
 import { decodePolyline } from "../lib/polyline.ts";
 
 // ── Fechas que vienen del Sheet ──────────────────────────────────────────
@@ -176,4 +179,45 @@ import { decodePolyline } from "../lib/polyline.ts";
   assert.doesNotThrow(() => decodePolyline("_p~iF~ps|U_ulL"));
 }
 
-console.log("✓ lib/dates.ts + lib/format.ts + lib/polyline.ts — fechas y formatos");
+// ── Avisos al cliente ────────────────────────────────────────────────────
+{
+  // El móvil, no el fijo que va delante, y con el 34 que pide wa.me.
+  assert.equal(whatsappHref("93 322 11 00 / 666 555 444", "hola"), "https://wa.me/34666555444?text=hola");
+  assert.equal(whatsappHref("+34 612 34 56 78", "a b"), "https://wa.me/34612345678?text=a%20b");
+  assert.equal(whatsappHref("0034 712345678", ""), "https://wa.me/34712345678?text=");
+  // Sin móvil, el primero que haya: mejor un intento que ningún botón.
+  assert.equal(whatsappHref("+34 932 91 90 00", ""), "https://wa.me/34932919000?text=");
+  assert.equal(smsHref("Javi 666555444", "ya"), "sms:+34666555444?&body=ya");
+
+  // El paso que se propone es el siguiente al último, y el último se queda.
+  assert.equal(pasProposat(undefined), "rebuda");
+  assert.equal(pasProposat("fabrica"), "cami");
+  assert.equal(pasProposat("lliurat"), "lliurat");
+
+  // Ningún paso sin texto, y la firma solo si hay empresa.
+  for (const pas of ["rebuda", "fabrica", "cami", "10min", "lliurat"] as const) {
+    assert.ok(missatge(pas, { customer: "Bar", codi: "748" }, "").trim(), `falta el texto de "${pas}"`);
+  }
+  assert.ok(missatge("cami", { customer: "Bar", codi: "748" }, "Transports Puig").endsWith("— Transports Puig"));
+
+  // La pestaña "Avisos": una fila por aviso, en el orden de la cabecera.
+  const avis = {
+    clientId: "id-1",
+    quan: "15/10/2026 10:42",
+    codi: "748",
+    customer: "Bar",
+    phone: null,
+    pas: "cami" as const,
+    text: "Ya vamos",
+    sheetTab: "OCT 26",
+  };
+  const [fila] = filesAvisos([avis], []);
+  assert.equal(fila.length, CABECERA_AVISOS.length);
+  assert.deepEqual(fila, ["15/10/2026 10:42", "748", "Bar", "", "En camí", "Ya vamos", "OCT 26", "id-1"]);
+  // Un reintento de lo que ya se escribió no añade nada, ni el mismo aviso
+  // repetido en una tanda.
+  assert.deepEqual(filesAvisos([avis], ["id-1"]), []);
+  assert.equal(filesAvisos([avis, avis, { ...avis, clientId: "id-2" }], []).length, 2);
+}
+
+console.log("✓ lib/dates.ts + lib/format.ts + lib/polyline.ts + lib/avisos.ts — fechas, formatos y avisos");
