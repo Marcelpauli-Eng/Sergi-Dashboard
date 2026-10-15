@@ -6,6 +6,8 @@
  * un cambio de columnas en el Sheet solo afecte a `lib/sheet-schema.ts`.
  */
 
+import type { Pas } from "./avisos.ts";
+
 /**
  * Los estados de una entrega, como lista y como tipo.
  *
@@ -241,8 +243,13 @@ export interface DeliveryRecord {
    * importe mal tecleado no puede reescribir la hora de entrega: esa hora es
    * el registro de cuándo se entregó de verdad, y un dedazo en el precio no
    * cambia cuándo pasó.
+   *
+   * "avis" no toca la hoja de repartos: añade una fila a la pestaña
+   * "Avisos" del documento privado. El texto enviado viaja en `note`.
    */
-  type?: "status" | "date" | "price";
+  type?: "status" | "date" | "price" | "avis";
+  /** Qué paso se le avisó al cliente. Solo en los "avis". */
+  pas?: Pas;
   /**
    * "pendiente" es el deshacer: devuelve el pedido a como estaba antes de
    * marcarlo, vaciando estado, hora e incidencia en la hoja. Solo lo genera

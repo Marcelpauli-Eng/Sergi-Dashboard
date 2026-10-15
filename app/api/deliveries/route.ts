@@ -5,12 +5,14 @@ import { writeDeliveries } from "@/lib/sheets";
 import { isDemoMode, recordDemoDeliveries } from "@/lib/demo";
 import { isConfigError } from "@/lib/env";
 import { DELIVERY_STATUSES } from "@/lib/types";
+import { PASSOS } from "@/lib/avisos";
 
 const recordSchema = z.object({
   clientId: z.string().uuid(),
   orderId: z.string().min(1),
-  type: z.enum(["status", "date", "price"]).optional().default("status"),
+  type: z.enum(["status", "date", "price", "avis"]).optional().default("status"),
   status: z.enum(DELIVERY_STATUSES).optional(),
+  pas: z.enum(PASSOS.map((p) => p.id)).optional(),
   date: z.string().optional().nullable(),
   recordedAt: z.string().datetime(),
   note: z.string().max(500).nullable().optional(),

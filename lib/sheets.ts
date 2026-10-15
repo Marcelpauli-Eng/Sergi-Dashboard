@@ -30,6 +30,7 @@ import {
   planImportes,
   type ImporteEntrada,
 } from "./importes.ts";
+import { CABECERA_AVISOS, TAB_AVISOS, filesAvisos, type AvisEntrada } from "./avisos.ts";
 import {
   columnLetter,
   filaNovaComanda,
@@ -550,6 +551,8 @@ async function escriureEntregues(
   /* Los importes no van a la hoja de repartos: la comparte la empresa. Se
      juntan aquí y se escriben en el documento privado, junto a las facturas. */
   const importes: ImporteEntrada[] = [];
+  /* Los avisos al cliente, tampoco: van a su pestaña del documento privado. */
+  const avisos: AvisEntrada[] = [];
   const applied: string[] = [];
   const notFound: string[] = [];
 
@@ -619,6 +622,17 @@ async function escriureEntregues(
         price: record.price ?? null,
         sheetTab: snapshot.sheetTab,
       });
+    } else if (type === "avis" && record.pas) {
+      avisos.push({
+        clientId: record.clientId,
+        quan: formatSheetTimestamp(record.recordedAt, env.timezone),
+        codi: order.codi,
+        customer: order.customer,
+        phone: order.phone,
+        pas: record.pas,
+        text: record.note ?? "",
+        sheetTab: snapshot.sheetTab,
+      });
     }
 
     applied.push(record.orderId);
@@ -638,7 +652,41 @@ async function escriureEntregues(
   */
   await writeCells(updates, headerMap, snapshot);
   await writeImportes(importes);
+  // Lo último: un aviso sin apuntar es lo que menos importa de la tanda.
+  await writeAvisos(avisos);
   return { applied, notFound };
+}
+
+/**
+ * Añade los avisos al cliente a la pestaña "Avisos" del documento privado.
+ *
+ * Antes de añadir se lee la columna "Id" y se quitan los que ya estén: es la
+ * única escritura de la cola que añade filas en vez de reescribir celdas, y
+ * sin esto un reintento apuntaría el mismo aviso dos veces. Ver `filesAvisos`.
+ */
+async function writeAvisos(avisos: AvisEntrada[]): Promise<void> {
+  if (avisos.length === 0) return;
+  await asegurarTab(TAB_AVISOS, CABECERA_AVISOS);
+
+  const doc = docFacturas();
+  const columnaId = columnLetter(CABECERA_AVISOS.length - 1);
+  const ids = (await sheetsFetch(
+    `/values/${encodeURIComponent(range(`${columnaId}2:${columnaId}`, TAB_AVISOS))}`,
+    undefined,
+    doc,
+  )) as { values?: unknown[][] };
+
+  const files = filesAvisos(avisos, (ids.values ?? []).map((fila) => text(fila[0])));
+  if (files.length === 0) return;
+
+  await sheetsFetch(
+    `/values/${encodeURIComponent(range(`A:${columnaId}`, TAB_AVISOS))}:append` +
+      // RAW por lo mismo que los importes: que Google no convierta el full
+      // "JUL 26" en una fecha, ni un "+34 666…" en una fórmula.
+      `?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    { method: "POST", body: JSON.stringify({ values: files }) },
+    doc,
+  );
 }
 
 /** Lo que hace falta para crear una comanda a mano. Solo el número lo es. */

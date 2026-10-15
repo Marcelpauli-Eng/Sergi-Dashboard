@@ -2,9 +2,12 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { Check, Navigation, Pencil, Phone, TriangleAlert, X } from "lucide-react";
+import { Check, Navigation, Pencil, Phone, Send, TriangleAlert, X } from "lucide-react";
 import type { Stop } from "@/lib/types";
-import { formatDistance, formatDuration, telHref } from "@/lib/format";
+import { formatDistance, formatDuration, smsHref, telHref, whatsappHref } from "@/lib/format";
+import { PASSOS, missatge, nomPas, pasProposat, type Pas } from "@/lib/avisos";
+import { getAvisos, getAvisosServer, setAvis, subscribeLocalPrefs } from "@/lib/sync";
+import { leerDatosFacturacion } from "@/lib/ajustes-factura";
 import {
   appNavUrlFor,
   appleNavUrlFor,
@@ -306,6 +309,20 @@ export default function StopCard({
   const [editantImport, setEditantImport] = useState<string | null>(null);
   /** Se enciende un momento al guardar, para que se vea que ha ido. */
   const [desat, setDesat] = useState(false);
+  /** El último aviso que recibió el cliente. */
+  const avis = useSyncExternalStore(
+    subscribeLocalPrefs,
+    () => getAvisos()[stop.id],
+    () => getAvisosServer()[stop.id],
+  );
+  /** El paso elegido en la hoja de avisar. `null` = hoja cerrada. */
+  const [pas, setPas] = useState<Pas | null>(null);
+  const [text, setText] = useState("");
+  const triarPas = (p: Pas) => {
+    setPas(p);
+    setText(missatge(p, stop, leerDatosFacturacion().emisor.nombre));
+  };
+  const enviat = (p: Pas) => PASSOS.findIndex((x) => x.id === p) <= PASSOS.findIndex((x) => x.id === avis?.pas);
 
   // Coma o punto: en el móvil el teclado numérico da una u otro según el
   // idioma. La cuenta la hace `parseImporte`, la misma que la factura, para
@@ -538,6 +555,14 @@ export default function StopCard({
             </>
           )}
 
+          {avis && (
+            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-[color:var(--success)]">
+              <Check className="size-3" strokeWidth={3} />
+              Avisat: {nomPas(avis.pas)} ·{" "}
+              {new Date(avis.at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
+            </p>
+          )}
+
           {stop.notes && (
             <div
               className={cn(
@@ -595,6 +620,19 @@ export default function StopCard({
                     <Phone />
                     {!detall && "Trucar"}
                   </a>
+                </Button>
+              )}
+              {/* Avisar al cliente de por dónde va el pedido. No en la
+                  previsualización de la bossa (`peu`): allí aún no es de nadie. */}
+              {stop.phone && peu === undefined && (
+                <Button
+                  variant="secondary"
+                  size={detall ? "icon" : "sm"}
+                  aria-label="Validar i avisar el client"
+                  onClick={() => triarPas(pasProposat(avis?.pas))}
+                >
+                  <Send />
+                  {!detall && "Validar"}
                 </Button>
               )}
               {/* Corregir los datos: solo en la ficha. En la lista del día
@@ -666,6 +704,120 @@ export default function StopCard({
                     >
                       Waze
                     </a>
+                  </div>
+                </div>
+              </div>,
+              document.body,
+            )}
+
+            {/* Hoja de avisar: se elige el paso, se ve el mensaje y sale por
+                WhatsApp o SMS desde el móvil de empresa. Mismo aspecto y
+                `z-[200]` que la de navegar, por lo mismo. */}
+            {pas && stop.phone && mounted && createPortal(
+              <div className="fixed inset-0 z-[200] flex flex-col justify-end">
+                <div
+                  className="absolute inset-0 animate-fade-in bg-black/40 backdrop-blur-sm"
+                  onClick={() => setPas(null)}
+                />
+                <div className="relative max-h-[90dvh] w-full animate-rise-in overflow-y-auto rounded-t-[20px] bg-[#1c1c1e] p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-white shadow-2xl">
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-semibold tracking-tight">Validar i avisar el client</h3>
+                      <p className="truncate text-sm text-white/50">
+                        {[stop.customer, stop.codi].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setPas(null)}
+                      className="pressable rounded-full bg-[#3a3a3c] p-1.5"
+                      aria-label="Tancar"
+                    >
+                      <X className="size-5" />
+                    </button>
+                  </div>
+
+                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-white/50">
+                    Pas de la comanda
+                  </p>
+                  <div role="radiogroup" className="flex flex-col overflow-hidden rounded-xl bg-[#2c2c2e]">
+                    {PASSOS.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={pas === p.id}
+                        onClick={() => triarPas(p.id)}
+                        className={cn(
+                          "flex items-center gap-3 border-b border-white/10 px-4 py-3 text-left text-[15px] last:border-b-0 active:bg-[#3a3a3c]",
+                          pas === p.id && "bg-[#3a3a3c]",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "flex size-5 shrink-0 items-center justify-center rounded-full border-2",
+                            pas === p.id
+                              ? "border-[#0a84ff]"
+                              : enviat(p.id)
+                                ? "border-[color:var(--success)] bg-[color:var(--success)]"
+                                : "border-white/30",
+                          )}
+                        >
+                          {pas === p.id ? (
+                            <span className="size-2.5 rounded-full bg-[#0a84ff]" />
+                          ) : (
+                            enviat(p.id) && <Check className="size-3" strokeWidth={3} />
+                          )}
+                        </span>
+                        <span className={cn(!enviat(p.id) && pas !== p.id && "text-white/60")}>{p.nom}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <label
+                    htmlFor={`avis-${stop.id}`}
+                    className="mb-1.5 mt-4 block text-[11px] font-medium uppercase tracking-wide text-white/50"
+                  >
+                    Missatge al client
+                  </label>
+                  <textarea
+                    id={`avis-${stop.id}`}
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    rows={4}
+                    /* El tope de `note` en la API: más largo, el registro se
+                       rechaza y el aviso no queda apuntado en la hoja. */
+                    maxLength={500}
+                    className="w-full resize-none rounded-xl bg-[#2c2c2e] px-4 py-3 text-[15px] outline-none focus-visible:ring-2 focus-visible:ring-[#0a84ff]"
+                  />
+
+                  {/* Se apunta al pulsar, no al llegar: la app no puede saber
+                      si el transportista acabó dándole a enviar en WhatsApp. */}
+                  <div className="mt-4 flex gap-2">
+                    <Button asChild size="touch" className="flex-1">
+                      <a
+                        href={whatsappHref(stop.phone, text)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => {
+                          void setAvis(stop.id, pas, text);
+                          setPas(null);
+                        }}
+                      >
+                        <Send />
+                        WhatsApp
+                      </a>
+                    </Button>
+                    <Button asChild variant="secondary" size="touch">
+                      <a
+                        href={smsHref(stop.phone, text)}
+                        onClick={() => {
+                          void setAvis(stop.id, pas, text);
+                          setPas(null);
+                        }}
+                      >
+                        SMS
+                      </a>
+                    </Button>
                   </div>
                 </div>
               </div>,

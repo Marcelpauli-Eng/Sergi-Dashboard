@@ -125,6 +125,9 @@ export function actualitzarComandaDemo(
 
 export function recordDemoDeliveries(records: DeliveryRecord[]): void {
   for (const record of records) {
+    // Un aviso al cliente no cambia la parada. Sin esto se guardaba como si
+    // fuera su entrega y la pisaba.
+    if (record.type === "avis") continue;
     // Corregir el importe no cambia el estado ni la hora: solo el precio de
     // lo que ya hubiera registrado.
     if (record.type === "price") {
