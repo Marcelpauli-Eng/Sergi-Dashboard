@@ -142,7 +142,14 @@ const TITOLS: Record<TabValue, { titol: string; subtitol: string }> = {
   informes: { titol: "Informes", subtitol: "Com va el mes: entregues, imports i incidències." },
 };
 
-export default function Dashboard({ driverName }: { driverName: string }) {
+export default function Dashboard({
+  driverName,
+  avisProva,
+}: {
+  driverName: string;
+  /** L'avís de final de prova (lib/prova.ts), o null. */
+  avisProva?: string | null;
+}) {
   const router = useRouter();
 
   const query = useLiveQuery(
@@ -713,6 +720,12 @@ export default function Dashboard({ driverName }: { driverName: string }) {
         // contraste suficiente y este aviso tiene que leerse sí o sí.
         <p className="avis-demo bg-warning px-4 py-1 text-center text-xs font-semibold text-black">
           Modo demo · pedidos de ejemplo
+        </p>
+      )}
+      {avisProva && (
+        // Com l'avís del mode demo: negre sobre taronja perquè es llegeixi sí o sí.
+        <p role="status" className="bg-warning px-4 py-1.5 text-center text-xs font-semibold text-black">
+          {avisProva}
         </p>
       )}
 
