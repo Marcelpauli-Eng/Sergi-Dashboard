@@ -294,12 +294,17 @@ export function planDelFull(opcions: {
   avui: string;
   /** Si es el segundo documento, que es el único que sigue al primero. */
   segon: boolean;
+  /**
+   * La hoja de un cliente, que es nuestra: el mes que se mire se le crea
+   * siempre, aunque ya haya pasado. Cambiar de full en la app lo estrena allí.
+   */
+  sempre?: boolean;
 }):
   | { fes: "usa"; full: string }
   | { fes: "crea"; full: string }
   | { fes: "enrere"; full: string }
   | { fes: "falta" } {
-  const { tabs, mes, nom, avui, segon } = opcions;
+  const { tabs, mes, nom, avui, segon, sempre } = opcions;
 
   const delMes = findMonthTab(tabs, mes);
   if (delMes) return { fes: "usa", full: delMes };
@@ -308,7 +313,7 @@ export function planDelFull(opcions: {
     // Un mes que ya pasó no se crea: mirar atrás no escribe en la hoja de
     // nadie, y enseñar otro mes como si fuera este es peor que decir que no
     // está.
-    if (mes >= avui) return { fes: "crea", full: nom };
+    if (mes >= avui || sempre) return { fes: "crea", full: nom };
     return { fes: "falta" };
   }
 

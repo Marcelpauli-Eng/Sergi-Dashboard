@@ -289,6 +289,15 @@ import {
     { fes: "crea", full: "OCT 26" },
   );
 
+  // En la hoja de un cliente el mes que se mira se crea siempre, pasado o no,
+  // tenga ya otros meses o esté en blanco.
+  for (const tabs of [["Full 1"], ["AGO 26", "SET 26"]]) {
+    assert.deepEqual(
+      planDelFull({ tabs, mes: "2026-07", nom: "JUL 26", avui: "2026-11", segon: true, sempre: true }),
+      { fes: "crea", full: "JUL 26" },
+    );
+  }
+
   // Un mes que ya pasó NO se crea: mirar atrás no escribe en la hoja de
   // nadie. Y tampoco se enseña otro mes en su lugar, que es lo que hacía.
   assert.deepEqual(

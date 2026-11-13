@@ -40,9 +40,11 @@ export async function POST(request: NextRequest) {
 
     // Solo los documentos de los que hay alguna parada: la ruta de un día
     // sin comandas del segundo no tiene por qué leerlo.
-    const calen = new Set(body.orderIds.map((id) => origenDe(id).id));
+    const calen = new Set(
+      (await Promise.all(body.orderIds.map(origenDe))).map((o) => o.id),
+    );
     const snapshots = await Promise.all(
-      origens()
+      (await origens())
         .filter((o) => calen.has(o.id))
         .map((o) => readSheet(body.sheetTab, o)),
     );

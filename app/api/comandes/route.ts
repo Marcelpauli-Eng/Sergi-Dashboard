@@ -85,7 +85,7 @@ export async function POST(request: Request) {
   try {
     // Un origen que ya no existe —el segundo documento quitado del entorno
     // con la pantalla abierta— no se manda al primero sin decir nada.
-    const origen = origens().find((o) => o.id === (idOrigen ?? ""));
+    const origen = (await origens()).find((o) => o.id === (idOrigen ?? ""));
     if (!origen) {
       return NextResponse.json(
         { error: "Aquesta bossa ja no està configurada al servidor." },

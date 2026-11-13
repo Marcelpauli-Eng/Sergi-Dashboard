@@ -18,6 +18,7 @@
 
 import type { ClienteFacturacion } from "./factura.ts";
 import { text } from "./sheet-cells.ts";
+import { sheetIdFrom } from "./sheet-tab.ts";
 
 export const TAB_CLIENTS = "Clients";
 
@@ -88,4 +89,72 @@ export function parseClients(filas: unknown[][]): ClienteFacturacion[] {
     if (client !== null) clients.push(client);
   }
   return clients;
+}
+
+/* ── La bossa de cada cliente ───────────────────────────────────────────── */
+
+/**
+ * Columna H: la hoja de comandas de ese cliente, URL o ID.
+ *
+ * La rellena el programador a mano, en el documento. La app no la enseña en
+ * ninguna pantalla: quien usa la app no tiene por qué saber que hay hojas.
+ * Con ella puesta, ese cliente tiene su propia bossa en el calendario.
+ */
+export const COL_FULL = 7;
+
+export interface BossaClient {
+  /** Lo que va delante del id de sus comandas. Ver `idDeBossa`. */
+  id: string;
+  nom: string;
+  sheetId: string;
+}
+
+/**
+ * El identificador de la bossa de un cliente.
+ *
+ * Va delante del id de cada comanda suya —"<id>:748"— y de ahí se saca a
+ * qué documento se escribe su entrega (ver `origenDe` en lib/sheets.ts).
+ *
+ * Sale de la hoja y no del cliente: el código y el nombre se cambian desde
+ * Ajustes, y con entregas en la cola del móvil un id que cambia las manda a
+ * buscar al documento equivocado. La hoja es la misma mientras sea la misma.
+ * Solo el principio, que el id entero es largo y va en cada comanda; dos que
+ * coincidan los descarta `origens`.
+ */
+export function idDeBossa(sheetId: string): string {
+  return sheetId.replace(/[^\w-]/g, "").slice(0, 10);
+}
+
+/** Las bosses que salen de la pestaña: una por cliente con la columna H puesta. */
+export function bossesDeClients(filas: unknown[][]): BossaClient[] {
+  const bosses: BossaClient[] = [];
+  for (const fila of filas) {
+    const client = filaAClient(fila);
+    const full = text(fila[COL_FULL]);
+    if (client === null || full === "") continue;
+    const sheetId = sheetIdFrom(full);
+    bosses.push({ id: idDeBossa(sheetId), nom: client.nombre, sheetId });
+  }
+  return bosses;
+}
+
+/**
+ * La columna H de cada cliente de la lista nueva, sacada de las filas de antes.
+ *
+ * Guardar los clientes reescribe el bloque entero, y borrar o reordenar uno
+ * dejaría cada hoja en la fila de otro cliente: sus comandas con el nombre
+ * equivocado. Se busca por código y, si no, por nombre.
+ */
+export function fullsDe(antigues: unknown[][], clients: ClienteFacturacion[]): string[] {
+  const perCodi = new Map<string, string>();
+  const perNom = new Map<string, string>();
+  for (const fila of antigues) {
+    const full = text(fila[COL_FULL]);
+    if (full === "") continue;
+    if (text(fila[0]) !== "") perCodi.set(text(fila[0]), full);
+    perNom.set(text(fila[1]), full);
+  }
+  // ponytail: cambiar código y nombre a la vez pierde el enlace y la bossa
+  // desaparece; se vuelve a pegar la URL en la H. Un id oculto por fila si pasa.
+  return clients.map((c) => perCodi.get(c.codigo) ?? perNom.get(c.nombre) ?? "");
 }
