@@ -289,6 +289,12 @@ import {
     { fes: "crea", full: "OCT 26" },
   );
 
+  // La hoja en blanco de un cliente sí estrena un mes pasado: no tiene otro.
+  assert.deepEqual(
+    planDelFull({ tabs: ["Full 1"], mes: "2026-07", nom: "JUL 26", avui: "2026-11", segon: true, enBlanc: true }),
+    { fes: "crea", full: "JUL 26" },
+  );
+
   // Un mes que ya pasó NO se crea: mirar atrás no escribe en la hoja de
   // nadie. Y tampoco se enseña otro mes en su lugar, que es lo que hacía.
   assert.deepEqual(
