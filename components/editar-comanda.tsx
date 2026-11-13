@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getSelectedTab, syncNow } from "@/lib/sync";
 import type { Stop } from "@/lib/types";
@@ -86,6 +86,62 @@ export default function EditarComanda({
     () => false,
   );
   const [error, setError] = useState<string | null>(null);
+  /* Borrar pide un segundo toque: el botón está a un dedo de Desar. */
+  const [confirmant, setConfirmant] = useState(false);
+
+  /**
+   * Borra la comanda del full y deja medio minuto para deshacerlo.
+   *
+   * El aviso de Desfer vive en el dashboard y esto se abre desde tres capas
+   * más adentro (la ficha, la previsualización…): se le avisa con un evento
+   * en vez de bajar un `onDesfer` por todas ellas.
+   */
+  const esborrar = async () => {
+    setDesant(true);
+    setError(null);
+    const full = getSelectedTab();
+    const crida = async (method: "POST" | "PUT", cos: object) => {
+      const resposta = await fetch("/api/comandes/esborrar", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cos),
+      });
+      const dades = (await resposta.json().catch(() => null)) as
+        | { error?: string; full?: string; fila?: unknown[] }
+        | null;
+      if (!resposta.ok) throw new Error(dades?.error ?? "No s'ha pogut esborrar");
+      return dades;
+    };
+    try {
+      const esborrada = await crida("POST", { id: stop.id, ...(full ? { sheetTab: full } : {}) });
+      await syncNow(full ?? undefined).catch(() => {});
+      window.dispatchEvent(
+        new CustomEvent("reparto:desfer", {
+          detail: {
+            etiqueta: `${stop.customer || stop.codi} · esborrada`,
+            fer: () =>
+              void crida("PUT", { id: stop.id, full: esborrada?.full, fila: esborrada?.fila })
+                .then(() => syncNow(full ?? undefined))
+                .catch((e: Error) => window.alert(e.message)),
+          },
+        }),
+      );
+      onTancar();
+    } catch (e) {
+      const sensaXarxa =
+        e instanceof TypeError ||
+        (typeof navigator !== "undefined" && !navigator.onLine);
+      setError(
+        sensaXarxa
+          ? "Sense cobertura no es pot esborrar: això s'escriu al full de l'oficina."
+          : e instanceof Error
+            ? e.message
+            : "Error desconegut",
+      );
+      setConfirmant(false);
+      setDesant(false);
+    }
+  };
 
   const desar = async () => {
     setDesant(true);
@@ -231,6 +287,18 @@ export default function EditarComanda({
               )}
             </div>
           ))}
+          {/* Al final de la lista y sin relleno: está, pero no compite con Desar. */}
+          <div className="px-5 py-3">
+            <button
+              type="button"
+              disabled={desant}
+              onClick={() => setConfirmant(true)}
+              className="pressable flex items-center gap-2 rounded-lg py-1.5 text-sm font-medium text-destructive disabled:opacity-50"
+            >
+              <Trash2 className="size-4" aria-hidden />
+              Esborrar la comanda
+            </button>
+          </div>
         </div>
 
         <div className="space-y-2 border-t border-border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-3">
@@ -239,14 +307,42 @@ export default function EditarComanda({
               {error}
             </p>
           )}
-          <div className="flex gap-2">
-            <Button variant="ghost" className="flex-1" disabled={desant} onClick={onTancar}>
-              Cancel·lar
-            </Button>
-            <Button className="flex-1" disabled={desant} onClick={() => void desar()}>
-              {desant ? "Desant…" : "Desar"}
-            </Button>
-          </div>
+          {confirmant ? (
+            <div role="alertdialog" aria-labelledby="esborrar-titol" aria-describedby="esborrar-text">
+              <p id="esborrar-titol" className="px-2 pt-1 text-[15px] font-semibold">
+                Segur que vols esborrar la comanda {stop.codi}?
+              </p>
+              <p id="esborrar-text" className="px-2 pb-3 pt-0.5 text-sm text-muted-foreground">
+                S&apos;esborra del full. Tindràs mig minut per desfer-ho.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  className="flex-1"
+                  disabled={desant}
+                  onClick={() => setConfirmant(false)}
+                >
+                  No, deixa-la
+                </Button>
+                <Button
+                  className="flex-1 bg-destructive text-white hover:bg-destructive/90"
+                  disabled={desant}
+                  onClick={() => void esborrar()}
+                >
+                  {desant ? "Esborrant…" : "Sí, esborra-la"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Button variant="ghost" className="flex-1" disabled={desant} onClick={onTancar}>
+                Cancel·lar
+              </Button>
+              <Button className="flex-1" disabled={desant} onClick={() => void desar()}>
+                {desant ? "Desant…" : "Desar"}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>,

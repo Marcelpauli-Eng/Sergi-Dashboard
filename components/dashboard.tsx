@@ -7,8 +7,6 @@ import dynamic from "next/dynamic";
 import {
   BarChart3,
   CalendarDays,
-  CalendarRange,
-  Check,
   Clock,
   FileText,
   History,
@@ -674,6 +672,17 @@ export default function Dashboard({
     return () => clearTimeout(id);
   }, [accioDesfer]);
 
+  // Quien no tiene `anotarDesfer` a mano —el diálogo de editar, que borra la
+  // comanda desde dentro de la ficha— lo pide con un evento.
+  useEffect(() => {
+    const escolta = (e: Event) => {
+      const { etiqueta, fer } = (e as CustomEvent<{ etiqueta: string; fer: () => void }>).detail;
+      setAccioDesfer({ etiqueta, fer, quan: Date.now() });
+    };
+    window.addEventListener("reparto:desfer", escolta);
+    return () => window.removeEventListener("reparto:desfer", escolta);
+  }, []);
+
   /**
    * Cambiar de pantalla retira el aviso de Desfer.
    *
@@ -819,18 +828,27 @@ export default function Dashboard({
 
       {/* ── Panel del menú hamburguesa ────────────────────────────────── */}
       {menuOpen && (
+        /* Tocar o arrastrar fuera lo cierra: antes se quedaba pegado arriba
+           tapando la pantalla hasta volver al botón del menú. */
+        <div
+          aria-hidden
+          className="fixed inset-0 z-[9]"
+          onClick={() => setMenuOpen(false)}
+          onTouchMove={() => setMenuOpen(false)}
+          onWheel={() => setMenuOpen(false)}
+        />
+      )}
+      {menuOpen && (
         <div className="material sticky top-[calc(env(safe-area-inset-top)+3.9rem)] z-10 animate-fade-in px-4 py-4">
           <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-tertiary-foreground">
             Full
           </p>
           {loadingTabs ? (
-            /* Tres siluetas del alto de una fila en vez de un texto: el panel
-               no da un salto de alto cuando llega la lista. */
-            <div className="soft-card divide-y divide-border overflow-hidden">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="flex h-12 items-center px-3.5">
-                  <div className="h-3.5 w-32 animate-pulse rounded-full bg-muted" />
-                </div>
+            /* Siluetas con la forma de la rejilla: el panel no da un salto
+               de alto cuando llega la lista. */
+            <div className="grid grid-cols-3 gap-1.5">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="h-[2.625rem] animate-pulse rounded-xl bg-muted" />
               ))}
             </div>
           ) : tabs.length === 0 ? (
@@ -852,10 +870,12 @@ export default function Dashboard({
               )}
             </div>
           ) : (
-            /* Doce fulls no caben en una pantalla de móvil: la lista se queda
-               en poco más de media y el resto se hace con el dedo. */
-            <ul className="soft-card max-h-[52svh] divide-y divide-border overflow-y-auto overscroll-contain">
-              {tabs.map((tab) => {
+            /* Doce fulls en una rejilla de tres: caben todos sin mover el
+               dedo, y el más reciente —el que casi siempre se busca— arriba.
+               Antes era una lista larga del más viejo al más nuevo, y el mes
+               en curso quedaba escondido al final. */
+            <ul className="grid grid-cols-3 gap-1.5">
+              {[...tabs].reverse().map((tab) => {
                 const isActive =
                   tab === selectedSheetTab ||
                   (!selectedSheetTab && tab === manifest?.sheetTab);
@@ -865,24 +885,14 @@ export default function Dashboard({
                       type="button"
                       onClick={() => void handleTabSelect(tab)}
                       aria-current={isActive ? "true" : undefined}
-                      className="flex w-full items-center gap-3 px-3.5 py-3 text-left active:bg-muted"
+                      className={cn(
+                        "pressable w-full truncate rounded-xl px-2 py-2.5 text-center text-[15px] tabular-nums",
+                        isActive
+                          ? "bg-primary font-semibold text-primary-foreground"
+                          : "bg-card font-medium text-foreground shadow-sm",
+                      )}
                     >
-                      <CalendarRange
-                        className={cn(
-                          "size-5 shrink-0",
-                          isActive ? "text-primary" : "text-tertiary-foreground",
-                        )}
-                        strokeWidth={isActive ? 2.2 : 1.8}
-                      />
-                      <span
-                        className={cn(
-                          "min-w-0 flex-1 truncate text-[15px]",
-                          isActive ? "font-semibold text-primary" : "font-medium",
-                        )}
-                      >
-                        {tab}
-                      </span>
-                      {isActive && <Check className="size-4 shrink-0 text-primary" />}
+                      {tab}
                     </button>
                   </li>
                 );

@@ -1094,6 +1094,72 @@ export async function moureComandes(
   return { mogudes: orders.map((o) => o.id), de: tabOrigen };
 }
 
+/**
+ * Borra una comanda del full: su fila entera.
+ *
+ * Devuelve la fila tal y como estaba escrita y en qué pestaña, que es lo que
+ * hace falta para deshacerlo (`restaurarComanda`). `null` si ya no está.
+ */
+export async function esborrarComanda(
+  id: string,
+  sheetTab?: string | null,
+): Promise<{ full: string; fila: unknown[] } | null> {
+  const origen = await origenDe(id);
+  const snapshot = await readSheet(sheetTab, origen);
+  const order = snapshot.orders.find((o) => o.id === id);
+  if (!order) return null;
+
+  const full = snapshot.sheetTab ?? "";
+  // Formateada, como en `moureComandes`: se reescribe igual con USER_ENTERED.
+  const llegida = (await sheetsFetch(
+    `/values/${encodeURIComponent(range(`A${order.rowNumber}:ZZ${order.rowNumber}`, full))}`,
+    undefined,
+    origen.sheetId,
+  )) as { values?: unknown[][] };
+
+  const gid = await idPestanya(origen.sheetId, full);
+  if (gid === null) throw new ErrorAccionable(`No trobo el full ${full} per esborrar-la.`);
+  await sheetsFetch(
+    ":batchUpdate",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        requests: [
+          {
+            deleteDimension: {
+              range: {
+                sheetId: gid,
+                dimension: "ROWS",
+                startIndex: order.rowNumber - 1,
+                endIndex: order.rowNumber,
+              },
+            },
+          },
+        ],
+      }),
+    },
+    origen.sheetId,
+  );
+  return { full, fila: llegida.values?.[0] ?? [] };
+}
+
+/**
+ * Deshace `esborrarComanda`: vuelve a escribir la fila en su pestaña.
+ *
+ * Al final y no donde estaba: entre el borrado y el Desfer la oficina puede
+ * haber movido filas, y el orden del full no significa nada para la app.
+ */
+export async function restaurarComanda(id: string, full: string, fila: unknown[]): Promise<void> {
+  const origen = await origenDe(id);
+  const snapshot = await readSheet(full, origen);
+  await sheetsFetch(
+    `/values/${encodeURIComponent(filaLliure(snapshot))}:append` +
+      `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { method: "POST", body: JSON.stringify({ values: [fila] }) },
+    origen.sheetId,
+  );
+}
+
 /** Lo que se guarda de una comanda ya geocodificada. */
 export interface CoordCacheada {
   orderId: string;

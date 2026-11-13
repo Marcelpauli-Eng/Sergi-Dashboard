@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ChevronLeft, Plus } from "lucide-react";
+import { ChevronDown, ChevronLeft, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/db";
 import { getSelectedTab, refreshManifest, subscribeLocalPrefs } from "@/lib/sync";
@@ -162,6 +162,14 @@ export default function NovaComanda({
     }
   };
 
+  const canviarOrigen = (id: string) => {
+    setOrigen(id);
+    // Otra hoja, otra numeración: lo que se contestó de la anterior no vale
+    // para esta.
+    setRepetida(false);
+    setError(null);
+  };
+
   return (
     <div className="mx-auto flex min-h-svh w-full max-w-2xl flex-col">
       <header className="sticky top-0 z-20 bg-background pt-[env(safe-area-inset-top)]">
@@ -209,28 +217,46 @@ export default function NovaComanda({
           <fieldset className="soft-card p-4">
             <legend className="sr-only">A quin full s&apos;afegeix</legend>
             <p className="text-sm font-medium">A quin full s&apos;afegeix</p>
-            <div className="mt-2 grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
-              {origens.map((o) => (
-                <button
-                  key={o.id}
-                  type="button"
-                  onClick={() => {
-                    setOrigen(o.id);
-                    // Otra hoja, otra numeración: lo que se contestó de la
-                    // anterior no vale para esta.
-                    setRepetida(false);
-                    setError(null);
-                  }}
-                  aria-pressed={origen === o.id}
-                  className={cn(
-                    "pressable truncate rounded-lg px-3 py-2 text-sm font-medium",
-                    origen === o.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground",
-                  )}
+            {origens.length > 2 ? (
+              /* Con tres o más ya no caben en una fila de botones: se
+                 partían en dos líneas y uno quedaba cortado. El desplegable
+                 del teléfono, que es el que ya se sabe usar. */
+              <div className="relative mt-2">
+                <select
+                  aria-label="A quin full s'afegeix"
+                  value={origen}
+                  onChange={(e) => canviarOrigen(e.target.value)}
+                  className="w-full appearance-none truncate rounded-xl bg-muted py-2.5 pl-3 pr-10 text-base font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 >
-                  {o.nom}
-                </button>
-              ))}
-            </div>
+                  {origens.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.nom}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  className="pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
+                />
+              </div>
+            ) : (
+              <div className="mt-2 grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+                {origens.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    onClick={() => canviarOrigen(o.id)}
+                    aria-pressed={origen === o.id}
+                    className={cn(
+                      "pressable truncate rounded-lg px-3 py-2 text-sm font-medium",
+                      origen === o.id ? "bg-card text-primary shadow-sm" : "text-muted-foreground",
+                    )}
+                  >
+                    {o.nom}
+                  </button>
+                ))}
+              </div>
+            )}
           </fieldset>
         )}
 
