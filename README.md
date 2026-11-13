@@ -228,8 +228,9 @@ Para más de dos documentos no hace falta tocar el entorno. En el documento
 privado, pestaña `Clients`, pega en la **columna H** de un cliente la URL (o
 el ID) de su hoja de comandas, compartida como Editor con la cuenta de
 servicio. En un minuto sale `Bossa · <nombre del cliente>` y se comporta
-como la del segundo documento: la hoja puede estar en blanco, el mes se crea
-solo con tu cabecera.
+como la del segundo documento, con una diferencia: la hoja puede estar en
+blanco y el mes que se mire en la app se le crea siempre con tu cabecera,
+aunque ya haya pasado.
 
 La columna H no sale en ninguna pantalla de la app, y guardar los clientes
 desde Ajustes la conserva. Ajustes → Diagnòstic comprueba cada una.

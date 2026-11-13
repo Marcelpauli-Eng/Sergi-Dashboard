@@ -298,9 +298,7 @@ async function resolverPestanya(origen: Origen, full?: string | null): Promise<s
     avui: today(env.timezone).slice(0, 7),
     segon: origen.id !== "",
     // Solo las bosses de clientes: en el segundo del entorno, todo como estaba.
-    enBlanc:
-      !origensFixos().some((o) => o.id === origen.id) &&
-      !tabs.some((tab) => parseTabMonth(tab)),
+    sempre: !origensFixos().some((o) => o.id === origen.id),
   });
   if (pla.fes === "usa" || pla.fes === "enrere") return pla.full;
   if (pla.fes === "crea") {
