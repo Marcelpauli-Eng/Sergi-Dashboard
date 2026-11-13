@@ -49,7 +49,7 @@ const schema = z.object({
    */
   afegirPart: z.boolean().optional(),
   /** En qué documento: "" o sin poner, el de siempre; "2", el segundo. */
-  origen: z.string().max(8).optional(),
+  origen: z.string().max(64).optional(),
 });
 
 export async function POST(request: Request) {
