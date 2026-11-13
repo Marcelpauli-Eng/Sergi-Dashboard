@@ -2,6 +2,7 @@ import "server-only";
 import { env } from "./env";
 import {
   origens,
+  origensFixos,
   readImportes,
   readSheet,
   cacheCoordinates,
@@ -345,7 +346,12 @@ export async function buildManifest(
     pedidos salen de la hoja que comparte la empresa y los importes del
     archivo privado del transportista. Una espera a la otra no aporta nada.
   */
-  const [principal, ...altres] = origens();
+  // Sin poder leer las bosses de clientes se sigue con las del entorno: como
+  // abajo, eso no puede dejar sin ruta a nadie.
+  const [principal, ...altres] = await origens().catch((error: unknown) => {
+    console.warn(`No se han podido leer las bosses de clientes: ${String(error)}`);
+    return origensFixos();
+  });
   const [snapshot, segons, importes] = await Promise.all([
     readSheet(sheetTab, principal),
     /*

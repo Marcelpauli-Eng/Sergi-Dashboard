@@ -12,8 +12,11 @@ import { parseImportesFactura } from "./factura.ts";
 import {
   CABECERA_CLIENTS,
   TAB_CLIENTS,
+  bossesDeClients,
   clientAFila,
+  fullsDe,
   parseClients,
+  type BossaClient,
 } from "./clients.ts";
 import type { ClienteFacturacion } from "./factura.ts";
 import {
@@ -135,17 +138,71 @@ export interface Origen {
   sheetTab: string | null;
 }
 
-/** Los documentos configurados, el de siempre primero. */
-export function origens(): Origen[] {
-  const { sheetId, sheetTab, nom, segon } = env.google;
-  const llista: Origen[] = [{ id: "", nom, sheetId, sheetTab }];
-  if (segon) llista.push({ id: "2", ...segon });
+/** El documento de siempre. */
+export function origenPrincipal(): Origen {
+  const { sheetId, sheetTab, nom } = env.google;
+  return { id: "", nom, sheetId, sheetTab };
+}
+
+/** Los del entorno: el de siempre y, si está, el segundo. Sin leer nada. */
+export function origensFixos(): Origen[] {
+  const { segon } = env.google;
+  return segon ? [origenPrincipal(), { id: "2", ...segon }] : [origenPrincipal()];
+}
+
+/** Las bosses de clientes ya leídas, y hasta cuándo valen. */
+let bosses: { fins: number; llista: BossaClient[] } | null = null;
+
+/**
+ * Las bosses que salen de la columna H de "Clients" (ver lib/clients.ts).
+ *
+ * Se guardan un minuto: esto se pregunta en cada entrega que se escribe. Si
+ * Google falla y hay una lista de antes, vale la de antes; si no hay ninguna
+ * el error sube, que dar por buena una lista vacía mandaría las entregas de
+ * esas bosses al documento de siempre.
+ */
+async function bossesClients(): Promise<BossaClient[]> {
+  const doc = env.google.facturasSheetId;
+  if (!doc) return [];
+  if (bosses && Date.now() < bosses.fins) return bosses.llista;
+
+  try {
+    const data = (await sheetsFetch(
+      `/values/${encodeURIComponent(range("A2:H", TAB_CLIENTS))}`,
+      undefined,
+      doc,
+    ).catch((error: unknown) => {
+      // Sin pestaña o sin acceso no hay bosses de clientes: es lo de siempre.
+      if (/respondió (400|403|404)/.test(String(error))) return { values: [] };
+      throw error;
+    })) as { values?: unknown[][] };
+    bosses = { fins: Date.now() + 60_000, llista: bossesDeClients(data.values ?? []) };
+  } catch (error) {
+    if (!bosses) throw error;
+  }
+  return bosses.llista;
+}
+
+/**
+ * Los documentos de comandas: el de siempre, el segundo del entorno y uno
+ * por cliente con hoja propia.
+ */
+export async function origens(): Promise<Origen[]> {
+  const llista = origensFixos();
+  for (const bossa of await bossesClients()) {
+    // La misma hoja dos veces sacaría cada comanda en dos bosses.
+    if (llista.some((o) => o.sheetId === bossa.sheetId || o.id === bossa.id)) {
+      console.warn(`La bossa de "${bossa.nom}" repite hoja o id: no se enseña.`);
+      continue;
+    }
+    llista.push({ ...bossa, sheetTab: null });
+  }
   return llista;
 }
 
 /** El documento de una comanda, por el prefijo de su id. */
-export function origenDe(orderId: string): Origen {
-  const [principal, ...altres] = origens();
+export async function origenDe(orderId: string): Promise<Origen> {
+  const [principal, ...altres] = await origens();
   return altres.find((o) => orderId.startsWith(`${o.id}:`)) ?? principal;
 }
 
@@ -219,7 +276,7 @@ async function resolverPestanya(origen: Origen, full?: string | null): Promise<s
     mismo que se escribe y el que se lee.
   */
   const ancora =
-    full ?? (origen.id ? await resolverPestanya(origens()[0]) : null);
+    full ?? (origen.id ? await resolverPestanya(origenPrincipal()) : null);
 
   const tabs = await listSheetTabs(origen.sheetId);
   const mes = (ancora && parseTabMonth(ancora)) || today(env.timezone).slice(0, 7);
@@ -276,7 +333,7 @@ async function assegurarPestanya(origen: Origen, full: string): Promise<void> {
 
   const [de, pestanya] = pla.cabeceraDe
     ? [origen, pla.cabeceraDe]
-    : [origens()[0], full];
+    : [origenPrincipal(), full];
   const cabecera = (await sheetsFetch(
     `/values/${encodeURIComponent(range("1:1", pestanya))}`,
     undefined,
@@ -327,7 +384,7 @@ async function assegurarPestanya(origen: Origen, full: string): Promise<void> {
  */
 export async function readSheet(
   sheetTab?: string | null,
-  origen: Origen = origens()[0],
+  origen: Origen = origenPrincipal(),
 ): Promise<SheetSnapshot> {
   const tab =
     origen.id === "" && sheetTab ? sheetTab : await resolverPestanya(origen, sheetTab);
@@ -510,13 +567,13 @@ export async function writeDeliveries(
   */
   const perOrigen = new Map<string, DeliveryRecord[]>();
   for (const record of records) {
-    const clau = origenDe(record.orderId).id;
+    const clau = (await origenDe(record.orderId)).id;
     perOrigen.set(clau, [...(perOrigen.get(clau) ?? []), record]);
   }
 
   const result: WriteResult = { applied: [], notFound: [] };
   for (const [clau, delOrigen] of perOrigen) {
-    const origen = origens().find((o) => o.id === clau)!;
+    const origen = (await origens()).find((o) => o.id === clau)!;
     const escrit = await escriureEntregues(delOrigen, sheetTab, origen);
     result.applied.push(...escrit.applied);
     result.notFound.push(...escrit.notFound);
@@ -730,7 +787,7 @@ export async function crearComanda(
   /** La dirección elegida del buscador, si se eligió: se guarda ya resuelta. */
   lloc?: LlocGuardat | null,
   /** En qué documento: la bossa desde la que se ha pulsado "+". */
-  origen: Origen = origens()[0],
+  origen: Origen = origenPrincipal(),
 ): Promise<{
   /** La pestaña donde ha caído la fila. En el segundo documento es la suya. */
   sheetTab: string;
@@ -749,7 +806,7 @@ export async function crearComanda(
   */
   let full = sheetTab;
   if (origen.id && !origen.sheetTab) {
-    full ??= await resolverPestanya(origens()[0]);
+    full ??= await resolverPestanya(origenPrincipal());
     await assegurarPestanya(origen, full);
   }
 
@@ -838,7 +895,7 @@ export async function crearComanda(
   return {
     sheetTab: snapshot.sheetTab ?? "",
     full: origen.id
-      ? (full ?? (await resolverPestanya(origens()[0])))
+      ? (full ?? (await resolverPestanya(origenPrincipal())))
       : (snapshot.sheetTab ?? ""),
   };
 }
@@ -885,7 +942,7 @@ export async function actualitzarComanda(
    */
   lloc?: LlocGuardat | null,
 ): Promise<boolean> {
-  const snapshot = await readSheet(sheetTab, origenDe(id));
+  const snapshot = await readSheet(sheetTab, await origenDe(id));
   const order = snapshot.orders.find((o) => o.id === id);
   if (!order) return false;
 
@@ -950,8 +1007,8 @@ export async function moureComandes(
   desti: string,
   sheetTab?: string | null,
 ): Promise<{ mogudes: string[]; de: string }> {
-  const origen = origenDe(ids[0]);
-  if (ids.some((id) => origenDe(id).id !== origen.id)) {
+  const [origen, ...resta] = await Promise.all(ids.map(origenDe));
+  if (resta.some((o) => o.id !== origen.id)) {
     throw new ErrorAccionable("Les comandes són de documents diferents.");
   }
   const snapshot = await readSheet(sheetTab, origen);
@@ -1465,20 +1522,34 @@ export async function writeClients(clients: ClienteFacturacion[]): Promise<void>
   await asegurarTab(TAB_CLIENTS, CABECERA_CLIENTS);
   const doc = docFacturas();
 
+  // La columna H no viene de la app: se relee y cada hoja sigue a su cliente.
+  const abans = (await sheetsFetch(
+    `/values/${encodeURIComponent(range("A2:H", TAB_CLIENTS))}`,
+    undefined,
+    doc,
+  )) as { values?: unknown[][] };
+  const fulls = fullsDe(abans.values ?? [], clients);
+
   if (clients.length > 0) {
     await sheetsFetch(
-      `/values/${encodeURIComponent(range(`A2:G${clients.length + 1}`, TAB_CLIENTS))}` +
+      `/values/${encodeURIComponent(range(`A2:H${clients.length + 1}`, TAB_CLIENTS))}` +
         `?valueInputOption=USER_ENTERED`,
-      { method: "PUT", body: JSON.stringify({ values: clients.map(clientAFila) }) },
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          values: clients.map((client, i) => [...clientAFila(client), fulls[i]]),
+        }),
+      },
       doc,
     );
   }
 
   await sheetsFetch(
-    `/values/${encodeURIComponent(range(`A${clients.length + 2}:G`, TAB_CLIENTS))}:clear`,
+    `/values/${encodeURIComponent(range(`A${clients.length + 2}:H`, TAB_CLIENTS))}:clear`,
     { method: "POST", body: "{}" },
     doc,
   );
+  bosses = null;
 }
 
 /* ── Quién emite ────────────────────────────────────────────────────────── */

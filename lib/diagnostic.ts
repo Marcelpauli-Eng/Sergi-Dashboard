@@ -6,6 +6,7 @@ import {
   TAB_FACTURAS,
   listSheetTabs,
   origens,
+  origensFixos,
   puedeEscribir,
   readSheet,
   type SheetDoc,
@@ -70,7 +71,7 @@ function porQueNoSeAbre(error: unknown, id: string): { detalle: string; arreglo:
 
 async function comprobarDocumento(
   id: string,
-  doc: SheetDoc,
+  doc: SheetDoc | `bossa-${string}`,
   etiqueta: string,
   pestañasEsperadas: string[],
 ): Promise<Comprobacion[]> {
@@ -242,12 +243,15 @@ export async function comprobarConfiguracion(timezone: string): Promise<Comproba
   }
 
   // ── El segundo documento de comandas, si lo hay ────────────────────────
-  const segon = origens()[1];
-  if (segon) {
-    const etiqueta = `Segunda hoja ("${segon.nom}")`;
+  // Y las bosses de clientes (columna H de "Clients"), igual que el segundo.
+  const altres = (await origens().catch(() => origensFixos())).slice(1);
+  for (const segon of altres) {
+    const fix = segon.id === "2";
+    const clau = fix ? "segon" : (`bossa-${segon.id}` as const);
+    const etiqueta = fix ? `Segunda hoja ("${segon.nom}")` : `Bossa de "${segon.nom}"`;
     if (segon.sheetId === repartos) {
       salida.push({
-        id: "segon",
+        id: clau,
         titulo: etiqueta,
         estado: "error",
         detalle: "GOOGLE_SHEET_ID_2 apunta al MISMO documento que GOOGLE_SHEET_ID.",
@@ -256,26 +260,27 @@ export async function comprobarConfiguracion(timezone: string): Promise<Comproba
           "documento de la otra empresa, o quita la variable.",
       });
     } else {
-      const acceso = await comprobarDocumento(segon.sheetId, "segon", etiqueta, []);
+      const acceso = await comprobarDocumento(segon.sheetId, clau, etiqueta, []);
       salida.push(...acceso);
       if (acceso.every((c) => c.estado === "ok")) {
         try {
           const hoja = await readSheet(undefined, segon);
           salida.push({
-            id: "segon-full",
+            id: `${clau}-full`,
             titulo: `${etiqueta}: pestaña`,
             estado: "ok",
             detalle: `Se está leyendo "${hoja.sheetTab}": ${hoja.orders.length} comandas.`,
           });
         } catch (error) {
           salida.push({
-            id: "segon-full",
+            id: `${clau}-full`,
             titulo: `${etiqueta}: pestaña`,
             estado: "error",
             detalle: (error instanceof Error ? error.message : String(error)).slice(0, 300),
-            arreglo:
-              "Si esa hoja no va por meses, pon en GOOGLE_SHEET_TAB_2 el nombre " +
-              "exacto de la pestaña con las comandas.",
+            arreglo: fix
+              ? "Si esa hoja no va por meses, pon en GOOGLE_SHEET_TAB_2 el nombre " +
+                "exacto de la pestaña con las comandas."
+              : "",
           });
         }
       }

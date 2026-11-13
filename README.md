@@ -222,6 +222,18 @@ Si otra empresa también te pasa portes en su propia hoja, pon su ID en
   `GOOGLE_SHEET_TAB_2` y no se crea nada.
 - Los nombres de las bosses: `GOOGLE_SHEET_NOM` y `GOOGLE_SHEET_NOM_2`.
 
+#### Una bossa por cliente (opcional)
+
+Para más de dos documentos no hace falta tocar el entorno. En el documento
+privado, pestaña `Clients`, pega en la **columna H** de un cliente la URL (o
+el ID) de su hoja de comandas, compartida como Editor con la cuenta de
+servicio. En un minuto sale `Bossa · <nombre del cliente>` y se comporta
+como la del segundo documento: la hoja puede estar en blanco, el mes se crea
+solo con tu cabecera.
+
+La columna H no sale en ninguna pantalla de la app, y guardar los clientes
+desde Ajustes la conserva. Ajustes → Diagnòstic comprueba cada una.
+
 Las comandas del segundo llevan `2:` delante de su identificador interno
 (no del número que se enseña ni del que va a la factura), para que un `748`
 de cada empresa no se pisen. Si no se puede leer, el primero sigue

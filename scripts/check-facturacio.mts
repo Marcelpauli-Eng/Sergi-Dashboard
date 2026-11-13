@@ -16,6 +16,9 @@ import {
   clientAFila,
   filaAClient,
   parseClients,
+  bossesDeClients,
+  fullsDe,
+  idDeBossa,
 } from "../lib/clients.ts";
 import {
   CABECERA_EMISSOR,
@@ -156,6 +159,39 @@ assert.deepEqual(CABECERA_EMISSOR, [
 {
   const fila = emissorAFila({ ...DATOS_POR_DEFECTO.emisor, telefono: "930000000" });
   assert.equal(fila[CABECERA_EMISSOR.indexOf("Telèfon")], "'930000000");
+}
+
+// ── La hoja de cada cliente (columna H) le sigue al guardar ───────────────
+{
+  const abans = [
+    ["35", "PROVA", "", "", "", "", "", "https://docs.google.com/spreadsheets/d/AAA111/edit"],
+    ["12", "ALTRE", "", "", "", "", "", ""],
+    ["", "SENSE CODI", "", "", "", "", "", "BBB222"],
+  ];
+  const c = (codigo: string, nombre: string) => ({
+    codigo, nombre, nif: "", direccion: "", cp: "", poblacion: "", provincia: "",
+  });
+  assert.deepEqual(
+    // Reordenados, uno borrado, uno renombrado y uno nuevo.
+    fullsDe(abans, [c("", "SENSE CODI"), c("35", "PROVA SL"), c("99", "NOU")]),
+    ["BBB222", "https://docs.google.com/spreadsheets/d/AAA111/edit", ""],
+    "una hoja ha acabado en la fila de otro cliente",
+  );
+
+  // Solo hay bossa con la H puesta, y la URL se queda en el ID.
+  const bosses = bossesDeClients(abans);
+  assert.deepEqual(
+    bosses.map((b) => [b.nom, b.sheetId]),
+    [["PROVA", "AAA111"], ["SENSE CODI", "BBB222"]],
+  );
+
+  // El id va delante de cada comanda ("<id>:748"): ni vacío, ni el del
+  // segundo documento, ni con ":", distinto por bossa, y el mismo aunque el
+  // cliente cambie de nombre o de código (hay entregas en cola con él).
+  const ids = bosses.map((b) => b.id);
+  for (const id of ids) assert.ok(id !== "" && id !== "2" && !id.includes(":"), id);
+  assert.equal(new Set(ids).size, ids.length, "dos bosses con el mismo id");
+  assert.equal(idDeBossa("AAA111"), ids[0], "el id no sale solo de la hoja");
 }
 
 console.log(
