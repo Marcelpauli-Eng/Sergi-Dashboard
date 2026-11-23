@@ -178,18 +178,28 @@ export default function Factura({
   /**
    * Las comandas que le tocan a este cliente.
    *
-   * Una comanda sin cliente asignado sale siempre: hoy la columna "Client
-   * facturació" del full está vacía en todas, así que con un solo cliente
-   * esto no filtra nada y la pantalla se comporta igual que antes. En cuanto
-   * alguien empieza a rellenarla, las de OTRO cliente desaparecen de aquí.
+   * Una comanda sin cliente asignado sale con cualquier cliente que no
+   * tenga bossa propia: la columna "Client facturació" casi nunca está
+   * rellenada, y con un solo cliente esto no filtra nada. Las que llevan
+   * cliente (todas las de la bossa de un cliente) solo salen con el suyo.
    */
   const agrupar = origens.length > 1;
 
   const delClient = useMemo(() => {
-    const llista = entregats.filter(
-      (s) =>
-        !s.billingClient ||
-        clientePara(datos, s.billingClient).codigo === client.codigo,
+    /*
+      Cada bossa va aparte. La de un cliente es suya: `readSheet` ya pone su
+      código a todas sus comandas, así que solo salen al facturarle a él. Y a
+      un cliente con bossa propia no se le cuelan las comandas sin cliente
+      de las otras bosses: así la DRUMI de Green PVC no acabó en la de
+      WinkaPlast, ni las de WinkaPlast pueden acabar en la de Green PVC.
+    */
+    const codi = client.codigo.trim().toLowerCase();
+    const teBossa =
+      codi !== "" && origens.some((o) => o.client?.trim().toLowerCase() === codi);
+    const llista = entregats.filter((s) =>
+      s.billingClient
+        ? clientePara(datos, s.billingClient).codigo === client.codigo
+        : !teBossa,
     );
     if (!agrupar) return llista;
     // Por documento, en el orden de las bosses; dentro, como venían (el
@@ -216,6 +226,7 @@ export default function Factura({
       seleccionades.map((s) => ({
         comanda: etiquetaComanda(s),
         importe: s.price as number,
+        id: s.id,
         ...(agrupar ? { grup: nomOrigen(origens, s) } : {}),
       })),
     [seleccionades, agrupar, origens],

@@ -136,7 +136,7 @@ export default function Factures({
     // coincide con el nombre de ningún documento, y así no se esconde nunca
     // por una factura de otra bossa.
     const numero = facturaDe(
-      etiquetaComanda(s),
+      s,
       nomDe(s) ?? (s.origen ? `\u0000${s.origen}` : undefined),
     );
     if (numero === null) perFacturar.push(s);

@@ -221,6 +221,11 @@ export interface OrigenManifest {
   /** La pestaña que se ha leído. Vacía si no se ha podido leer. */
   sheetTab: string;
   /**
+   * Solo la bossa de un cliente: su código. Un cliente con bossa propia solo
+   * factura las comandas de su bossa (o las que lleven su código).
+   */
+  client?: string;
+  /**
    * Por qué no se ha podido leer. Solo el segundo documento puede fallar
    * sin tumbar el manifiesto: sin el primero no hay app.
    */
@@ -304,7 +309,7 @@ export interface FacturaEmitida {
    */
   estat: EstatFactura;
   /** `grup` es el documento de donde salió cada línea. Ver `LineaFactura`. */
-  lineas: { comanda: string; importe: number; grup?: string }[];
+  lineas: { comanda: string; importe: number; grup?: string; id?: string }[];
   base: number;
   iva: number;
   irpf: number;

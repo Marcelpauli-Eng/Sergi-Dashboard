@@ -162,6 +162,13 @@ export interface LineaFactura {
    * documento, y entonces la factura es la de siempre.
    */
   grup?: string;
+  /**
+   * El id de la comanda en la app ("748", "748#2", "<bossa>:748"), que lleva
+   * delante el de su bossa. Es lo que dice, sin confusión posible, qué
+   * comanda está facturada: el nombre se repite de una bossa a otra y el id
+   * no. Las facturas de antes no lo tienen. Ver `comandesFacturades`.
+   */
+  id?: string;
 }
 
 /**
@@ -316,23 +323,24 @@ export function parseImportesFactura(cru: string): number[] {
 
 /* ── Lo que ya está facturado ───────────────────────────────────────────── */
 
+type LiniaEmesa = { comanda: string; grup?: string; id?: string };
+
 /**
  * ¿En qué factura emitida del mismo mes está ya esta comanda?
  *
  * Devuelve un buscador, que contesta con el número de la factura o `null`.
- * Las facturas no guardan el id del pedido, solo lo que se imprime: la
- * etiqueta de la comanda ("748" o "748 (1/3)", ver `etiquetaComanda`), el
- * documento de donde sale (`grup`) y la pestaña del mes (`periodo`). Así que
- * la comanda se reconoce por esas tres cosas.
  *
- * - El mes cuenta: los números de comanda se repiten de un mes a otro.
- * - El documento cuenta siempre: cada bossa numera por su cuenta, y la "12"
- *   del full principal no es la "12" de la bossa de un cliente.
- * - Una línea SIN documento es del full principal (`nomPrincipal`). Solo se
- *   guarda `grup` cuando hay más de un documento, así que una factura sin él
- *   es de cuando el principal era el único. Tratarla como "de cualquier
- *   bossa" escondía comandas de las bosses de cliente que no estaban
- *   facturadas en ningún sitio.
+ * Cada bossa va aparte y ninguna puede tapar a otra:
+ *
+ * - Las líneas con `id` (todas las emitidas desde que existe) se buscan por
+ *   ese id y solo por él. El id lleva delante el de la bossa, así que la
+ *   "DRUMI" de una bossa no es nunca la "DRUMI" de otra.
+ * - Las líneas antiguas, sin id, solo tienen lo que se imprime: la etiqueta
+ *   ("748" o "748 (1/3)"), el documento (`grup`) y el mes. Se reconocen por
+ *   documento + etiqueta, y una sin documento es del full principal
+ *   (`nomPrincipal`): `grup` solo se guarda cuando hay más de uno, así que
+ *   sin él la factura es de cuando el principal era el único.
+ * - El mes cuenta siempre: los números se repiten de un mes a otro.
  *
  * Al borrar una factura sus líneas dejan de estar aquí, y las comandas
  * vuelven a salir en el generador solas.
@@ -341,22 +349,30 @@ export function comandesFacturades(
   facturas: readonly {
     numero: number;
     periodo: string;
-    lineas: readonly { comanda: string; grup?: string }[];
+    lineas: readonly LiniaEmesa[];
   }[],
   periodo: string,
   nomPrincipal: string,
-): (comanda: string, grup?: string) => number | null {
+): (
+  comanda: { codi: string; part: number; parts: number; id: string },
+  grup?: string,
+) => number | null {
   const mes = periodo.trim();
   const principal = nomPrincipal.trim();
-  const clau = (comanda: string, grup?: string) =>
-    `${(grup ?? "").trim() || principal}\u0000${comanda.trim()}`;
+  const clau = (etiqueta: string, grup?: string) =>
+    `${(grup ?? "").trim() || principal}\u0000${etiqueta.trim()}`;
 
-  const on = new Map<string, number>();
+  const perId = new Map<string, number>();
+  const antigues = new Map<string, number>();
   for (const f of facturas) {
     if (f.periodo.trim() !== mes) continue;
-    for (const l of f.lineas) on.set(clau(l.comanda, l.grup), f.numero);
+    for (const l of f.lineas) {
+      if (l.id?.trim()) perId.set(l.id.trim(), f.numero);
+      else antigues.set(clau(l.comanda, l.grup), f.numero);
+    }
   }
-  return (comanda, grup) => on.get(clau(comanda, grup)) ?? null;
+  return (comanda, grup) =>
+    perId.get(comanda.id) ?? antigues.get(clau(etiquetaComanda(comanda), grup)) ?? null;
 }
 
 /**
@@ -383,29 +399,34 @@ export class ComandesJaFacturadesError extends Error {
 /**
  * Lanza `ComandesJaFacturadesError` si alguna línea ya está facturada.
  *
- * Sin `nomPrincipal` (un móvil con la versión anterior de la app) no se
- * puede saber de qué bossa es una línea sin documento, y solo se comparan
- * las que lo llevan: mejor dejar pasar una que bloquear una factura buena.
+ * Las líneas nuevas con id se comprueban por id contra las que lo tienen, y
+ * por bossa + etiqueta contra las antiguas (ver `comandesFacturades`). Sin
+ * `nomPrincipal` (un móvil con una versión anterior) no se sabe de qué bossa
+ * es una línea sin documento, y esas se saltan: mejor dejar pasar una que
+ * bloquear una factura buena.
  */
 export function comprovarNoFacturades(
   emeses: Parameters<typeof comandesFacturades>[0],
-  nova: {
-    periodo: string;
-    lineas: readonly { comanda: string; grup?: string }[];
-    nomPrincipal?: string;
-  },
+  nova: { periodo: string; lineas: readonly LiniaEmesa[]; nomPrincipal?: string },
 ): void {
   const principal = nova.nomPrincipal?.trim() ?? "";
-  const facturada = comandesFacturades(
-    principal
-      ? emeses
-      : emeses.map((f) => ({ ...f, lineas: f.lineas.filter((l) => l.grup?.trim()) })),
-    nova.periodo,
-    // Sin nombre, una clave que no puede coincidir con ningún documento.
-    principal || "\u0000",
-  );
+  const mes = nova.periodo.trim();
+  const ids = new Set<string>();
+  const antigues = new Set<string>();
+  const clau = (l: LiniaEmesa) => `${l.grup?.trim() || principal}\u0000${l.comanda.trim()}`;
+  for (const f of emeses) {
+    if (f.periodo.trim() !== mes) continue;
+    for (const l of f.lineas) {
+      if (l.id?.trim()) ids.add(l.id.trim());
+      else if (principal || l.grup?.trim()) antigues.add(clau(l));
+    }
+  }
   const repetides = nova.lineas
-    .filter((l) => (principal || l.grup?.trim()) && facturada(l.comanda, l.grup) !== null)
+    .filter(
+      (l) =>
+        (l.id?.trim() && ids.has(l.id.trim())) ||
+        ((principal || l.grup?.trim()) && antigues.has(clau(l))),
+    )
     .map((l) => l.comanda);
   if (repetides.length > 0) throw new ComandesJaFacturadesError(repetides);
 }

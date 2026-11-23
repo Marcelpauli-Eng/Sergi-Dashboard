@@ -107,6 +107,11 @@ export interface BossaClient {
   id: string;
   nom: string;
   sheetId: string;
+  /**
+   * El código del cliente. Sus comandas se le facturan a él y a nadie más:
+   * ver `readSheet` y el filtro de `components/factura.tsx`.
+   */
+  client: string;
 }
 
 /**
@@ -133,7 +138,7 @@ export function bossesDeClients(filas: unknown[][]): BossaClient[] {
     const full = text(fila[COL_FULL]);
     if (client === null || full === "") continue;
     const sheetId = sheetIdFrom(full);
-    bosses.push({ id: idDeBossa(sheetId), nom: client.nombre, sheetId });
+    bosses.push({ id: idDeBossa(sheetId), nom: client.nombre, sheetId, client: client.codigo });
   }
   return bosses;
 }
