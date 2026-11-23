@@ -131,7 +131,14 @@ export default function Factures({
   /** Las escondidas, con la factura que las tiene: nada desaparece sin decir dónde ha ido. */
   const facturades: { stop: Stop; numero: number }[] = [];
   for (const s of entregats) {
-    const numero = facturaDe(etiquetaComanda(s), nomDe(s));
+    // Una comanda de una bossa que no está en la lista (no se ha podido
+    // leer, o se ha quitado) no es del principal: se busca con su id, que no
+    // coincide con el nombre de ningún documento, y así no se esconde nunca
+    // por una factura de otra bossa.
+    const numero = facturaDe(
+      etiquetaComanda(s),
+      nomDe(s) ?? (s.origen ? `\u0000${s.origen}` : undefined),
+    );
     if (numero === null) perFacturar.push(s);
     else facturades.push({ stop: s, numero });
   }
