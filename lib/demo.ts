@@ -3,6 +3,7 @@ import { today, addDays, formatSheetTimestamp } from "./dates";
 import { navUrlFor, fullRouteUrlFor } from "./routing";
 import {
   DATOS_POR_DEFECTO,
+  comprovarNoFacturades,
   type ClienteFacturacion,
   type DatosFacturacion,
 } from "./factura";
@@ -427,6 +428,7 @@ export function guardarDemoEmissor(emissor: DatosFacturacion["emisor"]): void {
 export function emitirFacturaDemo(
   datos: Omit<FacturaEmitida, "numero"> & { primerNumero: number },
 ): FacturaEmitida {
+  comprovarNoFacturades(facturasDemo, datos);
   const numero =
     facturasDemo.length > 0
       ? Math.max(...facturasDemo.map((f) => f.numero)) + 1

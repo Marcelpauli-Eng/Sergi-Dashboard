@@ -8,7 +8,7 @@ import {
   pestanyaACrear,
   planDelFull,
 } from "./sheet-tab";
-import { parseImportesFactura } from "./factura.ts";
+import { comprovarNoFacturades, parseImportesFactura } from "./factura.ts";
 import {
   CABECERA_CLIENTS,
   TAB_CLIENTS,
@@ -1463,6 +1463,8 @@ export async function emitirFactura(datos: {
   await asegurarTabFacturas();
 
   const emitidas = await readFacturas();
+  // Una comanda no se factura dos veces. Ver `comandesFacturades`.
+  comprovarNoFacturades(emitidas, datos);
   const numero =
     emitidas.length > 0
       ? Math.max(...emitidas.map((f) => f.numero)) + 1

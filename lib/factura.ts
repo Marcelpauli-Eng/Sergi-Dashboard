@@ -313,3 +313,88 @@ export function parseImportesFactura(cru: string): number[] {
 
   return partes.map((parte) => parseImporte(parte) ?? 0);
 }
+
+/* ── Lo que ya está facturado ───────────────────────────────────────────── */
+
+/**
+ * ¿Esta comanda ya está en alguna factura emitida del mismo mes?
+ *
+ * Devuelve un comprobador y no una lista porque las facturas no guardan el
+ * id del pedido, solo lo que se imprime: la etiqueta de la comanda ("748" o
+ * "748 (1/3)", ver `etiquetaComanda`), el documento de donde sale (`grup`,
+ * solo cuando había más de uno) y la pestaña del mes (`periodo`). Así que la
+ * comanda se reconoce por esas tres cosas.
+ *
+ * - El mes cuenta: los números de comanda se repiten de un mes a otro.
+ * - El documento cuenta cuando está: las dos bosses tienen numeraciones
+ *   distintas y las dos pueden tener una "748". Una línea SIN documento (las
+ *   facturas de cuando solo había uno) tapa esa etiqueta en cualquiera, y
+ *   una comanda sin documento conocido se tapa con cualquier línea de esa
+ *   etiqueta: es preferible esconder de más que facturar dos veces.
+ *
+ * Al borrar una factura sus líneas dejan de estar aquí, y las comandas
+ * vuelven a salir en el generador solas.
+ */
+export function comandesFacturades(
+  facturas: readonly {
+    periodo: string;
+    lineas: readonly { comanda: string; grup?: string }[];
+  }[],
+  periodo: string,
+): (comanda: string, grup?: string) => boolean {
+  const mes = periodo.trim();
+  const ambGrup = new Set<string>();
+  const senseGrup = new Set<string>();
+  /** Todas las etiquetas con documento, para una comanda que no sabe el suyo. */
+  const totes = new Set<string>();
+  for (const f of facturas) {
+    if (f.periodo.trim() !== mes) continue;
+    for (const l of f.lineas) {
+      const comanda = l.comanda.trim();
+      const grup = (l.grup ?? "").trim();
+      if (grup) {
+        ambGrup.add(`${grup}\u0000${comanda}`);
+        totes.add(comanda);
+      } else senseGrup.add(comanda);
+    }
+  }
+  return (comanda, grup) => {
+    const c = comanda.trim();
+    if (senseGrup.has(c)) return true;
+    const g = (grup ?? "").trim();
+    return g === "" ? totes.has(c) : ambGrup.has(`${g}\u0000${c}`);
+  };
+}
+
+/**
+ * Se ha intentado emitir una factura con comandas que ya están en otra.
+ *
+ * Lo lanza el servidor justo antes de registrarla: la pantalla ya las
+ * esconde, pero con dos móviles, o con el listado sin cargar, la única
+ * comprobación que vale es la que se hace contra la hoja.
+ */
+export class ComandesJaFacturadesError extends Error {
+  readonly comandes: string[];
+
+  constructor(comandes: string[]) {
+    super(
+      comandes.length === 1
+        ? `La comanda ${comandes[0]} ja està en una altra factura d'aquest mes.`
+        : `Les comandes ${comandes.join(", ")} ja estan en una altra factura d'aquest mes.`,
+    );
+    this.comandes = comandes;
+    this.name = "ComandesJaFacturadesError";
+  }
+}
+
+/** Lanza `ComandesJaFacturadesError` si alguna línea ya está facturada. */
+export function comprovarNoFacturades(
+  emeses: Parameters<typeof comandesFacturades>[0],
+  nova: { periodo: string; lineas: readonly { comanda: string; grup?: string }[] },
+): void {
+  const jaFacturada = comandesFacturades(emeses, nova.periodo);
+  const repetides = nova.lineas
+    .filter((l) => jaFacturada(l.comanda, l.grup))
+    .map((l) => l.comanda);
+  if (repetides.length > 0) throw new ComandesJaFacturadesError(repetides);
+}
