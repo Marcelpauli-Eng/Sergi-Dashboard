@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isConfigError } from "@/lib/env";
+import { ComandesJaFacturadesError } from "@/lib/factura";
 import { getSession } from "@/lib/session";
 import {
   actualizarEstadoFactura,
@@ -108,16 +109,18 @@ export async function POST(request: Request) {
     );
   }
 
-  if (isDemoMode()) {
-    return NextResponse.json({
-      factura: emitirFacturaDemo({ ...parsed.data, estat: "emesa" }),
-    });
-  }
-
   try {
-    const factura = await emitirFactura(parsed.data);
+    const factura = isDemoMode()
+      ? emitirFacturaDemo({ ...parsed.data, estat: "emesa" })
+      : await emitirFactura(parsed.data);
     return NextResponse.json({ factura });
   } catch (error) {
+    if (error instanceof ComandesJaFacturadesError) {
+      return NextResponse.json(
+        { error: error.message, comandes: error.comandes },
+        { status: 409 },
+      );
+    }
     console.error("Error emitiendo la factura:", error);
     return fallo(error, "No se ha podido registrar la factura en el Google Sheet");
   }

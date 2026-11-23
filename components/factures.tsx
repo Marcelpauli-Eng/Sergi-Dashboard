@@ -8,6 +8,8 @@ import { EscenaFactura } from "@/components/halloween";
 import type { FacturaEmitida, OrigenManifest, Stop } from "@/lib/types";
 import {
   clientePara,
+  comandesFacturades,
+  etiquetaComanda,
   euros,
   fechaCorta,
   formatearNumero,
@@ -97,8 +99,39 @@ export default function Factures({
   const [facturant, setFacturant] = useState(false);
   // Cambia al emitir una factura: fuerza a releer el listado.
   const [recarrega, setRecarrega] = useState(0);
+  /**
+   * Hay una factura recién emitida y el listado aún no la tiene.
+   *
+   * Se relee al CERRAR el generador y no al emitir: al releer, sus comandas
+   * pasan a estar facturadas y salen de `perFacturar`, y el generador, que
+   * aún está abierto enseñando la factura para imprimirla, se quedaría sin
+   * líneas debajo del botón de imprimir.
+   */
+  const [emesaSenseRellegir, setEmesaSenseRellegir] = useState<FacturaEmitida | null>(null);
 
-  const pendentsDeFacturar = entregats.filter((s) => s.price !== null && s.price > 0);
+  /*
+    Las entregas que todavía no están en ninguna factura de este mes.
+
+    Una comanda facturada ya no sale en el generador, para no cobrarla dos
+    veces; si se borra su factura, vuelve a salir sola, porque esto se
+    calcula a partir del listado de emitidas y no de una marca en el pedido.
+
+    Mientras el listado no ha llegado no se sabe qué está facturado, así que
+    el botón de generar espera (ver más abajo). Si no se ha podido leer, se
+    enseñan todas: sin cobertura tampoco se puede emitir, y el servidor
+    rechaza de todos modos una factura con comandas ya facturadas.
+  */
+  const jaFacturada = comandesFacturades(facturas ?? [], mes);
+  const perFacturar = entregats.filter(
+    (s) =>
+      !jaFacturada(
+        etiquetaComanda(s),
+        origens.find((o) => o.id === (s.origen ?? ""))?.nom,
+      ),
+  );
+  const facturades = entregats.length - perFacturar.length;
+
+  const pendentsDeFacturar = perFacturar.filter((s) => s.price !== null && s.price > 0);
   // Lo que se va a facturar, en euros. El recuento de comandas no dice si
   // son cuatro portales o el mes entero, y es lo primero que se mira.
   const aFacturar = pendentsDeFacturar.reduce((total, s) => total + (s.price ?? 0), 0);
@@ -200,34 +233,53 @@ export default function Factures({
               ? "entrega amb import"
               : "entregues amb import"}
           </p>
-          {entregats.length > pendentsDeFacturar.length && (
+          {perFacturar.length > pendentsDeFacturar.length && (
             <p className="mt-1.5 text-sm text-warning-foreground">
-              {entregats.length - pendentsDeFacturar.length} sense import: no hi
+              {perFacturar.length - pendentsDeFacturar.length} sense import: no hi
               entraran.
+            </p>
+          )}
+          {facturades > 0 && (
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {facturades} ja {facturades === 1 ? "facturada" : "facturades"}: no
+              tornen a sortir. Si esborres la factura, sí.
             </p>
           )}
         </div>
         <Button
           size="touch"
           className="w-full"
-          disabled={entregats.length === 0}
+          disabled={perFacturar.length === 0 || (facturas === null && !error)}
           onClick={() => setFacturant(true)}
         >
           <FileCheck strokeWidth={2.2} />
-          Generar factura
+          {facturas === null && !error ? "Carregant factures…" : "Generar factura"}
         </Button>
       </div>
 
       {facturant && (
         <Factura
-          entregats={entregats}
+          entregats={perFacturar}
           origens={origens}
           mes={mes}
           datos={datos}
           online={online}
           onImporte={onImporte}
-          onEmesa={() => setRecarrega((n) => n + 1)}
-          onTancar={() => setFacturant(false)}
+          onEmesa={setEmesaSenseRellegir}
+          onTancar={() => {
+            setFacturant(false);
+            if (emesaSenseRellegir) {
+              // Entra ya en la lista, para que sus comandas desaparezcan
+              // en el acto; la relectura llega detrás y la confirma.
+              const nova = emesaSenseRellegir;
+              setFacturas((previas) => [
+                nova,
+                ...(previas ?? []).filter((f) => f.numero !== nova.numero),
+              ]);
+              setEmesaSenseRellegir(null);
+              setRecarrega((n) => n + 1);
+            }
+          }}
         />
       )}
 

@@ -147,7 +147,7 @@ export default function Factura({
   /** Guarda el importe de un pedido. Reescribe la misma celda del Sheet. */
   onImporte: (orderId: string, importe: number | null) => void;
   /** Avisa de que ya hay una factura nueva, para refrescar el listado. */
-  onEmesa?: () => void;
+  onEmesa?: (factura: FacturaEmitida) => void;
   onTancar: () => void;
 }) {
   /**
@@ -301,7 +301,7 @@ export default function Factura({
         throw new Error(cuerpo?.error ?? "No s'ha pogut emetre la factura");
       }
       setEmitida(cuerpo.factura as FacturaEmitida);
-      onEmesa?.();
+      onEmesa?.(cuerpo.factura as FacturaEmitida);
     } catch (error) {
       setErrorEmision(error instanceof Error ? error.message : "Error desconegut");
     } finally {
