@@ -427,8 +427,9 @@ export function guardarDemoEmissor(emissor: DatosFacturacion["emisor"]): void {
 
 export function emitirFacturaDemo(
   datos: Omit<FacturaEmitida, "numero"> & { primerNumero: number },
+  nomPrincipal?: string,
 ): FacturaEmitida {
-  comprovarNoFacturades(facturasDemo, datos);
+  comprovarNoFacturades(facturasDemo, { ...datos, nomPrincipal });
   const numero =
     facturasDemo.length > 0
       ? Math.max(...facturasDemo.map((f) => f.numero)) + 1

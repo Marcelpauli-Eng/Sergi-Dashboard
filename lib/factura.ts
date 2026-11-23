@@ -317,53 +317,46 @@ export function parseImportesFactura(cru: string): number[] {
 /* ── Lo que ya está facturado ───────────────────────────────────────────── */
 
 /**
- * ¿Esta comanda ya está en alguna factura emitida del mismo mes?
+ * ¿En qué factura emitida del mismo mes está ya esta comanda?
  *
- * Devuelve un comprobador y no una lista porque las facturas no guardan el
- * id del pedido, solo lo que se imprime: la etiqueta de la comanda ("748" o
- * "748 (1/3)", ver `etiquetaComanda`), el documento de donde sale (`grup`,
- * solo cuando había más de uno) y la pestaña del mes (`periodo`). Así que la
- * comanda se reconoce por esas tres cosas.
+ * Devuelve un buscador, que contesta con el número de la factura o `null`.
+ * Las facturas no guardan el id del pedido, solo lo que se imprime: la
+ * etiqueta de la comanda ("748" o "748 (1/3)", ver `etiquetaComanda`), el
+ * documento de donde sale (`grup`) y la pestaña del mes (`periodo`). Así que
+ * la comanda se reconoce por esas tres cosas.
  *
  * - El mes cuenta: los números de comanda se repiten de un mes a otro.
- * - El documento cuenta cuando está: las dos bosses tienen numeraciones
- *   distintas y las dos pueden tener una "748". Una línea SIN documento (las
- *   facturas de cuando solo había uno) tapa esa etiqueta en cualquiera, y
- *   una comanda sin documento conocido se tapa con cualquier línea de esa
- *   etiqueta: es preferible esconder de más que facturar dos veces.
+ * - El documento cuenta siempre: cada bossa numera por su cuenta, y la "12"
+ *   del full principal no es la "12" de la bossa de un cliente.
+ * - Una línea SIN documento es del full principal (`nomPrincipal`). Solo se
+ *   guarda `grup` cuando hay más de un documento, así que una factura sin él
+ *   es de cuando el principal era el único. Tratarla como "de cualquier
+ *   bossa" escondía comandas de las bosses de cliente que no estaban
+ *   facturadas en ningún sitio.
  *
  * Al borrar una factura sus líneas dejan de estar aquí, y las comandas
  * vuelven a salir en el generador solas.
  */
 export function comandesFacturades(
   facturas: readonly {
+    numero: number;
     periodo: string;
     lineas: readonly { comanda: string; grup?: string }[];
   }[],
   periodo: string,
-): (comanda: string, grup?: string) => boolean {
+  nomPrincipal: string,
+): (comanda: string, grup?: string) => number | null {
   const mes = periodo.trim();
-  const ambGrup = new Set<string>();
-  const senseGrup = new Set<string>();
-  /** Todas las etiquetas con documento, para una comanda que no sabe el suyo. */
-  const totes = new Set<string>();
+  const principal = nomPrincipal.trim();
+  const clau = (comanda: string, grup?: string) =>
+    `${(grup ?? "").trim() || principal}\u0000${comanda.trim()}`;
+
+  const on = new Map<string, number>();
   for (const f of facturas) {
     if (f.periodo.trim() !== mes) continue;
-    for (const l of f.lineas) {
-      const comanda = l.comanda.trim();
-      const grup = (l.grup ?? "").trim();
-      if (grup) {
-        ambGrup.add(`${grup}\u0000${comanda}`);
-        totes.add(comanda);
-      } else senseGrup.add(comanda);
-    }
+    for (const l of f.lineas) on.set(clau(l.comanda, l.grup), f.numero);
   }
-  return (comanda, grup) => {
-    const c = comanda.trim();
-    if (senseGrup.has(c)) return true;
-    const g = (grup ?? "").trim();
-    return g === "" ? totes.has(c) : ambGrup.has(`${g}\u0000${c}`);
-  };
+  return (comanda, grup) => on.get(clau(comanda, grup)) ?? null;
 }
 
 /**
@@ -387,14 +380,32 @@ export class ComandesJaFacturadesError extends Error {
   }
 }
 
-/** Lanza `ComandesJaFacturadesError` si alguna línea ya está facturada. */
+/**
+ * Lanza `ComandesJaFacturadesError` si alguna línea ya está facturada.
+ *
+ * Sin `nomPrincipal` (un móvil con la versión anterior de la app) no se
+ * puede saber de qué bossa es una línea sin documento, y solo se comparan
+ * las que lo llevan: mejor dejar pasar una que bloquear una factura buena.
+ */
 export function comprovarNoFacturades(
   emeses: Parameters<typeof comandesFacturades>[0],
-  nova: { periodo: string; lineas: readonly { comanda: string; grup?: string }[] },
+  nova: {
+    periodo: string;
+    lineas: readonly { comanda: string; grup?: string }[];
+    nomPrincipal?: string;
+  },
 ): void {
-  const jaFacturada = comandesFacturades(emeses, nova.periodo);
+  const principal = nova.nomPrincipal?.trim() ?? "";
+  const facturada = comandesFacturades(
+    principal
+      ? emeses
+      : emeses.map((f) => ({ ...f, lineas: f.lineas.filter((l) => l.grup?.trim()) })),
+    nova.periodo,
+    // Sin nombre, una clave que no puede coincidir con ningún documento.
+    principal || "\u0000",
+  );
   const repetides = nova.lineas
-    .filter((l) => jaFacturada(l.comanda, l.grup))
+    .filter((l) => (principal || l.grup?.trim()) && facturada(l.comanda, l.grup) !== null)
     .map((l) => l.comanda);
   if (repetides.length > 0) throw new ComandesJaFacturadesError(repetides);
 }

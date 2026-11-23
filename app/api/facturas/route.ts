@@ -68,6 +68,11 @@ const schema = z.object({
   irpf: z.number().min(0),
   total: z.number().min(0),
   primerNumero: z.number().int().min(1).max(9_999_999),
+  /**
+   * Cómo se llama el full principal. Las líneas sin documento son suyas, y
+   * hace falta para saber si una comanda ya está facturada. No se guarda.
+   */
+  nomPrincipal: z.string().max(120).optional(),
 });
 
 export async function GET() {
@@ -109,10 +114,11 @@ export async function POST(request: Request) {
     );
   }
 
+  const { nomPrincipal, ...dades } = parsed.data;
   try {
     const factura = isDemoMode()
-      ? emitirFacturaDemo({ ...parsed.data, estat: "emesa" })
-      : await emitirFactura(parsed.data);
+      ? emitirFacturaDemo({ ...dades, estat: "emesa" }, nomPrincipal)
+      : await emitirFactura(dades, nomPrincipal);
     return NextResponse.json({ factura });
   } catch (error) {
     if (error instanceof ComandesJaFacturadesError) {

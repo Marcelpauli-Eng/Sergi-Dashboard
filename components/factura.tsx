@@ -294,6 +294,7 @@ export default function Factura({
           irpf: totales.irpf,
           total: totales.total,
           primerNumero: datos.primerNumero,
+          nomPrincipal: origens.find((o) => o.id === "")?.nom ?? "",
         }),
       });
       const cuerpo = await respuesta.json().catch(() => null);
