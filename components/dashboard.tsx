@@ -49,7 +49,7 @@ const Cobraments = dynamic(() => import("@/components/cobraments"), { ssr: false
 const Ajustos = dynamic(() => import("@/components/ajustos"), { ssr: false });
 const Cercador = dynamic(() => import("@/components/cercador"), { ssr: false });
 import { leerDatosFacturacion, sincronizarFacturacio } from "@/lib/ajustes-factura";
-import { type DatosFacturacion } from "@/lib/factura";
+import { etiquetaComanda, type DatosFacturacion } from "@/lib/factura";
 import {
   recordDelivery,
   recordDateAssignment,
@@ -582,8 +582,12 @@ export default function Dashboard({
     setAccioDesfer({ etiqueta, fer, quan: Date.now() });
   };
 
-  const nomDe = (orderId: string) =>
-    allStops.find((s) => s.id === orderId)?.customer || orderId;
+  // Lo que se lee en la comanda: el cliente o, si no tiene, su número. Nunca
+  // el id interno, que en otras bosses lleva delante el de la hoja.
+  const nomDe = (orderId: string) => {
+    const s = allStops.find((x) => x.id === orderId);
+    return s ? s.customer || etiquetaComanda(s) : orderId;
+  };
 
   const comandaOberta = comandaObertaId
     ? (allStops.find((s) => s.id === comandaObertaId) ?? null)

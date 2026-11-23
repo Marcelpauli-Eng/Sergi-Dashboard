@@ -178,28 +178,24 @@ export default function Factura({
   /**
    * Las comandas que le tocan a este cliente.
    *
-   * Una comanda sin cliente asignado sale con cualquier cliente que no
-   * tenga bossa propia: la columna "Client facturació" casi nunca está
-   * rellenada, y con un solo cliente esto no filtra nada. Las que llevan
-   * cliente (todas las de la bossa de un cliente) solo salen con el suyo.
+   * Una comanda sin cliente asignado es del cliente por defecto (el primero).
+   * Las que llevan cliente (todas las de la bossa de un cliente) solo salen
+   * con el suyo. Con un solo cliente esto no filtra nada.
    */
   const agrupar = origens.length > 1;
 
   const delClient = useMemo(() => {
     /*
-      Cada bossa va aparte. La de un cliente es suya: `readSheet` ya pone su
-      código a todas sus comandas, así que solo salen al facturarle a él. Y a
-      un cliente con bossa propia no se le cuelan las comandas sin cliente
-      de las otras bosses: así la DRUMI de Green PVC no acabó en la de
-      WinkaPlast, ni las de WinkaPlast pueden acabar en la de Green PVC.
+      Cada comanda es de UN cliente, y solo sale al facturarle a él.
+
+      La de la bossa de un cliente lleva su código (lo pone `readSheet`). La
+      que no lleva ninguno es del cliente por defecto, el primero de la lista
+      —es lo que dice `clientePara`—. Antes una comanda sin cliente salía con
+      todos: así la DRUMI de Green PVC acabó en la de WinkaPlast, y al
+      facturar a Bricocentro salían las de WinkaPlast.
     */
-    const codi = client.codigo.trim().toLowerCase();
-    const teBossa =
-      codi !== "" && origens.some((o) => o.client?.trim().toLowerCase() === codi);
-    const llista = entregats.filter((s) =>
-      s.billingClient
-        ? clientePara(datos, s.billingClient).codigo === client.codigo
-        : !teBossa,
+    const llista = entregats.filter(
+      (s) => clientePara(datos, s.billingClient).codigo === client.codigo,
     );
     if (!agrupar) return llista;
     // Por documento, en el orden de las bosses; dentro, como venían (el
@@ -474,7 +470,9 @@ export default function Factura({
           <div className="soft-card divide-y divide-border">
             {delClient.length === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                Cap entrega aquest mes.
+                {datos.clientes.length > 1
+                  ? `No hi ha cap comanda per facturar a ${client.nombre.trim() || "aquest client"} aquest mes.`
+                  : "Cap entrega aquest mes."}
               </p>
             ) : (
               delClient.map((stop, i) => {
