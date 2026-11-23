@@ -136,6 +136,11 @@ export interface Origen {
   sheetId: string;
   /** Pestaña forzada por entorno. `null`: la del mes, como siempre. */
   sheetTab: string | null;
+  /**
+   * Solo en la bossa de un cliente: su código. Todas sus comandas se le
+   * facturan a él, diga lo que diga la columna "Client facturació".
+   */
+  client?: string;
 }
 
 /** El documento de siempre. */
@@ -410,6 +415,9 @@ export async function readSheet(
     for (const order of orders) {
       order.id = `${origen.id}:${order.id}`;
       order.origen = origen.id;
+      // La bossa de un cliente es suya: sus comandas no pueden acabar en la
+      // factura de otro. Sin código (un solo cliente) no hay nada que separar.
+      if (origen.client?.trim()) order.billingClient = origen.client.trim();
     }
   }
   return { orders, headerMap, skipped, sheetTab: tab, origen, files: rows.length };
@@ -1313,10 +1321,14 @@ const CABECERA_FACTURAS = [
   // De qué documento sale cada línea, en el orden de "Comandes". Vacía en
   // las facturas de un solo documento, que son todas las de antes.
   "Grups",
+  // El id de cada comanda en la app, en el orden de "Comandes". Es lo que
+  // dice qué comanda está facturada sin confundirla con la de otra bossa
+  // (ver `comandesFacturades`). Vacía en las facturas de antes.
+  "Ids",
 ];
 
 /** Última columna de la pestaña de facturas. Va con `CABECERA_FACTURAS`. */
-const ULTIMA_COLUMNA_FACTURAS = "L";
+const ULTIMA_COLUMNA_FACTURAS = "M";
 
 /** Cómo se escribe cada estado de cobro en la hoja, para que se lea a ojo. */
 const ESTAT_FACTURA_SHEET: Record<EstatFactura, string> = {
@@ -1394,6 +1406,7 @@ function filaAFactura(fila: unknown[]): FacturaEmitida | null {
   // cada importe. Ver `parseImportesFactura`.
   const importes = parseImportesFactura(text(fila[4]));
   const grups = text(fila[11]).split(";").map((g) => g.trim());
+  const ids = text(fila[12]).split(";").map((g) => g.trim());
 
   return {
     numero,
@@ -1405,6 +1418,7 @@ function filaAFactura(fila: unknown[]): FacturaEmitida | null {
       comanda,
       importe: importes[i] ?? 0,
       ...(grups[i] ? { grup: grups[i] } : {}),
+      ...(ids[i] ? { id: ids[i] } : {}),
     })),
     base: parseNumber(fila[5]) ?? 0,
     iva: parseNumber(fila[6]) ?? 0,
@@ -1450,7 +1464,7 @@ export async function readFacturas(): Promise<FacturaEmitida[]> {
 export async function emitirFactura(datos: {
   fecha: string;
   periodo: string;
-  lineas: { comanda: string; importe: number; grup?: string }[];
+  lineas: { comanda: string; importe: number; grup?: string; id?: string }[];
   base: number;
   iva: number;
   irpf: number;
@@ -1501,6 +1515,11 @@ nomPrincipal?: string,
     // dentro, que es el separador.
     datos.lineas.some((l) => l.grup)
       ? `'${datos.lineas.map((l) => (l.grup ?? "").replace(/;/g, ",")).join("; ")}`
+      : "",
+    // Igual que los grupos. Un id con ";" dentro no se podría volver a
+    // partir: esa línea se queda sin id y se reconoce como las antiguas.
+    datos.lineas.some((l) => l.id)
+      ? `'${datos.lineas.map((l) => (l.id && !l.id.includes(";") ? l.id : "")).join("; ")}`
       : "",
   ];
 

@@ -445,6 +445,7 @@ export async function buildManifest(
     origens: [snapshot, ...segons].map((s) => ({
       id: s.origen.id,
       nom: s.origen.nom,
+      ...(s.origen.client?.trim() ? { client: s.origen.client.trim() } : {}),
       ...("error" in s ? { sheetTab: "", error: s.error } : { sheetTab: s.sheetTab ?? "" }),
     })),
     today: {

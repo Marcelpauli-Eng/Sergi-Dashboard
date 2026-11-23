@@ -55,6 +55,8 @@ const lineaSchema = z.object({
   importe: z.number().min(0).max(1_000_000),
   /** El documento de donde sale, para el separador. Ver `LineaFactura`. */
   grup: z.string().max(120).optional(),
+  /** El id de la comanda en la app, con el de su bossa delante. */
+  id: z.string().max(200).optional(),
 });
 
 const schema = z.object({
