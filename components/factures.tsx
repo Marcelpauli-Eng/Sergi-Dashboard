@@ -121,15 +121,20 @@ export default function Factures({
     enseñan todas: sin cobertura tampoco se puede emitir, y el servidor
     rechaza de todos modos una factura con comandas ya facturadas.
   */
-  const jaFacturada = comandesFacturades(facturas ?? [], mes);
-  const perFacturar = entregats.filter(
-    (s) =>
-      !jaFacturada(
-        etiquetaComanda(s),
-        origens.find((o) => o.id === (s.origen ?? ""))?.nom,
-      ),
+  const nomDe = (s: Stop) => origens.find((o) => o.id === (s.origen ?? ""))?.nom;
+  const facturaDe = comandesFacturades(
+    facturas ?? [],
+    mes,
+    origens.find((o) => o.id === "")?.nom ?? "",
   );
-  const facturades = entregats.length - perFacturar.length;
+  const perFacturar: Stop[] = [];
+  /** Las escondidas, con la factura que las tiene: nada desaparece sin decir dónde ha ido. */
+  const facturades: { stop: Stop; numero: number }[] = [];
+  for (const s of entregats) {
+    const numero = facturaDe(etiquetaComanda(s), nomDe(s));
+    if (numero === null) perFacturar.push(s);
+    else facturades.push({ stop: s, numero });
+  }
 
   const pendentsDeFacturar = perFacturar.filter((s) => s.price !== null && s.price > 0);
   // Lo que se va a facturar, en euros. El recuento de comandas no dice si
@@ -239,11 +244,30 @@ export default function Factures({
               entraran.
             </p>
           )}
-          {facturades > 0 && (
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              {facturades} ja {facturades === 1 ? "facturada" : "facturades"}: no
-              tornen a sortir. Si esborres la factura, sí.
-            </p>
+          {facturades.length > 0 && (
+            <details className="mt-1.5 text-sm text-muted-foreground">
+              <summary className="cursor-pointer">
+                {facturades.length} ja{" "}
+                {facturades.length === 1 ? "facturada" : "facturades"}: no tornen
+                a sortir. Si esborres la factura, sí.
+              </summary>
+              <ul className="mt-1.5 space-y-0.5">
+                {facturades.map(({ stop, numero }) => (
+                  <li key={stop.id} className="flex justify-between gap-2">
+                    <span className="min-w-0 truncate">
+                      <span className="tabular-nums text-foreground">
+                        {etiquetaComanda(stop)}
+                      </span>
+                      {origens.length > 1 && nomDe(stop) && ` · ${nomDe(stop)}`}
+                      {stop.customer && ` · ${stop.customer}`}
+                    </span>
+                    <span className="shrink-0 tabular-nums">
+                      {formatearNumero(numero)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
         </div>
         <Button

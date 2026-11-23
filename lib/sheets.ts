@@ -1459,12 +1459,15 @@ export async function emitirFactura(datos: {
   client?: string;
   /** Número con el que arranca la serie si todavía no hay ninguna factura. */
   primerNumero: number;
-}): Promise<FacturaEmitida> {
+},
+/** El nombre del full principal. Ver `comprovarNoFacturades`. */
+nomPrincipal?: string,
+): Promise<FacturaEmitida> {
   await asegurarTabFacturas();
 
   const emitidas = await readFacturas();
   // Una comanda no se factura dos veces. Ver `comandesFacturades`.
-  comprovarNoFacturades(emitidas, datos);
+  comprovarNoFacturades(emitidas, { ...datos, nomPrincipal });
   const numero =
     emitidas.length > 0
       ? Math.max(...emitidas.map((f) => f.numero)) + 1
