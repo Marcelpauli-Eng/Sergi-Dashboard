@@ -195,6 +195,16 @@ async function bossesClients(): Promise<BossaClient[]> {
 export async function origens(): Promise<Origen[]> {
   const llista = origensFixos();
   for (const bossa of await bossesClients()) {
+    /*
+      La hoja de un cliente que ya es uno de los documentos del entorno (la
+      de Bricomuebles en la H de Bricocentro) no es otra bossa: es decir de
+      quién es ese documento. Se le pone el cliente y se sigue.
+    */
+    const fix = llista.find((o) => o.sheetId === bossa.sheetId && !o.client);
+    if (fix && origensFixos().some((o) => o.id === fix.id)) {
+      fix.client = bossa.client;
+      continue;
+    }
     // La misma hoja dos veces sacaría cada comanda en dos bosses.
     if (llista.some((o) => o.sheetId === bossa.sheetId || o.id === bossa.id)) {
       console.warn(`La bossa de "${bossa.nom}" repite hoja o id: no se enseña.`);
@@ -411,14 +421,14 @@ export async function readSheet(
   }
 
   const { orders, headerMap, skipped } = construirComandes(rows);
-  if (origen.id) {
-    for (const order of orders) {
+  for (const order of orders) {
+    if (origen.id) {
       order.id = `${origen.id}:${order.id}`;
       order.origen = origen.id;
-      // La bossa de un cliente es suya: sus comandas no pueden acabar en la
-      // factura de otro. Sin código (un solo cliente) no hay nada que separar.
-      if (origen.client?.trim()) order.billingClient = origen.client.trim();
     }
+    // La bossa de un cliente es suya: sus comandas no pueden acabar en la
+    // factura de otro. Sin código (un solo cliente) no hay nada que separar.
+    if (origen.client?.trim()) order.billingClient = origen.client.trim();
   }
   return { orders, headerMap, skipped, sheetTab: tab, origen, files: rows.length };
 }

@@ -59,15 +59,17 @@ export default function Desfer({
       className="fixed inset-x-0 z-[90] flex justify-center px-4
                  bottom-[calc(5rem+env(safe-area-inset-bottom))] lg:bottom-6 lg:left-64"
     >
-      <div className="material flex animate-rise-in items-center gap-3 rounded-full border border-border py-2 pl-4 pr-2 shadow-lg">
-        <p className="truncate text-sm">{accio.etiqueta}</p>
+      {/* `min-w-0` y `max-w-full`: sin ellos una etiqueta larga ensancha el
+          aviso más que la pantalla y, centrado, se corta por los dos lados. */}
+      <div className="material flex min-w-0 max-w-full animate-rise-in items-center gap-3 rounded-full border border-border py-2 pl-4 pr-2 shadow-lg">
+        <p className="min-w-0 truncate text-sm">{accio.etiqueta}</p>
         <button
           type="button"
           onClick={() => {
             accio.fer();
             onTancar();
           }}
-          className="pressable flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground"
+          className="pressable flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground"
         >
           <Undo2 className="size-4" aria-hidden />
           Desfer
