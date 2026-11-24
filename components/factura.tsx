@@ -14,6 +14,7 @@ import {
   fechaCorta,
   formatearNumero,
   paginar,
+  clauClient,
   clientePara,
   etiquetaComanda,
   type ClienteFacturacion,
@@ -195,14 +196,16 @@ export default function Factura({
       facturar a Bricocentro salían las de WinkaPlast.
     */
     const llista = entregats.filter(
-      (s) => clientePara(datos, s.billingClient).codigo === client.codigo,
+      // El mismo cliente de la lista, no el mismo código: dos sin código
+      // tienen el mismo "" y se llevaban las comandas el uno del otro.
+      (s) => clientePara(datos, s.billingClient) === client,
     );
     if (!agrupar) return llista;
     // Por documento, en el orden de las bosses; dentro, como venían (el
     // `sort` es estable). Así cada grupo sale entero y una sola vez.
     const posicio = (s: Stop) => origens.findIndex((o) => o.id === (s.origen ?? ""));
     return [...llista].sort((a, b) => posicio(a) - posicio(b));
-  }, [entregats, datos, client.codigo, agrupar, origens]);
+  }, [entregats, datos, client, agrupar, origens]);
 
   const conImporte = useMemo(
     () => delClient.filter((s) => s.price !== null && s.price > 0),
@@ -294,7 +297,7 @@ export default function Factura({
         body: JSON.stringify({
           fecha: hoy,
           periodo: mes,
-          client: client.codigo,
+          client: clauClient(client),
           lineas,
           base: totales.base,
           iva: totales.iva,

@@ -109,11 +109,24 @@ export function clientePara(
   datos: DatosFacturacion,
   codigo: string | null,
 ): ClienteFacturacion {
-  if (!codigo) return datos.clientes[0];
-  const encontrado = datos.clientes.find(
-    (c) => c.codigo.trim().toLowerCase() === codigo.trim().toLowerCase(),
-  );
+  const buscat = codigo?.trim().toLowerCase();
+  if (!buscat) return datos.clientes[0];
+  // Por código y, si no, por nombre: ver `clauClient`.
+  const encontrado =
+    datos.clientes.find((c) => c.codigo.trim().toLowerCase() === buscat) ??
+    datos.clientes.find((c) => c.nombre.trim().toLowerCase() === buscat);
   return encontrado ?? datos.clientes[0];
+}
+
+/**
+ * Cómo se apunta un cliente en una comanda o en una factura.
+ *
+ * Su código, y si no tiene, su nombre. El código es opcional en Ajustes, y
+ * con dos clientes sin código los dos eran "": la factura de cada uno salía
+ * con las comandas de los dos y, al reimprimirla, a nombre del primero.
+ */
+export function clauClient(client: ClienteFacturacion): string {
+  return client.codigo.trim() || client.nombre.trim();
 }
 
 /** El número tal y como se imprime: seis cifras con ceros delante. */

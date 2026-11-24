@@ -1124,7 +1124,9 @@ export default function Dashboard({
 
       {/* Poner la dirección sin salir del aviso: al guardar, se relee la
           hoja y se vuelve a intentar la ruta con la comanda ya completa. */}
-      {afegintAdrecaId && (
+      {/* Buscada y no dada por hecha: si se borra desde aquí, la comanda deja
+          de existir antes de que se cierre el diálogo. */}
+      {afegintAdrecaId && allStops.some((s) => s.id === afegintAdrecaId) && (
         <EditarComanda
           stop={allStops.find((s) => s.id === afegintAdrecaId)!}
           focus="address"

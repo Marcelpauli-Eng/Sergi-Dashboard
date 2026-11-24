@@ -18,6 +18,7 @@
 
 import type { ClienteFacturacion } from "./factura.ts";
 import { text } from "./sheet-cells.ts";
+import { clauClient } from "./factura.ts";
 import { sheetIdFrom } from "./sheet-tab.ts";
 
 export const TAB_CLIENTS = "Clients";
@@ -138,7 +139,7 @@ export function bossesDeClients(filas: unknown[][]): BossaClient[] {
     const full = text(fila[COL_FULL]);
     if (client === null || full === "") continue;
     const sheetId = sheetIdFrom(full);
-    bosses.push({ id: idDeBossa(sheetId), nom: client.nombre, sheetId, client: client.codigo });
+    bosses.push({ id: idDeBossa(sheetId), nom: client.nombre, sheetId, client: clauClient(client) });
   }
   return bosses;
 }

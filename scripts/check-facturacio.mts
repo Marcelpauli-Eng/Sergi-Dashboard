@@ -26,7 +26,12 @@ import {
   emissorAFila,
   filaAEmissor,
 } from "../lib/emissor.ts";
-import { DATOS_POR_DEFECTO, type ClienteFacturacion } from "../lib/factura.ts";
+import {
+  DATOS_POR_DEFECTO,
+  clauClient,
+  clientePara,
+  type ClienteFacturacion,
+} from "../lib/factura.ts";
 
 const CLIENT: ClienteFacturacion = {
   codigo: "35",
@@ -192,6 +197,31 @@ assert.deepEqual(CABECERA_EMISSOR, [
   for (const id of ids) assert.ok(id !== "" && id !== "2" && !id.includes(":"), id);
   assert.equal(new Set(ids).size, ids.length, "dos bosses con el mismo id");
   assert.equal(idDeBossa("AAA111"), ids[0], "el id no sale solo de la hoja");
+}
+
+// ── Dos clientes sin código: cada uno factura lo suyo ─────────────────────
+{
+  // El código es opcional en Ajustes. Sin él los dos eran "", y la factura
+  // de cada uno salía con las comandas de los dos.
+  const files = [
+    ["", "BRICOCENTRO", "", "", "", "", "", ""],
+    ["", "GREEN PVC", "", "", "", "", "", "https://docs.google.com/spreadsheets/d/AAA111/edit"],
+  ];
+  const clientes = parseClients(files);
+  const datos = { ...DATOS_POR_DEFECTO, clientes };
+  const [bossa] = bossesDeClients(files);
+  assert.equal(bossa.client, "GREEN PVC", "la bossa no sabe de qué cliente es");
+
+  // Lo que hace readSheet: la de la bossa lleva su cliente; la otra, ninguno.
+  const comandes = [{ id: "748", billingClient: null }, { id: "AAA111:P-1", billingClient: bossa.client }];
+  const de = (c: ClienteFacturacion) =>
+    comandes.filter((s) => clientePara(datos, s.billingClient) === c).map((s) => s.id);
+  assert.deepEqual(de(clientes[0]), ["748"], "a Bricocentro le salen las de Green PVC");
+  assert.deepEqual(de(clientes[1]), ["AAA111:P-1"], "a Green PVC le salen las de Bricocentro");
+
+  // Y la factura guardada se reimprime a nombre de quien toca.
+  assert.equal(clientePara(datos, clauClient(clientes[1])), clientes[1]);
+  assert.equal(clauClient({ ...clientes[1], codigo: " 35 " }), "35", "con código, manda el código");
 }
 
 console.log(

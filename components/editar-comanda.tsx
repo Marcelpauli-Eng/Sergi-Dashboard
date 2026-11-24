@@ -288,17 +288,20 @@ export default function EditarComanda({
             </div>
           ))}
           {/* Al final de la lista y sin relleno: está, pero no compite con Desar. */}
-          <div className="px-5 py-3">
-            <button
-              type="button"
-              disabled={desant}
-              onClick={() => setConfirmant(true)}
-              className="pressable flex items-center gap-2 rounded-lg py-1.5 text-sm font-medium text-destructive disabled:opacity-50"
-            >
-              <Trash2 className="size-4" aria-hidden />
-              Esborrar la comanda
-            </button>
-          </div>
+          {/* Mientras se pregunta, fuera: se quedaba medio tapado por el aviso. */}
+          {!confirmant && (
+            <div className="px-5 py-3">
+              <button
+                type="button"
+                disabled={desant}
+                onClick={() => setConfirmant(true)}
+                className="pressable flex items-center gap-2 rounded-lg py-1.5 text-sm font-medium text-destructive disabled:opacity-50"
+              >
+                <Trash2 className="size-4" aria-hidden />
+                Esborrar la comanda
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="space-y-2 border-t border-border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-3">
