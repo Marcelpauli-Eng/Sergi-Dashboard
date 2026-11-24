@@ -13,7 +13,7 @@
  *
  * Aquí no hay red: solo qué columna es cada cosa y cómo se lee y se escribe
  * una fila. Se comprueba con `scripts/check-clients.mts`; el transporte está
- * en `lib/sheets.ts`.
+ * en `lib/sheets/facturacio.ts`.
  */
 
 import type { ClienteFacturacion } from "./factura.ts";
@@ -119,7 +119,7 @@ export interface BossaClient {
  * El identificador de la bossa de un cliente.
  *
  * Va delante del id de cada comanda suya —"<id>:748"— y de ahí se saca a
- * qué documento se escribe su entrega (ver `origenDe` en lib/sheets.ts).
+ * qué documento se escribe su entrega (ver `origenDe` en lib/sheets/bosses.ts).
  *
  * Sale de la hoja y no del cliente: el código y el nombre se cambian desde
  * Ajustes, y con entregas en la cola del móvil un id que cambia las manda a

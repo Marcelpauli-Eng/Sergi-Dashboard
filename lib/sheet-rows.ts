@@ -1,7 +1,7 @@
 /**
  * De filas de la hoja a comandas.
  *
- * Vive fuera de `lib/sheets.ts` —que es solo de servidor y trae consigo las
+ * Vive fuera de `lib/sheets/` —que es solo de servidor y trae consigo las
  * credenciales— porque aquí está lo único que hay que poder comprobar sin
  * Google: qué filas entran, cuáles se descartan y qué pasa cuando la oficina
  * repite un número de comanda, que es una comanda partida en varios viajes.

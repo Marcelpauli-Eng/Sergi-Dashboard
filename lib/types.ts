@@ -55,7 +55,7 @@ export interface Order {
    * Las comandas del segundo llevan el origen delante de su `id` —"2:748"—
    * porque los dos documentos numeran por su cuenta y un 748 de cada uno
    * se pisarían en la cola, en los importes y en la pantalla. Ver
-   * `origens()` en lib/sheets.ts.
+   * `origens()` en lib/sheets/bosses.ts.
    */
   origen: string;
   /** Qué parte de la comanda es esta entrega. 1 cuando no está partida. */

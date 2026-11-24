@@ -22,7 +22,7 @@ export type Pas = (typeof PASSOS)[number]["id"];
 /**
  * El registro de avisos: pestaña "Avisos" del documento privado, junto a
  * "Imports". Una fila por aviso mandado, para poder mirar qué se le dijo a
- * cada cliente y cuándo. El transporte está en `writeAvisos` (lib/sheets.ts).
+ * cada cliente y cuándo. El transporte está en `writeAvisos` (lib/sheets/comandes.ts).
  */
 export const TAB_AVISOS = "Avisos";
 

@@ -7,7 +7,7 @@
  * emitiendo con domicilios distintos.
  *
  * Una sola fila: emisor no hay más que uno. Se comprueba con
- * `scripts/check-facturacio.mts`; el transporte está en `lib/sheets.ts`.
+ * `scripts/check-facturacio.mts`; el transporte está en `lib/sheets/facturacio.ts`.
  */
 
 import type { DatosFacturacion } from "./factura.ts";

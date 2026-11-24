@@ -38,7 +38,7 @@ mismos valores, así que un reintento nunca duplica nada.
 | `lib/sheet-tab.ts` | Elige la pestaña del mes en curso cuando hay una por mes. |
 | `lib/sheet-cells.ts` | Cómo se interpreta **una** celda (estados, importes, prioridades). |
 | `lib/importes.ts` | El registro privado de precios: qué fila se actualiza y cuál se añade. |
-| `lib/sheets.ts` | Lee y escribe en el Google Sheet. Las facturas van a su propio documento (ver `GOOGLE_SHEET_ID_FACTURAS`). |
+| `lib/sheets/` | Lee y escribe en el Google Sheet, un archivo por tema: `bosses.ts` (qué documentos y pestañas), `comandes.ts`, `factures.ts`, `facturacio.ts` (clientes y emisor), `imports.ts`, y `api.ts` debajo de todos. Las facturas van a su propio documento (ver `GOOGLE_SHEET_ID_FACTURAS`). |
 | `lib/outbox.ts` | Cómo se ve en pantalla lo que aún no ha llegado al Sheet. |
 | `lib/routing.ts` | Geocoding y cálculo de la ruta óptima. |
 | `lib/manifest.ts` | Junta ambas cosas en el paquete que se descarga. |
@@ -342,7 +342,7 @@ de navegador y funciona sin cobertura.
 Para una flota pequeña sobra, y evita mantener dos sistemas sincronizados.
 Si algún día hay muchos transportistas escribiendo a la vez, o hace falta
 histórico y estadísticas, el sitio natural para meter Postgres es entre
-`lib/sheets.ts` y `lib/manifest.ts`.
+`lib/sheets/` y `lib/manifest.ts`.
 
 **No hay mapa dentro de la app.** Los términos de servicio de Google
 prohíben cachear las teselas del mapa, así que un mapa embebido se quedaría
