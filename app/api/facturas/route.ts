@@ -63,7 +63,8 @@ const schema = z.object({
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   periodo: z.string().max(120),
   /** Código del cliente al que se emite. Vacío mientras solo haya uno. */
-  client: z.string().max(64).optional().default(""),
+  // El código del cliente o, si no tiene, su nombre: ver `clauClient`.
+  client: z.string().max(200).optional().default(""),
   lineas: z.array(lineaSchema).min(1).max(500),
   base: z.number().min(0),
   iva: z.number().min(0),
