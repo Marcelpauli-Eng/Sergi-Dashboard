@@ -9,7 +9,7 @@
  *
  * Aquí está la decisión —qué fila se actualiza y cuál se añade— sin nada de
  * red, para poder comprobarla sin Google: ver `scripts/check-importes.mts`.
- * El transporte está en `lib/sheets.ts`.
+ * El transporte está en `lib/sheets/imports.ts`.
  *
  * La clave es el número de comanda, que es único e inmutable. Por eso los
  * importes pueden vivir en otro documento sin depender de números de fila

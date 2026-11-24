@@ -13,7 +13,7 @@
  * destructivo y borra un dato que no está en ningún otro sitio hasta que la
  * copia ha ido bien, así que hay que pedirlo aparte y con la copia hecha.
  *
- * No importa `lib/sheets.ts` porque ese módulo es solo de servidor; sí
+ * No importa `lib/sheets/` porque esos módulos son solo de servidor; sí
  * reutiliza el mapeo de columnas real, para leer exactamente lo que lee la
  * app.
  */

@@ -7,7 +7,7 @@
  * que falla explicando qué hacer. Está pensado para el momento de la puesta
  * en marcha, cuando lo único que sabes es que "no funciona".
  *
- * No importa nada de `lib/sheets.ts` porque ese módulo es solo de servidor,
+ * No importa nada de `lib/sheets/` porque esos módulos son solo de servidor,
  * pero sí reutiliza el mapeo de columnas real para que lo que aquí se ve sea
  * exactamente lo que la app va a ver.
  */
@@ -409,7 +409,7 @@ if (headerMap.driverId === undefined) {
 if (dataRows.length > 0) {
   const sample = dataRows[0];
   // La dirección que se geocodifica es calle + municipio, igual que en
-  // lib/sheets.ts: verla montada evita sorpresas con las coordenadas.
+  // lib/sheets/: verla montada evita sorpresas con las coordenadas.
   const fullAddress = [cell(sample, "address"), cell(sample, "city")]
     .filter(Boolean)
     .join(", ");

@@ -1,7 +1,7 @@
 /**
  * Cómo se lee y se escribe UNA celda del Google Sheet.
  *
- * Aparte de `lib/sheets.ts` porque aquello habla con Google —y arrastra
+ * Aparte de `lib/sheets/` porque aquello habla con Google —y arrastra
  * `server-only`, que fuera de un componente de servidor revienta al
  * importarlo— y esto es interpretación de texto y nada más. Separarlo
  * permite comprobarlo sin red y sin servidor: ver `scripts/check-cells.mts`.
