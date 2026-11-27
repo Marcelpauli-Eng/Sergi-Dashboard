@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { buildManifest } from "@/lib/manifest";
 import { isDemoMode, demoManifest } from "@/lib/demo";
 import { env } from "@/lib/env";
+import { ErrorQuotaGoogle } from "@/lib/sheets";
 
 /**
  * Devuelve todo lo que el transportista necesita para la jornada.
@@ -35,6 +36,12 @@ export async function GET(request: NextRequest) {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
+    // La cuota de Google: no es una avería y pasa sola. 429 para que el
+    // móvil lo sepa distinguir y espere en vez de insistir.
+    if (error instanceof ErrorQuotaGoogle) {
+      console.warn("Cuota de Google Sheets agotada al construir el manifiesto");
+      return NextResponse.json({ error: error.message, quota: true }, { status: 429 });
+    }
     console.error("Error construyendo el manifiesto:", error);
     return NextResponse.json(
       {

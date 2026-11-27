@@ -19,6 +19,36 @@ export function range(a1: string, sheetTab?: string | null): string {
 }
 
 /**
+ * Google ha dicho que no: demasiadas peticiones en un minuto (HTTP 429).
+ *
+ * La cuota es de la cuenta de servicio, no de cada móvil: todos los
+ * dispositivos y todas las bosses gastan del mismo saco, unas sesenta
+ * lecturas por minuto. No es una avería: pasado el minuto vuelve a ir. Por
+ * eso tiene su propio tipo, para que quien lo reciba pueda decirlo claro y
+ * esperar en vez de enseñar el error crudo de Google.
+ */
+export class ErrorQuotaGoogle extends Error {
+  constructor() {
+    super(
+      "Google va saturat: massa lectures en un minut. Les dades que veus són les " +
+        "d'abans i es tornarà a provar sol.",
+    );
+    this.name = "ErrorQuotaGoogle";
+  }
+}
+
+/**
+ * Cuánto esperar antes de cada reintento tras un 429.
+ *
+ * Un 429 quiere decir que Google ni ha mirado la petición, así que repetirla
+ * es seguro, también si escribe. Poco rato y pocas veces: la cuota es por
+ * minuto, y una petición no puede quedarse colgada esperando a que pase:
+ * una sincronización encadena varias lecturas y la función del servidor
+ * tiene un tiempo máximo. Como mucho, unos tres segundos por lectura.
+ */
+const ESPERES_429_MS = [700, 1_800];
+
+/**
  * Una llamada a la API de Sheets.
  *
  * `spreadsheetId` existe porque las facturas viven en OTRO documento que los
@@ -31,16 +61,24 @@ export async function sheetsFetch(
   spreadsheetId: string = env.google.sheetId,
 ): Promise<unknown> {
   const token = await googleAccessToken();
-  const response = await fetch(`${API}/${spreadsheetId}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
-    // Los datos del Sheet cambian constantemente; nunca los cachea Next.
-    cache: "no-store",
-  });
+  let response: Response;
+  for (let intent = 0; ; intent++) {
+    response = await fetch(`${API}/${spreadsheetId}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...init?.headers,
+      },
+      // Los datos del Sheet cambian constantemente; nunca los cachea Next.
+      cache: "no-store",
+    });
+    if (response.status !== 429) break;
+    if (intent >= ESPERES_429_MS.length) throw new ErrorQuotaGoogle();
+    // Con algo de azar, para que dos peticiones rechazadas a la vez no
+    // vuelvan a chocar en el mismo instante.
+    await new Promise((fet) => setTimeout(fet, ESPERES_429_MS[intent] + Math.random() * 300));
+  }
 
   if (!response.ok) {
     const body = await response.text();
@@ -53,9 +91,42 @@ export async function sheetsFetch(
 }
 
 /**
- * Devuelve los nombres de todas las pestañas (hojas) del Google Sheet.
+ * Cuánto se fía uno de la lista de pestañas de un documento.
+ *
+ * Se preguntaba en cada sincronización, una vez por bossa: con cuatro bosses
+ * y un refresco cada veinte segundos eran doce lecturas por minuto y móvil
+ * solo para saber que las pestañas seguían siendo las mismas, y la cuota de
+ * Google (ver `ErrorQuotaGoogle`) saltaba. Las pestañas cambian una vez al
+ * mes. Lo que las crea desde la app tira la lista (`oblidarPestanyes`), y lo
+ * que crea algo si NO está pide la lista fresca (`fresca`).
+ *
+ * ponytail: caché en memoria del proceso, como la de bosses e importes; en
+ * Vercel cada instancia tiene la suya.
  */
-export async function listSheetTabs(spreadsheetId?: string): Promise<string[]> {
+const PESTANYES_MS = 5 * 60_000;
+
+const pestanyes = new Map<string, { fins: number; llista: string[] }>();
+
+/** Olvida la lista de pestañas de un documento, o de todos. */
+export function oblidarPestanyes(spreadsheetId?: string): void {
+  if (spreadsheetId) pestanyes.delete(spreadsheetId);
+  else pestanyes.clear();
+}
+
+/**
+ * Devuelve los nombres de todas las pestañas (hojas) del Google Sheet.
+ *
+ * @param fresca - Preguntar a Google aunque haya una lista reciente. Para
+ *   quien va a CREAR una pestaña si no la ve: una lista de hace un rato
+ *   podría no tener la que acaba de crear otro, y se intentaría dos veces.
+ */
+export async function listSheetTabs(
+  spreadsheetId: string = env.google.sheetId,
+  { fresca = false }: { fresca?: boolean } = {},
+): Promise<string[]> {
+  const guardada = pestanyes.get(spreadsheetId);
+  if (!fresca && guardada && Date.now() < guardada.fins) return [...guardada.llista];
+
   const data = (await sheetsFetch(
     `?fields=sheets.properties.title`,
     undefined,
@@ -64,9 +135,11 @@ export async function listSheetTabs(spreadsheetId?: string): Promise<string[]> {
     sheets?: { properties?: { title?: string } }[];
   };
 
-  return (data.sheets ?? [])
+  const llista = (data.sheets ?? [])
     .map((s) => s.properties?.title ?? "")
     .filter((title) => title.length > 0);
+  pestanyes.set(spreadsheetId, { fins: Date.now() + PESTANYES_MS, llista });
+  return [...llista];
 }
 
 /** Cuál de los dos documentos. Solo para etiquetar comprobaciones. */

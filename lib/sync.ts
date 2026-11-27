@@ -34,6 +34,19 @@ export class SessionExpiredError extends Error {
 }
 
 /**
+ * El servidor dice que Google no da más lecturas este minuto (HTTP 429).
+ *
+ * Distinto de cualquier otro fallo porque lo que toca es esperar, no
+ * insistir: cada reintento gasta de la misma cuota. Ver `ErrorQuotaGoogle`.
+ */
+export class QuotaGoogleError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "QuotaGoogleError";
+  }
+}
+
+/**
  * `fetch` lanza un TypeError seco ("Failed to fetch") cuando no hay red, el
  * servidor está caído o hay un portal cautivo de por medio. Ese texto no le
  * dice nada a un transportista, así que se traduce a algo accionable.
@@ -583,7 +596,9 @@ export async function refreshManifest(sheetTab?: string): Promise<void> {
     const body = (await response.json().catch(() => ({}))) as { error?: string };
     // Se propaga el error pero NO se toca el manifiesto guardado: es
     // preferible una ruta de hace dos horas que una pantalla en blanco.
-    throw new Error(body.error ?? `El servidor respondió ${response.status}`);
+    const missatge = body.error ?? `El servidor respondió ${response.status}`;
+    if (response.status === 429) throw new QuotaGoogleError(missatge);
+    throw new Error(missatge);
   }
 
   const manifest = (await response.json()) as Manifest;
@@ -595,6 +610,8 @@ export interface SyncOutcome {
   uploaded: number;
   refreshed: boolean;
   error: string | null;
+  /** Google ha dicho que basta por este minuto. Ver `QuotaGoogleError`. */
+  quota?: boolean;
 }
 
 /**
@@ -639,6 +656,7 @@ export async function syncNow(sheetTab?: string): Promise<SyncOutcome> {
       uploaded,
       refreshed: false,
       error: error ?? (e instanceof Error ? e.message : "Error de sincronización"),
+      quota: e instanceof QuotaGoogleError,
     };
   }
 }

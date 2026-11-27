@@ -1,7 +1,7 @@
 /**
  * Todo lo que habla con Google Sheets. Ver cada archivo de esta carpeta.
  */
-export { listSheetTabs, puedeEscribir } from "./api";
+export { ErrorQuotaGoogle, listSheetTabs, puedeEscribir } from "./api";
 export type { SheetDoc } from "./api";
 export { origenPrincipal, origensFixos, origens, origenDe } from "./bosses";
 export type { Origen } from "./bosses";

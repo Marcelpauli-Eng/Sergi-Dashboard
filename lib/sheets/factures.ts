@@ -7,7 +7,7 @@ import { parseSheetDate } from "../dates";
 import { comprovarNoFacturades, parseImportesFactura } from "../factura.ts";
 import { parseNumber, text } from "../sheet-cells.ts";
 import { type EstatFactura, type FacturaEmitida } from "../types";
-import { idPestanya, range, sheetsFetch } from "./api";
+import { idPestanya, oblidarPestanyes, range, sheetsFetch } from "./api";
 import { docFacturas, tabsFacturas } from "./document-privat";
 
 /**
@@ -77,7 +77,7 @@ function parseEstatFactura(valor: unknown): EstatFactura {
  */
 async function asegurarTabFacturas(): Promise<void> {
   const doc = docFacturas();
-  const tabs = await tabsFacturas(doc);
+  const tabs = await pestanyesFacturas(doc);
 
   if (!tabs.includes(TAB_FACTURAS)) {
     await sheetsFetch(
@@ -90,6 +90,7 @@ async function asegurarTabFacturas(): Promise<void> {
       },
       doc,
     );
+    oblidarPestanyes(doc);
   } else {
     const actual = (await sheetsFetch(
       `/values/${encodeURIComponent(range(`A1:${ULTIMA_COLUMNA_FACTURAS}1`, TAB_FACTURAS))}`,
@@ -148,10 +149,22 @@ function filaAFactura(fila: unknown[]): FacturaEmitida | null {
   };
 }
 
+/**
+ * Las pestañas del documento de facturas, con la de "Factures" de seguro.
+ *
+ * La lista puede venir de hace unos minutos (ver `listSheetTabs`). Si en ella
+ * no está "Factures", se pregunta de nuevo antes de creérselo: leer "no hay
+ * facturas" por una lista vieja dejaría pasar una comanda ya facturada.
+ */
+async function pestanyesFacturas(doc: string): Promise<string[]> {
+  const tabs = await tabsFacturas(doc);
+  return tabs.includes(TAB_FACTURAS) ? tabs : tabsFacturas(doc, true);
+}
+
 /** Todas las facturas emitidas, de la más reciente a la más antigua. */
 export async function readFacturas(): Promise<FacturaEmitida[]> {
   const doc = docFacturas();
-  const tabs = await tabsFacturas(doc);
+  const tabs = await pestanyesFacturas(doc);
   if (!tabs.includes(TAB_FACTURAS)) return [];
 
   const data = (await sheetsFetch(
@@ -338,7 +351,7 @@ export async function canviarDataFactura(
  */
 export async function esborrarFactura(numero: number): Promise<boolean> {
   const doc = docFacturas();
-  const tabs = await tabsFacturas(doc);
+  const tabs = await pestanyesFacturas(doc);
   if (!tabs.includes(TAB_FACTURAS)) return false;
 
   const gid = await idPestanya(doc, TAB_FACTURAS);

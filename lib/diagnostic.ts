@@ -79,7 +79,7 @@ async function comprobarDocumento(
   let tabs: string[];
 
   try {
-    tabs = await listSheetTabs(id);
+    tabs = await listSheetTabs(id, { fresca: true });
   } catch (error) {
     const { detalle, arreglo } = porQueNoSeAbre(error, id);
     return [{ id: `${doc}-acceso`, titulo: `${etiqueta}: acceso`, estado: "error", detalle, arreglo }];
@@ -145,7 +145,7 @@ export async function comprobarConfiguracion(timezone: string): Promise<Comproba
   // ¿Y hay pestaña para el mes de hoy?
   if (salida.every((c) => c.id !== "repartos-acceso" || c.estado === "ok")) {
     try {
-      const tabs = await listSheetTabs(repartos);
+      const tabs = await listSheetTabs(repartos, { fresca: true });
       const mes = today(timezone).slice(0, 7);
       const delMes = findMonthTab(tabs, mes);
       const anterior = findLatestTabUpTo(tabs, mes);
