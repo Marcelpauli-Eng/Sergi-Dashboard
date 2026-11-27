@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import dynamic from "next/dynamic";
@@ -124,11 +124,21 @@ const A_PANTALLA_SENCERA: TabValue[] = ["calendari"];
  * Cada cuánto se vuelve a leer la hoja con la app delante.
  *
  * Veinte segundos es el equilibrio: lo que uno marca lo ve el otro casi al
- * momento, y sale a tres lecturas por minuto y móvil —de las sesenta por
- * minuto que da Google—, así que caben varios repartidores a la vez sin que
- * salte la cuota. Bajarlo multiplica el gasto por todos los dispositivos.
+ * momento. Pero cada vuelta no es UNA lectura: es una por bossa, más los
+ * clientes y los importes cuando caducan (ver `buildManifest`), y la cuota de
+ * Google —unas sesenta por minuto— es de la app entera, no de cada móvil.
+ * Con cuatro bosses salen unas quince por minuto y móvil. Bajarlo multiplica
+ * el gasto por todos los dispositivos y por todas las bosses.
  */
 const REFRESC_MS = 20_000;
+
+/**
+ * Cuánto se deja de refrescar solo después de que Google diga que basta.
+ *
+ * Su cuota es por minuto: insistir antes solo vuelve a gastarla y alarga el
+ * aviso. Actualizar a mano sí sigue funcionando.
+ */
+const PAUSA_QUOTA_MS = 60_000;
 
 /** Encabezado de cada sección en ordenador e iPad. */
 const TITOLS: Record<TabValue, { titol: string; subtitol: string }> = {
@@ -314,6 +324,9 @@ export default function Dashboard({
    * encender el "Sincronizando…" de la barra. Un parpadeo cada veinte
    * segundos acaba leyéndose como que algo va mal.
    */
+  /** Hasta cuándo no se refresca solo, tras un 429. Ver `PAUSA_QUOTA_MS`. */
+  const pausaFins = useRef(0);
+
   const sync = useCallback(
     async (silenciós = false) => {
       if (!silenciós) setSyncing(true);
@@ -321,6 +334,7 @@ export default function Dashboard({
       try {
         const outcome = await syncNow(selectedSheetTab ?? undefined);
         setError(outcome.error);
+        pausaFins.current = outcome.quota ? Date.now() + PAUSA_QUOTA_MS : 0;
       } catch (e) {
         if (e instanceof SessionExpiredError) {
           router.replace("/login");
@@ -358,6 +372,7 @@ export default function Dashboard({
       Sheet. Si medio minuto de retraso llega a molestar, ese es el camino.
     */
     const refresc = setInterval(() => {
+      if (Date.now() < pausaFins.current) return;
       if (document.visibilityState === "visible" && navigator.onLine) {
         void sync(true);
       }

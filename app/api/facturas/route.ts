@@ -4,6 +4,7 @@ import { isConfigError } from "@/lib/env";
 import { ComandesJaFacturadesError } from "@/lib/factura";
 import { getSession } from "@/lib/session";
 import {
+  ErrorQuotaGoogle,
   actualizarEstadoFactura,
   canviarDataFactura,
   emitirFactura,
@@ -44,6 +45,10 @@ import {
  * No revela ningún secreto, solo qué falta por configurar.
  */
 function fallo(error: unknown, mensaje: string): NextResponse {
+  // La cuota de Google pasa sola en un minuto: se dice tal cual.
+  if (error instanceof ErrorQuotaGoogle) {
+    return NextResponse.json({ error: error.message }, { status: 429 });
+  }
   if (isConfigError(error)) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

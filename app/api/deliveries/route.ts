@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
-import { writeDeliveries } from "@/lib/sheets";
+import { ErrorQuotaGoogle, writeDeliveries } from "@/lib/sheets";
 import { isDemoMode, recordDemoDeliveries } from "@/lib/demo";
 import { isConfigError } from "@/lib/env";
 import { DELIVERY_STATUSES } from "@/lib/types";
@@ -154,6 +154,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ...result, invalids });
   } catch (error) {
     console.error("Error escribiendo entregas en el Sheet:", error);
+
+    // La cuota de Google: la cola se queda como está y se sube sola luego.
+    if (error instanceof ErrorQuotaGoogle) {
+      return NextResponse.json({ error: error.message }, { status: 429 });
+    }
 
     // Falta una variable de entorno —típicamente el documento de facturas,
     // que es donde van los importes—. Decirlo ahorra buscar a ciegas por qué

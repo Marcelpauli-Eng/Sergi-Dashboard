@@ -1,6 +1,7 @@
 import "server-only";
 import { env } from "./env";
 import {
+  ErrorQuotaGoogle,
   origens,
   origensFixos,
   readImportes,
@@ -346,9 +347,17 @@ export async function buildManifest(
     pedidos salen de la hoja que comparte la empresa y los importes del
     archivo privado del transportista. Una espera a la otra no aporta nada.
   */
-  // Sin poder leer las bosses de clientes se sigue con las del entorno: como
-  // abajo, eso no puede dejar sin ruta a nadie.
+  /*
+    Sin poder leer las bosses de clientes se sigue con las del entorno: como
+    abajo, eso no puede dejar sin ruta a nadie.
+
+    Salvo si es la cuota de Google (`ErrorQuotaGoogle`): eso pasa en un
+    minuto, y seguir sin una bossa o sin importes guardaría en el móvil un
+    manifiesto al que le faltan comandas o precios. Se falla entero y el
+    móvil se queda con el último bueno, que es lo que hay que enseñar.
+  */
   const [principal, ...altres] = await origens().catch((error: unknown) => {
+    if (error instanceof ErrorQuotaGoogle) throw error;
     console.warn(`No se han podido leer las bosses de clientes: ${String(error)}`);
     return origensFixos();
   });
@@ -362,6 +371,7 @@ export async function buildManifest(
     Promise.all(
       altres.map((origen) =>
         readSheet(sheetTab, origen).catch((error: unknown) => {
+          if (error instanceof ErrorQuotaGoogle) throw error;
           const motiu = error instanceof Error ? error.message : String(error);
           console.warn(`No se ha podido leer "${origen.nom}": ${motiu}`);
           return { origen, error: motiu.slice(0, 300) };
@@ -369,6 +379,7 @@ export async function buildManifest(
       ),
     ),
     readImportes().catch((error) => {
+      if (error instanceof ErrorQuotaGoogle) throw error;
       // Que no se puedan leer los importes no puede dejar sin ruta a nadie:
       // se sigue con los pedidos y sin precios, que es lo accesorio.
       avisarUnaVez(error);

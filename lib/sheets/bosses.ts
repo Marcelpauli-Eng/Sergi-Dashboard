@@ -10,7 +10,7 @@ import { env } from "../env";
 import { today } from "../dates";
 import { noTabFoundMessage, parseTabMonth, pestanyaACrear, planDelFull } from "../sheet-tab";
 import { type BossaClient, TAB_CLIENTS, bossesDeClients } from "../clients.ts";
-import { listSheetTabs, range, sheetsFetch } from "./api";
+import { listSheetTabs, oblidarPestanyes, range, sheetsFetch } from "./api";
 
 /**
  * Un documento de comandas.
@@ -212,7 +212,8 @@ export async function resolverPestanya(origen: Origen, full?: string | null): Pr
  * hoja de la otra. Qué crear lo decide `pestanyaACrear`.
  */
 export async function assegurarPestanya(origen: Origen, full: string): Promise<void> {
-  const pla = pestanyaACrear(await listSheetTabs(origen.sheetId), full);
+  // Fresca: con la de hace un rato se podría intentar crear una que ya hay.
+  const pla = pestanyaACrear(await listSheetTabs(origen.sheetId, { fresca: true }), full);
   if (!pla) return;
 
   const [de, pestanya] = pla.cabeceraDe
@@ -246,6 +247,9 @@ export async function assegurarPestanya(origen: Origen, full: string): Promise<v
     // Otra petición la acaba de crear: ya está, que es lo que se quería.
     if (String(error).includes("already exists")) return;
     throw error;
+  } finally {
+    // Haya ido como haya ido, la lista de pestañas ya no es la de antes.
+    oblidarPestanyes(origen.sheetId);
   }
 
   await sheetsFetch(

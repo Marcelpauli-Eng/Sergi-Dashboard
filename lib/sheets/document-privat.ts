@@ -6,7 +6,7 @@
 import "server-only";
 import { ErrorAccionable, env } from "../env";
 import { columnLetter, text } from "../sheet-cells.ts";
-import { listSheetTabs, range, sheetsFetch } from "./api";
+import { listSheetTabs, oblidarPestanyes, range, sheetsFetch } from "./api";
 
 /**
  * Dónde vive el registro de facturas: un documento aparte, obligatorio.
@@ -37,9 +37,9 @@ export function docFacturas(): string {
  * documento aparte y olvidarse de compartirlo con la cuenta de servicio.
  * Google contesta un 403 que no dice qué hacer.
  */
-export async function tabsFacturas(doc: string): Promise<string[]> {
+export async function tabsFacturas(doc: string, fresca = false): Promise<string[]> {
   try {
-    return await listSheetTabs(doc);
+    return await listSheetTabs(doc, { fresca });
   } catch (error) {
     const mensaje = String(error);
     const codigo = mensaje.match(/respondió (403|404)/)?.[1];
@@ -80,7 +80,10 @@ export async function tabsFacturas(doc: string): Promise<string[]> {
  */
 export async function asegurarTab(tab: string, cabecera: string[]): Promise<void> {
   const doc = docFacturas();
-  const tabs = await tabsFacturas(doc);
+  let tabs = await tabsFacturas(doc);
+  // La lista de hace un rato puede no tener la que otro acaba de crear: antes
+  // de crearla, se pregunta otra vez.
+  if (!tabs.includes(tab)) tabs = await tabsFacturas(doc, true);
   const rangCabecera = range(`A1:${columnLetter(cabecera.length - 1)}1`, tab);
 
   if (tabs.includes(tab)) {
@@ -101,6 +104,7 @@ export async function asegurarTab(tab: string, cabecera: string[]): Promise<void
       },
       doc,
     );
+    oblidarPestanyes(doc);
   }
 
   await sheetsFetch(
